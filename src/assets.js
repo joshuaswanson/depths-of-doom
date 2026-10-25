@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { applySurfaceDetail } from './surface.js';
 import { addSkullDecals } from './decals.js';
@@ -12,10 +13,11 @@ const MODEL_NAMES = [
   'mine', 'ruin_pillar_a', 'ruin_pillar_b', 'ruin_arch', 'ruin_wall', 'ruin_pier', 'ruin_tower', 'anchor', 'chain',
   'coral_brain', 'rock_a', 'rock_b', 'deep_jelly', 'kelp_tall', 'kelp_short', 'coral_staghorn', 'coral_fan',
   'coral_table', 'sponge_cluster', 'anemone_patch', 'reef_small', 'reef_large',
-  'wreck_sub', 'anglerfish',
+  'wreck_sub', 'anglerfish', 'seagull',
 ];
 
 const models = {};
+const clips = {};
 
 export async function loadModels(onProgress) {
   const draco = new DRACOLoader().setDecoderPath(`${import.meta.env.BASE_URL}draco/`);
@@ -28,6 +30,7 @@ export async function loadModels(onProgress) {
     });
     applySurfaceDetail(gltf.scene);
     models[name] = gltf.scene;
+    clips[name] = gltf.animations;
     onProgress?.(++done / MODEL_NAMES.length);
   }));
   draco.dispose();
@@ -90,6 +93,15 @@ export async function warmUp(renderer, scene, camera, target) {
   await renderer.compileAsync(scene, camera);
   renderer.setRenderTarget(previous);
   scene.remove(holder);
+}
+
+export function animationsOf(name) {
+  return clips[name] ?? [];
+}
+
+// Skinned models need their skeleton rebound to the copy, which a plain clone does not do.
+export function spawnSkinned(name) {
+  return cloneSkinned(models[name]);
 }
 
 export function spawn(name) {

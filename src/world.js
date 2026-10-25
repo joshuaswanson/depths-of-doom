@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { findNode, plainMaterials, spawn, tint } from './assets.js';
+import { animationsOf, findNode, plainMaterials, spawn, spawnSkinned, tint } from './assets.js';
+import { sfx } from './audio.js';
 import { CURRENT_MATERIALS, NOISE_GLSL } from './surface.js';
 import {
   ABYSS_Y, CAMERA_Z, SHELF_Y, SURFACE_Y, TAN_HALF_FOV, WATER_GRADIENT_GLSL, darkness, depthShift,
@@ -528,6 +529,71 @@ function updateAngler(a, dt, t, cx, sub, world) {
   }
 }
 
+// Seagulls bob on the swell and take flight when a surfacing sub comes too close. The source animation runs at
+// 24 fps: floating and preening, then a takeoff, then steady flapping.
+const GULL_COUNT = 6;
+const GULL_SCALE = 1.3;
+const GULL_SCARE = 7;
+const GULL_FPS = 24;
+let gullClips = null;
+
+function gullAnimations() {
+  if (gullClips) return gullClips;
+  const [source] = animationsOf('seagull');
+  // The rig's own travel is dropped; the game moves the gull itself.
+  const clip = source.clone();
+  clip.tracks = clip.tracks.filter((track) => !track.name.startsWith('GullRig.'));
+  gullClips = {
+    idle: THREE.AnimationUtils.subclip(clip, 'idle', 1, 115, GULL_FPS),
+    takeoff: THREE.AnimationUtils.subclip(clip, 'takeoff', 126, 214, GULL_FPS),
+    fly: THREE.AnimationUtils.subclip(clip, 'fly', 216, 237, GULL_FPS),
+  };
+  return gullClips;
+}
+
+function makeGull() {
+  const holder = new THREE.Group();
+  const body = spawnSkinned('seagull');
+  body.rotation.y = -Math.PI / 2;
+  body.scale.setScalar(GULL_SCALE);
+  holder.add(body);
+  body.traverse((o) => {
+    if (o.isMesh) {
+      o.material.color.setScalar(0.62);
+      o.material.envMapIntensity = 0.25;
+    }
+  });
+  const legs = ['L', 'R'].map((side) => ['thigh', 'shin', 'foot'].map((bone) => body.getObjectByName(bone + side)));
+  const mixer = new THREE.AnimationMixer(body);
+  const clipsFor = gullAnimations();
+  const actions = {
+    idle: mixer.clipAction(clipsFor.idle).setLoop(THREE.LoopPingPong),
+    takeoff: mixer.clipAction(clipsFor.takeoff).setLoop(THREE.LoopOnce),
+    fly: mixer.clipAction(clipsFor.fly).setLoop(THREE.LoopRepeat),
+  };
+  actions.takeoff.clampWhenFinished = true;
+  holder.userData = { mixer, actions, legs, state: 'float', t: 0, phase: rand(0, 6), vel: new THREE.Vector2(), dir: 1 };
+  return holder;
+}
+
+// Alternating strokes on top of the clip, so a floating gull's feet keep paddling under the surface.
+function treadWater(u, time) {
+  u.legs.forEach(([thigh, shin, foot], i) => {
+    const stroke = time * 5.5 + u.phase + i * Math.PI;
+    thigh.rotateX(0.45 * Math.sin(stroke));
+    shin.rotateX(0.55 * Math.sin(stroke - 0.8));
+    foot.rotateX(-0.7 * Math.sin(stroke - 1.4));
+  });
+}
+
+function playGull(gull, name, fade = 0.25) {
+  const { actions, current } = gull.userData;
+  const next = actions[name];
+  next.reset().play();
+  if (current && current !== next) current.crossFadeTo(next, fade, false);
+  gull.userData.current = next;
+}
+
 // Jellies gather in one glowing layer in the dark trenches, with a few stragglers drifting deeper.
 const JELLY_CEILING = 96;
 const JELLY_LAYER = [-122, -100];
@@ -715,6 +781,12 @@ export class World {
     this.anglerLight = new THREE.PointLight('#9ff8ea', 0, 9, 1.6);
     this.anglerLight.userData.owner = null;
     scene.add(this.anglerLight);
+    this.gulls = Array.from({ length: GULL_COUNT }, () => {
+      const gull = makeGull();
+      this.landGull(gull, rand(-40, 40));
+      scene.add(gull);
+      return gull;
+    });
     this.anglers = Array.from({ length: 3 }, (_, i) => {
       const a = makeAngler();
       a.position.set(-36 + i * 36 + rand(-5, 5), -200, rand(-20, -4));
@@ -740,6 +812,62 @@ export class World {
 
   setAspect(aspect) {
     this.aspect = aspect;
+  }
+
+  landGull(gull, x) {
+    const u = gull.userData;
+    u.state = 'float';
+    u.dir = Math.random() < 0.5 ? -1 : 1;
+    u.t = 0;
+    gull.position.set(x, SURFACE_Y, rand(-0.5, 0.5));
+    gull.rotation.set(0, u.dir > 0 ? 0 : Math.PI, 0);
+    playGull(gull, 'idle', 0);
+    u.current.time = rand(0, u.current.getClip().duration);
+  }
+
+  // Returns how many gulls just took off, so the game can play one cry for the flock.
+  updateGulls(dt, cx, cy, sub) {
+    let scared = 0;
+    const visible = Math.abs(cy - SURFACE_Y) < 30;
+    for (const gull of this.gulls) {
+      const u = gull.userData;
+      gull.visible = visible;
+      u.t += dt;
+      if (visible) u.mixer.update(dt);
+      if (u.state === 'float') {
+        if (visible) treadWater(u, this.time);
+        gull.position.y = SURFACE_Y - 0.02 + Math.sin(this.time * 1.4 + gull.position.x * 0.5) * 0.09;
+        gull.rotation.z = Math.sin(this.time * 1.1 + u.phase) * 0.06;
+        gull.position.x += u.dir * 0.08 * dt;
+        const near = sub && Math.abs(sub.x - gull.position.x) < GULL_SCARE && sub.y > SURFACE_Y - 3.5;
+        if (near) {
+          u.state = 'takeoff';
+          u.t = 0;
+          u.dir = Math.sign(gull.position.x - sub.x) || 1;
+          gull.rotation.y = u.dir > 0 ? 0 : Math.PI;
+          playGull(gull, 'takeoff', 0.15);
+          scared++;
+        }
+        const wrapped = wrap(gull.position.x, cx, 45);
+        if (Math.abs(wrapped - gull.position.x) > 1) this.landGull(gull, wrapped);
+      } else {
+        // Matches the takeoff in the animation: a short run along the water, then a climb into steady flight.
+        const run = THREE.MathUtils.smoothstep(u.t, 0.9, 2.2);
+        const climb = THREE.MathUtils.smoothstep(u.t, 1.3, 2.4);
+        u.vel.set(u.dir * (0.6 + 4.6 * run), 3.4 * climb);
+        gull.position.x += u.vel.x * dt;
+        gull.position.y = Math.max(SURFACE_Y - 0.02, gull.position.y + u.vel.y * dt);
+        gull.rotation.z = u.dir * THREE.MathUtils.lerp(0, 0.18, climb);
+        if (u.state === 'takeoff' && u.t > 3.6) {
+          u.state = 'fly';
+          playGull(gull, 'fly', 0.4);
+        }
+        if (gull.position.y > SURFACE_Y + 24 || Math.abs(gull.position.x - cx) > 60) {
+          this.landGull(gull, cx + (Math.random() < 0.5 ? -1 : 1) * rand(32, 44));
+        }
+      }
+    }
+    return scared;
   }
 
   placeProp(prop, x) {
@@ -919,6 +1047,7 @@ export class World {
     this.time += dt;
     const cx = camera.position.x;
     const cy = camera.position.y;
+    if (this.updateGulls(dt, cx, cy, sub) > 0) sfx.gull();
     const t = this.time;
     this.uniforms.uTime.value = t;
     const shift = depthShift(cy);

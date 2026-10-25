@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { NodeIO } from '@gltf-transform/core';
 import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
-import { dedup, draco, prune, simplify, weld } from '@gltf-transform/functions';
+import { dedup, draco, prune, resample, simplify, weld } from '@gltf-transform/functions';
 import draco3d from 'draco3dgltf';
 import { MeshoptSimplifier } from 'meshoptimizer';
 
@@ -47,6 +47,7 @@ for (const file of fs.readdirSync(SRC).filter((f) => f.endsWith('.glb')).sort())
   const doc = await io.read(path.join(SRC, file));
   // Empty nodes stay: the game finds muzzles, lenses and lures by name.
   const steps = [dedup(), prune({ keepLeaves: true })];
+  if (doc.getRoot().listAnimations().length) steps.push(resample({ tolerance: 1e-4 }));
   if (SIMPLIFY[name]) {
     const [ratio, error] = SIMPLIFY[name];
     steps.push(weld(), simplify({ simplifier: MeshoptSimplifier, ratio, error }));
