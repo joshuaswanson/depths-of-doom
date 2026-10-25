@@ -10,7 +10,9 @@ const DRAG = 1.9;
 const MAX_SPOTLIGHTS = 4;
 const GRAVITY = 18;
 const AIR_DRAG = 0.15;
-const TURN_TIME = 0.7;
+const TURN_SPEED = Math.PI / 0.7;
+const TURN_ACCEL = 14;
+const TURN_DRAG = 3.5;
 const MAX_PITCH = 1.52;
 const CRUISE_BUILD = 0.32;
 const CRUISE_BOOST = 0.9;
@@ -233,7 +235,7 @@ export class Player {
     this.heading = new THREE.Vector2(1, 0);
     this.facing = 1;
     this.yaw = YAW.right;
-    this.turn = null;
+    this.yawVel = 0;
     this.pitch = 0;
     this.airborne = false;
     this.invuln = 0;
@@ -542,16 +544,19 @@ export class Player {
     if (bounds.top !== undefined) p.y = Math.min(p.y, bounds.top);
     this.airborne = p.y > SURFACE_Y + 0.3;
 
-    // Turning around is a committed animation: once started it always plays to the end, and input for the other
-    // way waits until it finishes.
-    if (this.turn) {
-      this.turn.t = Math.min(1, this.turn.t + dt / TURN_TIME);
-      const e = this.turn.t * this.turn.t * (3 - 2 * this.turn.t);
-      this.yaw = this.turn.from + (this.turn.to - this.turn.from) * e;
-      if (this.turn.t >= 1) this.turn = null;
-    } else if (Math.abs(input.x) > 0.1 && Math.sign(input.x) !== this.facing) {
+    // Holding left or right spins the turn up; letting go lets it coast to a stop wherever it ends up.
+    if (Math.abs(input.x) > 0.1) {
       this.facing = Math.sign(input.x);
-      this.turn = { from: this.yaw, to: this.facing > 0 ? YAW.right : YAW.left, t: 0 };
+      const target = this.facing > 0 ? YAW.right : YAW.left;
+      const want = THREE.MathUtils.clamp((target - this.yaw) * 6, -TURN_SPEED, TURN_SPEED);
+      this.yawVel += THREE.MathUtils.clamp(want - this.yawVel, -dt * TURN_ACCEL, dt * TURN_ACCEL);
+    } else {
+      this.yawVel *= Math.exp(-dt * TURN_DRAG);
+    }
+    this.yaw += this.yawVel * dt;
+    if (this.yaw > YAW.right || this.yaw < YAW.left) {
+      this.yaw = THREE.MathUtils.clamp(this.yaw, YAW.left, YAW.right);
+      this.yawVel = 0;
     }
     this.yawPivot.rotation.y = this.yaw;
     this.updateExtents();
