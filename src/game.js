@@ -17,6 +17,7 @@ const ENEMY_YAW = {
 };
 const SKULL_CHANCE = 1 / 3;
 const ENEMY_RELOAD = 0.9;
+const DARK_HINT_Y = -40;
 // Where each enemy hull carries its missile drum, in model space (the nose points to -X).
 const POD_MOUNT = { scout: { x: -0.45, y: 0.55, scale: 0.8 }, gunner: { x: -0.6, y: 0.74, scale: 0.95 },
   boss: { x: -1.1, y: 1.3, scale: 1.4 } };
@@ -1573,6 +1574,15 @@ export class Game {
     this.cam.y = THREE.MathUtils.clamp(this.cam.y, floorLimit, SURFACE_Y + 1);
   }
 
+  // Diving into a dark trench without a lamp suggests buying one, once per descent.
+  spotlightHint() {
+    const y = this.player.center.y;
+    if (y > SHELF_Y) this.hintedDark = false;
+    if (this.hintedDark || y > DARK_HINT_Y || !this.player.alive || this.player.levels.spotlight > 0) return;
+    this.hintedDark = true;
+    this.hud.showToast('Buy a spotlight for better visibility!');
+  }
+
   splashCheck() {
     const pc = this.player.center;
     const above = this.player.group.position.y > SURFACE_Y;
@@ -1603,6 +1613,7 @@ export class Game {
     this.updateWaves(dt);
     this.updateCamera(dt);
     this.splashCheck();
+    this.spotlightHint();
 
     if (pl.alive) {
       const prop = pl.propellerWorld(this.tmp);
