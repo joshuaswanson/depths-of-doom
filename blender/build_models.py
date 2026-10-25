@@ -42,7 +42,11 @@ ASSETS = {
 }
 
 
-AO_DISTANCE = {"kelp": 0.3, "reef": 0.6, "sponge": 0.4, "anemone": 0.3, "wreck": 1.2, "deep": 0.5, "ruin": 1.4, "rock": 1.2, "coral": 0.5, "seaweed": 0.8, "anchor": 1.0, "chain": 0.3, "enemy": 0.8}
+AO_DISTANCE = {"kelp": 0.3, "reef": 0.6, "sponge": 0.4, "anemone": 0.3, "wreck": 1.2, "deep": 0.5, "ruin": 0.7, "rock": 1.2, "coral": 0.5, "seaweed": 0.8, "anchor": 1.0, "chain": 0.3, "enemy": 0.8}
+
+
+# Stacked masonry occludes itself heavily; keep its walls from going black.
+AO_FLOOR = {"ruin": 0.5, "rock": 0.35}
 
 
 def parse_args():
@@ -130,7 +134,8 @@ def main():
     for name in names:
         root = ASSETS[name](P)
         if not args.no_bake:
-            bake_ao(root, distance=AO_DISTANCE.get(name.split("_")[0], 0.6))
+            kind = name.split("_")[0]
+            bake_ao(root, distance=AO_DISTANCE.get(kind, 0.6), floor=AO_FLOOR.get(kind, 0.0))
         if not args.no_export:
             export_glb(root, os.path.join(MODEL_DIR, f"{name}.glb"))
         if cam:

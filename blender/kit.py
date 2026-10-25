@@ -299,8 +299,9 @@ def export_glb(root, path):
                               export_active_vertex_color_when_no_material=True)
 
 
-def bake_ao(root, distance=0.6, samples=48):
-    """Bake ambient occlusion into a point color attribute so crevices stay dark in the game."""
+def bake_ao(root, distance=0.6, samples=48, floor=0.0):
+    """Bake ambient occlusion into a point color attribute so crevices stay dark in the game. `floor` is the darkest
+    value a fully occluded vertex keeps."""
     scene = bpy.context.scene
     previous = scene.render.engine
     scene.render.engine = "CYCLES"
@@ -317,6 +318,11 @@ def bake_ao(root, distance=0.6, samples=48):
         obj.select_set(True)
     bpy.context.view_layer.objects.active = meshes[0]
     bpy.ops.object.bake(type="AO", target="VERTEX_COLORS")
+    if floor > 0:
+        for obj in meshes:
+            for c in obj.data.color_attributes["ao"].data:
+                r, g, b, a = c.color
+                c.color = (floor + (1 - floor) * r, floor + (1 - floor) * g, floor + (1 - floor) * b, a)
     scene.render.engine = previous
 
 

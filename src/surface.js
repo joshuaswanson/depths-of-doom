@@ -22,7 +22,7 @@ const PROFILES = {
   paint: { scale: 2.2, mottle: 0.12, scratch: 0.32, grime: 0.22, rust: 0.0, bump: 0.55, crack: 0.0, rough: 0.12 },
   metal: { scale: 3.0, mottle: 0.1, scratch: 0.45, grime: 0.28, rust: 0.0, bump: 0.45, crack: 0.0, rough: 0.2 },
   enemy: { scale: 2.0, mottle: 0.14, scratch: 0.4, grime: 0.3, rust: 0.55, bump: 0.6, crack: 0.0, rough: 0.2 },
-  stone: { scale: 1.4, mottle: 0.32, scratch: 0.0, grime: 0.35, rust: 0.0, bump: 1.4, crack: 0.75, rough: 0.0 },
+  stone: { scale: 1.4, mottle: 0.28, scratch: 0.0, grime: 0.18, rust: 0.0, bump: 2.0, crack: 0.9, rough: 0.0 },
   moss: { scale: 6.0, mottle: 0.35, scratch: 0.0, grime: 0.2, rust: 0.0, bump: 1.2, crack: 0.0, rough: 0.0 },
   wood: { scale: 2.0, mottle: 0.2, scratch: 0.15, grime: 0.25, rust: 0.0, bump: 0.9, crack: 0.0, rough: 0.0 },
   rock: { scale: 1.6, mottle: 0.35, scratch: 0.0, grime: 0.3, rust: 0.0, bump: 1.5, crack: 0.45, rough: 0.0 },
@@ -98,7 +98,18 @@ function detailShader(p, kind) {
   if (kind === 'wood' || kind === 'coral') color.push('diffuseColor.rgb *= 1.0 - dGrain * 0.28 - dPore * 0.35;');
   if (kind === 'weed') color.push('diffuseColor.rgb *= 1.0 + dVein * 0.18;');
   if (kind === 'stone' || kind === 'rock') {
-    color.push(`vec3 dUpN = inverseTransformDirection( normalize( vNormal ), viewMatrix );
+    // Weathered underwater masonry: per-block tone, granite speckle, pitting, algae streaks running down, and
+    // pale encrusting spots, with moss gathering on upward faces.
+    decl.push(`vec3 dUpN = inverseTransformDirection( normalize( vNormal ), viewMatrix );
+      float sBlock = dNoise( floor( vDetailPos * 1.15 + 0.5 ) * 3.7 );
+      float sSpeck = dNoise( dp * 9.0 );
+      float sPit = smoothstep( 0.6, 0.85, dNoise( dp * 4.5 + 9.0 ) ) * smoothstep( 0.5, 0.8, dNoise( dp * 1.3 + 4.0 ) );
+      float sStreak = smoothstep( 0.45, 0.85, dNoise( vec3( dp.x * 5.0, dp.y * 0.45, dp.z * 5.0 ) + 2.0 ) )
+        * smoothstep( 0.2, 0.7, dLow );`);
+    color.push(`diffuseColor.rgb *= 0.9 + sBlock * 0.4;
+      diffuseColor.rgb *= 0.9 + sSpeck * 0.2;
+      diffuseColor.rgb *= 1.0 - sPit * 0.35;
+      diffuseColor.rgb = mix( diffuseColor.rgb, diffuseColor.rgb * vec3( 0.55, 0.75, 0.6 ), sStreak * 0.6 * ( 1.0 - max( dUpN.y, 0.0 ) ) );
       diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.18, 0.36, 0.12 ), smoothstep( 0.55, 0.9, dUpN.y ) * smoothstep( 0.45, 0.62, dLow ) * 0.85 );`);
   }
   return { decl: decl.join('\n'), color: color.join('\n') };
@@ -119,7 +130,7 @@ function patch(material, profileName) {
         roughnessFactor = clamp( roughnessFactor + ( dMottle - 0.5 ) * ${f(p.rough * 2)} + dScratch * ${f(p.scratch * 0.3)} + dRust * 0.4, 0.04, 1.0 );`)
       .replace('#include <normal_fragment_maps>', /* glsl */ `#include <normal_fragment_maps>
         float dHeight = dMottle * 0.35 - dScratch * 0.5 - dCrack * ${f(p.crack * 0.9)} + dGrain * 0.5 - dPore * 0.8
-          + dRust * dMottle * 0.6;
+          + dRust * dMottle * 0.6${profileName === 'stone' || profileName === 'rock' ? ' + sSpeck * 0.25 - sPit * 0.7' : ''};
         normal = dPerturb( - vViewPosition, normal, vec2( dFdx( dHeight ), dFdy( dHeight ) ) * ${f(p.bump * 0.12)}, faceDirection );`);
   };
   material.needsUpdate = true;
