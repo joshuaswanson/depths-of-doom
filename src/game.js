@@ -22,6 +22,8 @@ const CHAIN_SEGMENT = 1.08;
 const CHAIN_SINK = 5;
 const CHAIN_DRIFT = 6;
 const MAX_BROKEN_CHAINS = 12;
+const MAX_WRECKS = 14;
+const MAX_COINS = 400;
 // Where each enemy hull carries its missile drum, in model space (the nose points to -X).
 const POD_MOUNT = { scout: { x: -0.45, y: 0.55, scale: 0.8 }, gunner: { x: -0.6, y: 0.74, scale: 0.95 },
   boss: { x: -1.1, y: 1.3, scale: 1.4 } };
@@ -756,7 +758,21 @@ export class Game {
 
   updateWrecks(dt) {
     const grey = new THREE.Color();
+    // A long fight in one spot would pile up hulls without end; past the cap the oldest settle into the sand.
+    let excess = this.wrecks.length - MAX_WRECKS;
     for (const w of this.wrecks) {
+      if (excess <= 0) break;
+      if (!w.settled || w.burying) continue;
+      w.burying = 0;
+      excess--;
+    }
+    for (const w of this.wrecks) {
+      if (w.burying !== undefined) {
+        w.burying += dt;
+        w.e.obj.position.y -= dt * 0.5;
+        if (w.burying > 2.5 + w.e.def.ry * w.e.def.scale * 2) w.gone = true;
+        continue;
+      }
       const { e } = w;
       const p = e.obj.position;
       w.t += dt;
