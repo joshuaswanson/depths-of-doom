@@ -4,7 +4,7 @@ export const UPGRADES = [
   { id: 'cannon', name: 'Cannon', icon: 'cannon', start: 1, max: 6, base: 35, growth: 1.6,
     blurb: 'Adds a gatling gun that auto-fires straight ahead. Each level also raises fire rate.' },
   { id: 'torpedo', name: 'Torpedos', icon: 'torpedo', start: 0, max: 5, base: 55, growth: 1.65,
-    blurb: 'Adds a torpedo rack. Fires forward every ~2 s, slowly homes in, 5 damage plus splash. Can leap out of the water.' },
+    blurb: 'Adds a torpedo rack. Fires forward every ~2 s, slowly homes in, 5 damage plus splash.' },
   { id: 'missile', name: 'Missiles', icon: 'missile', start: 0, max: 5, base: 75, growth: 1.65,
     blurb: 'Adds a missile pod. Launches every ~3 s and homes in fast on the nearest enemy. 4 damage.' },
   { id: 'shield', name: 'Shield', icon: 'shield', start: 0, max: 5, base: 60, growth: 1.7,
