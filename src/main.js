@@ -219,6 +219,7 @@ function frame() {
     if (state === 'gameover') game.update(dt, { x: 0, y: 0 });
   }
   if (state !== 'paused') effects.update(dt, 0);
+  game.status.group.visible = (state === 'playing' || state === 'paused') && player.alive;
   const shake = state === 'paused' ? 0 : effects.shake;
   camera.position.x = game.cam.x + (Math.random() - 0.5) * shake * 0.5;
   camera.position.y = game.cam.y + (Math.random() - 0.5) * shake * 0.5;

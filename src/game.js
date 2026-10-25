@@ -1384,7 +1384,6 @@ export class Game {
   updateStatus(dt) {
     const pl = this.player;
     const { group, bar, pips } = this.status;
-    group.visible = pl.alive;
     const ext = pl.extents;
     group.position.set(pl.group.position.x, pl.group.position.y + ext.cy + ext.hy + 0.75, 1.5);
     setBar(bar, Math.max(0, pl.hp / pl.maxHp), dt);
