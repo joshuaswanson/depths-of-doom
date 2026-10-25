@@ -235,6 +235,8 @@ function frame() {
     active: true,
     surface: 1 - THREE.MathUtils.smoothstep(Math.abs(player.center.y - SURFACE_Y), 0.8, 5),
     speed: THREE.MathUtils.clamp(player.vel.length() / 9, 0, 1),
+    underwater: THREE.MathUtils.smoothstep(SURFACE_Y - player.center.y, 0.3, 1.5),
+    depth: world.dark,
   });
   setMusic(musicMix());
   lightForDepth(world.dark);

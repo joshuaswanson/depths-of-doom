@@ -2,6 +2,7 @@ let ctx = null;
 let master = null;
 let muted = false;
 let noiseBuffer = null;
+let sfxBus = null;
 
 function ensure() {
   if (ctx) return ctx;
@@ -9,6 +10,11 @@ function ensure() {
   master = ctx.createGain();
   master.gain.value = 0.35;
   master.connect(ctx.destination);
+  // Sound effects pass through a lowpass that closes underwater, so everything below the surface sounds muffled.
+  sfxBus = ctx.createBiquadFilter();
+  sfxBus.type = 'lowpass';
+  sfxBus.frequency.value = 18000;
+  sfxBus.connect(master);
   noiseBuffer = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
   const data = noiseBuffer.getChannelData(0);
   for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
@@ -26,7 +32,8 @@ export function toggleMute() {
   return muted;
 }
 
-function tone({ type = 'sine', freq = 440, to = freq, dur = 0.15, vol = 0.3, delay = 0 }) {
+// `dry` sounds skip the underwater muffling: interface cues like coins, upgrades and the sonar scope.
+function tone({ type = 'sine', freq = 440, to = freq, dur = 0.15, vol = 0.3, delay = 0, dry = false }) {
   if (!ctx || muted) return;
   const t = ctx.currentTime + delay;
   const osc = ctx.createOscillator();
@@ -36,12 +43,12 @@ function tone({ type = 'sine', freq = 440, to = freq, dur = 0.15, vol = 0.3, del
   osc.frequency.exponentialRampToValueAtTime(Math.max(1, to), t + dur);
   gain.gain.setValueAtTime(vol, t);
   gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
-  osc.connect(gain).connect(master);
+  osc.connect(gain).connect(dry ? master : sfxBus);
   osc.start(t);
   osc.stop(t + dur + 0.02);
 }
 
-function noise({ dur = 0.3, vol = 0.4, freq = 800, to = 200, q = 1, delay = 0 }) {
+function noise({ dur = 0.3, vol = 0.4, freq = 800, to = 200, q = 1, delay = 0, dry = false }) {
   if (!ctx || muted) return;
   const t = ctx.currentTime + delay;
   const src = ctx.createBufferSource();
@@ -54,14 +61,15 @@ function noise({ dur = 0.3, vol = 0.4, freq = 800, to = 200, q = 1, delay = 0 })
   const gain = ctx.createGain();
   gain.gain.setValueAtTime(vol, t);
   gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
-  src.connect(filter).connect(gain).connect(master);
+  src.connect(filter).connect(gain).connect(dry ? master : sfxBus);
   src.start(t);
   src.stop(t + dur + 0.02);
 }
 
-// Looping water beds heard only at the surface: a low rumble, a rush that grows with speed, and waves washing.
-// Bubbles pop now and then on top.
+// Looping water beds. At the surface: a rumble, a rush that grows with speed, and waves washing. Below it: a deep,
+// soft pressure rumble that sinks lower with depth, trains of bubbles, and the odd groan from the hull far down.
 let amb = null;
+const lerp = (a, b, t) => a + (b - a) * t;
 
 function waterBed(type, freq, q) {
   const src = ctx.createBufferSource();
@@ -80,11 +88,39 @@ function waterBed(type, freq, q) {
   return { filter, gain };
 }
 
-export function setAmbience(dt, { active = false, surface = 0, speed = 0 } = {}) {
+function hum(freq) {
+  const osc = ctx.createOscillator();
+  osc.frequency.value = freq;
+  const gain = ctx.createGain();
+  gain.gain.value = 0;
+  osc.connect(gain).connect(master);
+  osc.start();
+  return { osc, gain };
+}
+
+function bubbleTrain(size) {
+  const count = 2 + Math.floor(Math.random() * 5);
+  let delay = 0;
+  for (let i = 0; i < count; i++) {
+    const f = (380 + Math.random() * 700) / size;
+    tone({ type: 'sine', freq: f, to: f * (1.8 + Math.random() * 0.5), dur: 0.04 + Math.random() * 0.05,
+      vol: 0.03 + Math.random() * 0.04, delay });
+    delay += 0.03 + Math.random() * 0.09;
+  }
+}
+
+function hullGroan() {
+  const f = 55 + Math.random() * 40;
+  tone({ type: 'sawtooth', freq: f, to: f * (0.75 + Math.random() * 0.5), dur: 1.4 + Math.random(), vol: 0.05 });
+  tone({ type: 'triangle', freq: f * 2.02, to: f * 1.7, dur: 1.1, vol: 0.025, delay: 0.15 });
+}
+
+export function setAmbience(dt, { active = false, surface = 0, speed = 0, underwater = 0, depth = 0 } = {}) {
   if (!ctx) return;
   if (!amb) {
     amb = { rumble: waterBed('lowpass', 500, 0.8), rush: waterBed('bandpass', 700, 0.9),
-      surf: waterBed('bandpass', 900, 0.6), t: 0 };
+      surf: waterBed('bandpass', 900, 0.6), deep: waterBed('lowpass', 160, 0.7), drift: waterBed('lowpass', 320, 0.5),
+      hum: hum(46), t: 0 };
   }
   amb.t += dt;
   const now = ctx.currentTime;
@@ -96,11 +132,22 @@ export function setAmbience(dt, { active = false, surface = 0, speed = 0 } = {})
   amb.rush.filter.frequency.setTargetAtTime(500 + 1100 * speed, now, 0.15);
   amb.surf.gain.gain.setTargetAtTime(on * surface * (0.06 + 0.16 * swell), now, 0.3);
   amb.surf.filter.frequency.setTargetAtTime(700 + 500 * swell, now, 0.3);
+  const below = on * underwater;
+  const tide = 0.5 + 0.5 * Math.sin(amb.t * 0.17) * Math.sin(amb.t * 0.11 + 2);
+  amb.deep.gain.gain.setTargetAtTime(below * (0.28 + 0.14 * depth) * (0.75 + 0.25 * tide), now, 0.6);
+  amb.deep.filter.frequency.setTargetAtTime(170 - 90 * depth + 25 * tide, now, 0.6);
+  amb.drift.gain.gain.setTargetAtTime(below * (0.035 + speed * 0.09), now, 0.3);
+  amb.drift.filter.frequency.setTargetAtTime(260 + 300 * speed, now, 0.3);
+  amb.hum.gain.gain.setTargetAtTime(below * depth * 0.05, now, 1);
+  amb.hum.osc.frequency.setTargetAtTime(44 + 6 * tide, now, 1);
+  sfxBus.frequency.setTargetAtTime(lerp(18000, 1100, underwater), now, 0.08);
   if (active && Math.random() < dt * surface * (0.35 + speed * 3)) {
     const f = 500 + Math.random() * 900;
     tone({ type: 'sine', freq: f, to: f * (1.6 + Math.random() * 0.6), dur: 0.05 + Math.random() * 0.04,
       vol: 0.025 + Math.random() * 0.035 });
   }
+  if (below > 0.5 && Math.random() < dt * (0.3 + speed * 2.2)) bubbleTrain(0.8 + Math.random() * 0.8);
+  if (below > 0.5 && depth > 0.5 && Math.random() < dt / 11) hullGroan();
 }
 
 // Music tracks streamed from files, each looped by starting a fresh copy as the old one fades out at its end.
@@ -195,8 +242,8 @@ export const sfx = {
     tone({ type: 'sine', freq: 500, to: 1100, dur: 0.08, vol: 0.12 });
   },
   coin() {
-    tone({ type: 'square', freq: 988, dur: 0.07, vol: 0.06 });
-    tone({ type: 'square', freq: 1319, dur: 0.16, vol: 0.06, delay: 0.06 });
+    tone({ type: 'square', freq: 988, dur: 0.07, vol: 0.06, dry: true });
+    tone({ type: 'square', freq: 1319, dur: 0.16, vol: 0.06, delay: 0.06, dry: true });
   },
   hurt() {
     tone({ type: 'sawtooth', freq: 220, to: 60, dur: 0.4, vol: 0.3 });
@@ -215,15 +262,16 @@ export const sfx = {
     noise({ dur: 0.45, vol: 0.25, freq: 6000, to: 800 });
   },
   shieldUp() {
-    tone({ type: 'sine', freq: 500, to: 1300, dur: 0.4, vol: 0.12 });
-    tone({ type: 'triangle', freq: 1600, dur: 0.18, vol: 0.06, delay: 0.32 });
+    tone({ type: 'sine', freq: 500, to: 1300, dur: 0.4, vol: 0.12, dry: true });
+    tone({ type: 'triangle', freq: 1600, dur: 0.18, vol: 0.06, delay: 0.32, dry: true });
   },
   upgrade() {
-    [523, 659, 784, 1047].forEach((f, i) => tone({ type: 'triangle', freq: f, dur: 0.16, vol: 0.18, delay: i * 0.07 }));
-    noise({ dur: 0.12, vol: 0.25, freq: 4000, to: 1500, delay: 0.3 });
+    [523, 659, 784, 1047].forEach((f, i) => tone({ type: 'triangle', freq: f, dur: 0.16, vol: 0.18, delay: i * 0.07,
+      dry: true }));
+    noise({ dur: 0.12, vol: 0.25, freq: 4000, to: 1500, delay: 0.3, dry: true });
   },
   denied() {
-    tone({ type: 'square', freq: 180, to: 150, dur: 0.15, vol: 0.08 });
+    tone({ type: 'square', freq: 180, to: 150, dur: 0.15, vol: 0.08, dry: true });
   },
   bump(strength = 0.5) {
     const v = 0.12 + 0.2 * strength;
@@ -236,7 +284,8 @@ export const sfx = {
     tone({ type: 'square', freq: 260, to: 120, dur: 0.08, vol: 0.1 });
   },
   wave() {
-    [392, 523, 659].forEach((f, i) => tone({ type: 'triangle', freq: f, dur: 0.25, vol: 0.15, delay: i * 0.12 }));
+    [392, 523, 659].forEach((f, i) => tone({ type: 'triangle', freq: f, dur: 0.25, vol: 0.15, delay: i * 0.12,
+      dry: true }));
   },
   splash() {
     noise({ dur: 0.6, vol: 0.35, freq: 2500, to: 400, q: 0.7 });
@@ -262,11 +311,11 @@ export const sfx = {
   sonar(strength = 1) {
     [0, 0.38, 0.76].forEach((delay, i) => {
       const vol = 0.05 * strength * [1, 0.35, 0.12][i];
-      tone({ type: 'sine', freq: 1180, to: 1120, dur: 1.3, vol, delay });
-      tone({ type: 'sine', freq: 2360, to: 2240, dur: 0.5, vol: vol * 0.25, delay });
+      tone({ type: 'sine', freq: 1180, to: 1120, dur: 1.3, vol, delay, dry: true });
+      tone({ type: 'sine', freq: 2360, to: 2240, dur: 0.5, vol: vol * 0.25, delay, dry: true });
     });
   },
   blip(big = false) {
-    tone({ type: 'sine', freq: big ? 1250 : 1900, to: big ? 1150 : 1800, dur: 0.09, vol: 0.035 });
+    tone({ type: 'sine', freq: big ? 1250 : 1900, to: big ? 1150 : 1800, dur: 0.09, vol: 0.035, dry: true });
   },
 };
