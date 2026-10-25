@@ -428,6 +428,23 @@ function makeSeabedMaterial(uniforms) {
   return mat;
 }
 
+// A wide, soft glow that fades out gradually, so the lure lights the water around it in place of a hard ball.
+let lureGlowTexture = null;
+function lureGlow() {
+  if (lureGlowTexture) return lureGlowTexture;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 128;
+  const g = canvas.getContext('2d');
+  const grad = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+  [[0, 0.9], [0.08, 0.55], [0.2, 0.28], [0.4, 0.1], [0.7, 0.03], [1, 0]].forEach(([stop, alpha]) => {
+    grad.addColorStop(stop, `rgba(255,255,255,${alpha})`);
+  });
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 128, 128);
+  lureGlowTexture = new THREE.CanvasTexture(canvas);
+  return lureGlowTexture;
+}
+
 function softDot() {
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = 32;
@@ -478,10 +495,10 @@ function makeAngler() {
   const esca = findNode(fish, 'Esca');
   esca.material = esca.material.clone();
   const halo = new THREE.Sprite(new THREE.SpriteMaterial({
-    map: softDot(), color: new THREE.Color(0.9, 2.4, 2.2), blending: THREE.AdditiveBlending, depthWrite: false,
+    map: lureGlow(), color: new THREE.Color(0.45, 1.25, 1.15), blending: THREE.AdditiveBlending, depthWrite: false,
     transparent: true, fog: false, opacity: 0,
   }));
-  halo.scale.setScalar(1.1);
+  halo.scale.setScalar(3.4);
   esca.add(halo);
   fish.userData = {
     halo, esca, escaBase: esca.material.emissiveIntensity, glow: 0, flash: 0, untilFlash: rand(2, 12), phase: rand(0, 6),
@@ -531,7 +548,8 @@ function updateAngler(a, dt, t, cx, sub, world) {
   p.y = Math.max(floorY(p.x) + ANGLER_BAND[0] - 1, p.y + u.vel.y * dt + Math.sin(t * 0.6 + u.phase) * 0.08 * dt);
   if (Math.abs(u.vel.x) > 0.2) u.facing = Math.sign(u.vel.x);
   u.yaw += ((u.facing > 0 ? 0 : -Math.PI) - u.yaw) * (1 - Math.exp(-dt * 0.8));
-  a.rotation.y = u.yaw;
+  // The whole body swings a little in time with the tail wave, so the swimming reads from the side.
+  a.rotation.y = u.yaw + Math.sin(t * 3 + u.phase) * 0.14;
   a.rotation.z = THREE.MathUtils.clamp(Math.atan2(u.vel.y, Math.abs(u.vel.x) + 0.3), -0.35, 0.35) * u.facing * 0.8;
   // Mostly dark: now and then the lure flares for a couple of seconds, lighting the fish up before it vanishes again.
   const near = sub && a.position.distanceTo(sub) < 12 * a.scale.x;
@@ -555,8 +573,8 @@ function updateAngler(a, dt, t, cx, sub, world) {
   }
   u.glow = flashLevel(u.flash);
   const flicker = 0.9 + 0.1 * Math.sin(t * 9 + u.phase);
-  u.esca.material.emissiveIntensity = u.escaBase * (0.03 + 0.97 * u.glow) * flicker;
-  u.halo.material.opacity = 0.85 * u.glow * flicker;
+  u.esca.material.emissiveIntensity = u.escaBase * 0.45 * (0.03 + 0.97 * u.glow) * flicker;
+  u.halo.material.opacity = 0.75 * u.glow * flicker;
   if (world.anglerLight.userData.owner === a) {
     u.esca.getWorldPosition(world.anglerLight.position);
     world.anglerLight.position.z += 1.2;

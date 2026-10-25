@@ -240,7 +240,7 @@ const SWAY_GLSL = /* glsl */ `
   transformed.xy = vec2( ${JAW_HINGE[0]}, ${JAW_HINGE[1]} )
     + vec2( cos( jawA ) * jawP.x + sin( jawA ) * jawP.y, -sin( jawA ) * jawP.x + cos( jawA ) * jawP.y );
   float swayRear = smoothstep( 0.3, -1.7, transformed.x );
-  transformed.z += sin( uTime * 3.0 - transformed.x * 2.2 + swaySeed ) * 0.22 * swayRear * swayRear;
+  transformed.z += sin( uTime * 3.0 - transformed.x * 2.2 + swaySeed ) * 0.42 * swayRear * swayRear;
 `;
 
 function addSway(material) {
