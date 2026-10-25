@@ -5,7 +5,7 @@ export const UPGRADES = [
     blurb: 'Adds a gatling gun that fires straight ahead on its own, and makes all your guns fire faster.' },
   { id: 'torpedo', name: 'Torpedos', icon: 'torpedo', start: 0, max: 5, base: 55, growth: 1.65,
     blurb: 'Adds a torpedo rack. Torpedoes shoot dead straight ahead and hit hard with a splash, but they can miss.' },
-  { id: 'missile', name: 'Missiles', icon: 'missile', start: 0, max: 5, base: 75, growth: 1.65,
+  { id: 'missile', name: 'Missiles', icon: 'missile', start: 0, max: 5, base: 120, growth: 1.7,
     blurb: 'Adds a missile pod. Missiles chase down the nearest enemy and rarely miss, but hit lighter.' },
   { id: 'shield', name: 'Shield', icon: 'shield', start: 0, max: 5, base: 60, growth: 1.7,
     blurb: 'Adds a shield charge. Each charge blocks one hit and refills over time.' },
