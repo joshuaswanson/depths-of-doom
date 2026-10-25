@@ -146,71 +146,110 @@ def gull_spine(steps=64):
     return [(x, z, max(0.0, ry), max(0.0, rz)) for x, z, ry, rz in catmull_rom(keys, steps)]
 
 
-def outline_plate(part, material, pts, thickness, matrix, bevel=0.008):
-    part.extrude(material, pts, depth=thickness, matrix=matrix, bevel=bevel)
+def gull_ring(x):
+    """Body half-widths and centre height at x, from the same spine used to skin the body."""
+    spine = gull_spine(64)
+    best = min(spine, key=lambda k: abs(k[0] - x))
+    return best[1], best[2], best[3]
+
+
+def grid_patch(part, P, rows, cols, point, color):
+    """Build a smooth quad patch from point(u, v) -> (Vector, material key) over a rows x cols grid."""
+    bm = part.bm
+    verts = [[None] * cols for _ in range(rows)]
+    mats = [[None] * cols for _ in range(rows)]
+    for i in range(rows):
+        for j in range(cols):
+            co, mkey = point(i / (rows - 1), j / (cols - 1))
+            verts[i][j] = bm.verts.new(co)
+            mats[i][j] = mkey
+    groups = {}
+    for i in range(rows - 1):
+        for j in range(cols - 1):
+            f = bm.faces.new((verts[i][j], verts[i][j + 1], verts[i + 1][j + 1], verts[i + 1][j]))
+            groups.setdefault(color(mats, i, j), []).append(f)
+    faces = [f for g in groups.values() for f in g]
+    bmesh.ops.recalc_face_normals(bm, faces=faces)
+    for key, group in groups.items():
+        part._paint(group, P[key], True)
 
 
 def gull_folded_wing(part, P, side):
-    """A wing tucked along the back, its black-and-white tip crossing over the tail."""
-    m = trs((0.0, side * 0.105, 0.215), (side * -0.5, 0.06, 0))
-    wing = [(0.14, 0.0), (0.12, 0.035), (0.06, 0.068), (-0.04, 0.085), (-0.16, 0.083), (-0.27, 0.068), (-0.35, 0.045),
-            (-0.37, 0.01), (-0.33, -0.022), (0.08, -0.034), (0.13, -0.018)]
-    outline_plate(part, P["gull_gray"], [(x, y * side) for x, y in wing], 0.045, m, bevel=0.016)
-    edge = [(0.06, -0.025), (-0.3, -0.015), (-0.3, -0.03), (0.06, -0.04)]
-    outline_plate(part, P["gull_white"], [(x, y * side) for x, y in edge], 0.032, m, bevel=0.004)
-    tip = [(-0.3, 0.06), (-0.4, 0.045), (-0.5, 0.015), (-0.5, -0.005), (-0.4, -0.01), (-0.3, -0.012)]
-    outline_plate(part, P["black"], [(x, y * side) for x, y in tip], 0.026, m @ trs((0, 0, 0.004)), bevel=0.004)
-    for x in (-0.42, -0.47):
-        part.sphere(P["gull_white"], matrix=m @ trs((x, 0.012 * side, 0.016), scale=(0.014, 0.01, 0.004)), segs=8, rings=4)
+    """A wing folded along the flank as a curved shell, its black-and-white tip crossing over the tail."""
+    def point(u, v):
+        x = 0.13 - u * 0.62
+        zc, ry, rz = gull_ring(max(x, -0.37))
+        tail = max(0.0, -0.3 - x) / 0.19
+        a = math.radians(105 - v * (80 - 50 * tail))
+        thick = 0.022 * (1 - 0.6 * u)
+        r_out = 1.0 + thick * 6
+        ry2 = max(ry, 0.06 + 0.02 * (1 - tail)) * r_out
+        rz2 = max(rz, 0.05) * r_out
+        y = side * (ry2 * math.cos(a) * (1 - 0.55 * tail) + 0.005)
+        z = zc + rz2 * math.sin(a) + 0.03 * tail
+        key = "black" if u > 0.74 else ("gull_white" if v > 0.82 else "gull_gray")
+        if u > 0.8 and 0.3 < v < 0.5 and (abs(u - 0.86) < 0.025 or abs(u - 0.94) < 0.02):
+            key = "gull_white"
+        return Vector((x, y, z)), key
+
+    grid_patch(part, P, 30, 10, point, lambda mats, i, j: mats[i][j])
 
 
 def gull_flying_wing(part, P, side):
-    """A spread wing along +Y (left) or -Y (right): grey arm and hand, white trailing edge, fingered black tips."""
-    m = trs(scale=(1, side, 1)) @ trs(rot=(0.12, 0, 0))
-    arm = [(0.07, 0.0), (0.075, 0.2), (0.05, 0.42), (-0.02, 0.5), (-0.1, 0.45), (-0.12, 0.25), (-0.11, 0.0)]
-    outline_plate(part, P["gull_gray"], arm, 0.028, m, bevel=0.01)
-    trailing = [(-0.11, 0.0), (-0.12, 0.25), (-0.1, 0.45), (-0.13, 0.43), (-0.15, 0.24), (-0.14, 0.0)]
-    outline_plate(part, P["gull_white"], trailing, 0.022, m, bevel=0.005)
-    for i in range(5):
-        a = 0.35 + i * 0.32
-        base = (0.03 - i * 0.03, 0.44 + i * 0.012)
-        length = 0.24 - i * 0.02
-        d = (math.sin(a) * -0.45 + 0.15, math.cos(a) * 0.35 + 0.8)
-        n = math.hypot(*d)
-        d = (d[0] / n, d[1] / n)
-        nx, ny = -d[1], d[0]
-        w = 0.042
-        tip = (base[0] + d[0] * length, base[1] + d[1] * length)
-        feather = [(base[0] + nx * w / 2, base[1] + ny * w / 2), (tip[0] + nx * w * 0.3, tip[1] + ny * w * 0.3), tip,
-                   (tip[0] - nx * w * 0.3, tip[1] - ny * w * 0.3), (base[0] - nx * w / 2, base[1] - ny * w / 2)]
-        outline_plate(part, P["gull_gray"] if i > 3 else P["black"], feather, 0.012, m @ trs((0, 0, 0.004 * i)),
-                      bevel=0.003)
-        if i < 2:
-            part.sphere(P["gull_white"], matrix=m @ trs((tip[0] - d[0] * 0.05, tip[1] - d[1] * 0.05, 0.012),
-                                                        scale=(0.014, 0.014, 0.004)), segs=8, rings=4)
+    """A spread wing along +Y (left) or -Y (right): cambered grey arm, white trailing edge, fingered black tips."""
+    def point(u, v):
+        span = u * 0.46
+        lead = 0.075 - 0.07 * u ** 2
+        trail = -0.12 + 0.03 * u
+        x = lead + (trail - lead) * v
+        z = 0.035 * math.sin(math.pi * v) * (1 - 0.5 * u) + 0.04 * u
+        key = "gull_white" if v > 0.82 else "gull_gray"
+        return Vector((x, side * span, z)), key
+
+    grid_patch(part, P, 16, 8, point, lambda mats, i, j: mats[i][j])
+    for k in range(5):
+        a = -0.15 - k * 0.2
+        base = Vector((0.02 - k * 0.032, side * (0.44 + k * 0.006), 0.04))
+        d = Vector((math.sin(a) * 0.55, side * math.cos(a), 0.01 * k)).normalized()
+        n = Vector((-d.y, d.x, 0)).normalized()
+        length = 0.25 - k * 0.022
+        w = 0.05 - k * 0.003
+
+        def feather_point(u, v, base=base, d=d, n=n, length=length, w=w):
+            taper = (1 - u ** 1.6) * 0.5 + 0.08
+            co = base + d * (u * length) + n * (v - 0.5) * w * taper * 2 + Vector((0, 0, 0.01 * math.sin(math.pi * v)))
+            key = "black" if u > 0.35 else "gull_gray"
+            if k < 2 and abs(u - 0.82) < 0.06 and abs(v - 0.5) < 0.25:
+                key = "gull_white"
+            return co, key
+
+        grid_patch(part, P, 10, 4, feather_point, lambda mats, i, j: mats[i][j])
 
 
 def seagull(P):
     root = empty("seagull")
     body = Part()
     white, grey = P["gull_white"], P["gull_gray"]
-    spine_body(body, lambda c, up: grey if up > 0.55 and -0.3 < c.x < 0.12 else white, gull_spine())
-    beak_m = trs((0, 0, 0.292), scale=(1, 0.7, 1))
-    body.lathe(P["beak"], [(0.35, 0.0), (0.35, 0.034), (0.41, 0.028), (0.47, 0.016), (0.5, 0.0)], matrix=beak_m, segs=16)
-    body.tube(P["beak"], [(0.465, 0, 0.308), (0.5, 0, 0.302), (0.51, 0, 0.282)], radius=lambda t: 0.011 * (1 - t) + 0.003,
-              segs=8)
-    body.sphere(P["red"], loc=(0.455, 0, 0.274), scale=(0.013, 0.016, 0.009), segs=8, rings=6)
+    spine_body(body, lambda c, up: grey if up > 0.6 and -0.3 < c.x < 0.1 else white, gull_spine())
+    beak_m = trs((0, 0, 0.29), scale=(1, 0.62, 1))
+    body.lathe(P["beak"], [(0.33, 0.0), (0.33, 0.045), (0.4, 0.04), (0.46, 0.03), (0.52, 0.018), (0.55, 0.0)],
+               matrix=beak_m @ trs((0, 0, 0.008)), segs=18)
+    body.lathe(P["beak"], [(0.34, 0.0), (0.34, 0.032), (0.42, 0.026), (0.49, 0.014), (0.51, 0.0)],
+               matrix=beak_m @ trs((0, 0, -0.018), scale=(1, 0.95, 0.8)), segs=16)
+    body.tube(P["beak"], [(0.52, 0, 0.306), (0.555, 0, 0.298), (0.565, 0, 0.278)],
+              radius=lambda t: 0.013 * (1 - t) + 0.003, segs=8)
+    body.sphere(P["red"], loc=(0.47, 0, 0.262), scale=(0.016, 0.017, 0.011), segs=8, rings=6)
+    body.tube(P["black"], [(0.34, -0.03, 0.29), (0.47, -0.022, 0.288)], radius=0.004, segs=4)
+    body.tube(P["black"], [(0.34, 0.03, 0.29), (0.47, 0.022, 0.288)], radius=0.004, segs=4)
     for side in (-1, 1):
-        eye = trs((0.325, side * 0.075, 0.33), (0, 0, side * 0.45))
-        body.sphere(P["gull_eye"], matrix=eye @ trs(scale=(0.016, 0.012, 0.016)), segs=12, rings=8)
-        body.sphere(P["black"], matrix=eye @ trs((0.004, side * 0.006, 0), scale=0.009), segs=8, rings=6)
-        body.sphere(P["eye_shine"], matrix=eye @ trs((0.008, side * 0.01, 0.006), scale=0.004), segs=6, rings=4)
-    tail = [(-0.3, 0.0), (-0.36, 0.06), (-0.47, 0.055), (-0.49, 0.0), (-0.47, -0.055), (-0.36, -0.06)]
+        eye = trs((0.33, side * 0.068, 0.338), (0, 0, side * 0.55))
+        body.sphere(P["white"], matrix=eye @ trs(scale=(0.026, 0.02, 0.03)), segs=16, rings=10)
+        body.sphere(P["black"], matrix=eye @ trs((0.008, side * 0.012, -0.002), scale=0.014), segs=12, rings=8)
+        body.sphere(P["eye_shine"], matrix=eye @ trs((0.014, side * 0.02, 0.008), scale=0.005), segs=6, rings=4)
+        brow = [(0.3, side * 0.075, 0.372), (0.33, side * 0.08, 0.37), (0.36, side * 0.073, 0.358)]
+        body.tube(grey, brow, radius=lambda t: 0.009 * (1 - abs(t - 0.5)), segs=6)
+    tail = [(-0.3, 0.0), (-0.36, 0.065), (-0.48, 0.06), (-0.5, 0.0), (-0.48, -0.06), (-0.36, -0.065)]
     body.extrude(white, tail, depth=0.016, loc=(0, 0, 0.165), rot=(0, 0.1, 0), bevel=0.006)
-    for side in (-1, 1):
-        body.tube(P["gull_leg"], [(-0.02, side * 0.05, 0.04), (-0.07, side * 0.055, -0.02)], radius=0.009, segs=6)
-        body.extrude(P["gull_leg"], [(0, 0), (0.05, 0.03), (0.065, 0.0), (0.05, -0.03)], depth=0.007,
-                     loc=(-0.08, side * 0.055, -0.025), rot=(0, 0.35, 0))
     body.build("gull_body", root)
 
     folded = Part()
@@ -219,7 +258,7 @@ def seagull(P):
     folded.build("wings_folded", root)
 
     for side, name in ((1, "wing_l"), (-1, "wing_r")):
-        pivot = empty(name, root, (0.05, side * 0.11, 0.24))
+        pivot = empty(name, root, (0.05, side * 0.1, 0.24))
         w = Part()
         gull_flying_wing(w, P, side)
         w.build(f"{name}_mesh", pivot)
