@@ -161,14 +161,13 @@ def part_sonar(P):
 
     dish = empty("sonar_dish", root, (0, 0, 0.5))
     d = Part()
-    tilt = trs((0.02, 0, 0.12), (0, -math.pi / 2 + 0.5, 0))
-    prof = [(-0.12 + 0.36 * (i / 8) ** 2, 0.03 + 0.3 * i / 8) for i in range(9)]
-    d.lathe(P["steel"], [(-0.13, 0.0)] + [(h - 0.01, r) for h, r in prof] + [(prof[-1][0] + 0.01, prof[-1][1])]
-            + [(h + 0.02, r) for h, r in reversed(prof)] + [(-0.1, 0.0)], matrix=tilt @ trs(rot=(0, -math.pi / 2, 0)),
-            segs=28)
-    d.torus(P["teal_glow"], matrix=tilt, loc=(0, 0, 0.24), major=0.33, minor=0.022, segs=32)
-    d.sphere(P["teal_glow"], matrix=tilt @ trs((0, 0, 0.08), scale=0.06), segs=12, rings=8)
-    d.tube(P["steel_dark"], [(0, 0, 0), (0, 0, 0.08)], radius=0.02, matrix=tilt, segs=8)
+    tilt = trs(rot=(0, 0.6, 0)) @ trs(rot=(0, -math.pi / 2, 0))
+    bowl = [(0.0, 0.0), (0.01, 0.08), (0.04, 0.16), (0.09, 0.24), (0.15, 0.31), (0.165, 0.3), (0.12, 0.25),
+            (0.07, 0.17), (0.04, 0.09), (0.03, 0.0)]
+    d.lathe(P["steel"], bowl, matrix=tilt, segs=32)
+    d.torus(P["teal_glow"], matrix=tilt, loc=(0.16, 0, 0), major=0.31, minor=0.022, rot=ALONG_X, segs=32)
+    d.tube(P["steel_dark"], [(0.02, 0, 0), (0.2, 0, 0)], radius=0.018, matrix=tilt, segs=8)
+    d.sphere(P["teal_glow"], matrix=tilt @ trs((0.22, 0, 0), scale=0.05), segs=12, rings=8)
     d.sphere(P["gunmetal"], scale=0.06, segs=12, rings=8)
     d.build("sonar_dish_mesh", dish)
     return root
@@ -238,7 +237,8 @@ def junk_toolbox(P):
     part.tube(P["gunmetal"], [(-0.13, 0, 0.33), (-0.13, 0, 0.42), (0.13, 0, 0.42), (0.13, 0, 0.33)], radius=0.025)
     wrench = [(-0.16, -0.025), (0.08, -0.025), (0.1, -0.06), (0.17, -0.06), (0.13, -0.02), (0.13, 0.02), (0.17, 0.06),
               (0.1, 0.06), (0.08, 0.025), (-0.16, 0.025)]
-    part.extrude(P["white"], wrench, depth=0.02, loc=(0, -0.165, 0.15), rot=(math.pi / 2, 0, 0.5), bevel=0.006)
+    part.extrude(P["white"], wrench, depth=0.02, loc=(0, -0.165, 0.16), rot=(math.pi / 2, 0, 0.35), scale=1.4,
+                 bevel=0.006)
     part.build("toolbox_mesh", root)
     return root
 
@@ -322,17 +322,24 @@ def pickup_coin(P):
     return root
 
 
+def shield_outline(scale=1.0, samples=10):
+    left = []
+    for i in range(samples + 1):
+        t = i / samples
+        left.append((-0.44 * math.cos(t * math.pi / 2) ** 0.75, 0.42 - 0.94 * t))
+    top = [(-0.44 + 0.88 * i / 6, 0.42 + 0.08 * math.sin(math.pi * i / 6)) for i in range(1, 6)]
+    right = [(-x, y) for x, y in reversed(left)]
+    return [(x * scale, y * scale) for x, y in left + right[1:] + list(reversed(top))]
+
+
 def icon_shield(P):
     root = empty("icon_shield")
     part = Part()
-    outline = [(0, -0.5)] + points_on_arc(0.62, -0.95, -0.2, 6, center=(-0.25, 0.25)) + [(-0.4, 0.42), (0, 0.5),
-                                                                                           (0.4, 0.42)]
-    outline += [(-x, y) for x, y in reversed(points_on_arc(0.62, -0.95, -0.2, 6, center=(-0.25, 0.25)))]
-    part.extrude(P["blue"], outline, depth=0.14, rot=(math.pi / 2, 0, 0), bevel=0.04, bevel_segs=3)
-    part.extrude(P["shield_glow"], [(x * 0.72, y * 0.72 + 0.02) for x, y in outline], depth=0.18,
-                 rot=(math.pi / 2, 0, 0), bevel=0.03)
-    part.extrude(P["white"], [(x * 0.3, y * 0.3 + 0.12) for x, y in outline], depth=0.22, rot=(math.pi / 2, 0, 0),
-                 loc=(0.08, 0, 0), bevel=0.02)
+    face = (math.pi / 2, 0, 0)
+    part.extrude(P["blue_dark"], shield_outline(), depth=0.14, rot=face, bevel=0.04, bevel_segs=3)
+    part.extrude(P["shield_glow"], shield_outline(0.78), depth=0.18, rot=face, loc=(0, 0, 0.01), bevel=0.03)
+    part.extrude(P["white"], [(-0.22, 0.28), (-0.08, 0.3), (-0.2, -0.05), (-0.28, 0.05)], depth=0.2, rot=face,
+                 bevel=0.01)
     part.build("icon_shield_mesh", root)
     return root
 

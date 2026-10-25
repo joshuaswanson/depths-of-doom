@@ -1,0 +1,191 @@
+"""Evil submarines and mines. Enemy subs face -X."""
+import math
+
+from mathutils import Vector
+
+from assets_player import band, propeller, rivet_ring
+from body import Body, face_dir
+from kit import Part, empty, frame, trs
+
+EYE = [(-0.16, 0.03), (0.15, 0.12), (0.12, -0.07), (-0.08, -0.09)]
+BROW = [(-0.2, 0.08), (0.2, 0.22), (0.2, 0.3), (-0.2, 0.15)]
+
+
+def mouth_outline(width=0.62, height=0.24, teeth=4):
+    top = []
+    for i in range(teeth * 2 + 1):
+        x = -width / 2 + width * i / (teeth * 2)
+        y = 0.06 * (x / (width / 2)) ** 2 + (0.0 if i % 2 == 0 else -0.08)
+        top.append((x, y))
+    bottom = []
+    for i in range(1, 12):
+        t = i / 12
+        x = width / 2 - width * t
+        y = -height * math.sin(math.pi * t) + 0.06 * (x / (width / 2)) ** 2
+        if i in (4, 8):
+            bottom.append((x, y + 0.08))
+        bottom.append((x, y))
+    return top + bottom
+
+
+def angry_face(part, P, body, center, yaw, pitch, scale=1.0, depth=0.16):
+    for side in (-1, 1):
+        p, n = body.ray(center, face_dir(yaw + side * 13 * scale, pitch + 9 * scale))
+        m = frame(p, n) @ trs(scale=(scale, scale, 1))
+        pts = [(x * side, y) for x, y in EYE]
+        part.extrude(P["enemy_glow"], pts if side > 0 else list(reversed(pts)), depth=depth, matrix=m, bevel=0.015)
+        brow = [(x * side, y) for x, y in BROW]
+        part.extrude(P["enemy_hull"], brow if side > 0 else list(reversed(brow)), depth=depth * 1.4, matrix=m,
+                     bevel=0.02)
+    p, n = body.ray(center, face_dir(yaw, pitch - 10 * scale))
+    part.extrude(P["enemy_glow"], mouth_outline(), depth=depth * 1.3, matrix=frame(p, n) @ trs(scale=(scale, scale, 1)),
+                 bevel=0.012)
+
+
+def skull(part, P, matrix, size=1.0):
+    def m(loc=(0, 0, 0), rot=(0, 0, 0), scale=(1, 1, 1)):
+        return matrix @ trs(Vector(loc) * size, rot, Vector(scale) * size)
+
+    for a in (0.75, -0.75):
+        part.cylinder(P["skull"], matrix=m((0, -0.08, 0.0), (0, 0, a)) @ trs(rot=(0, math.pi / 2, 0)),
+                      radius=0.045 * size, depth=0.75 * size, segs=12)
+        for s in (-1, 1):
+            end = (s * 0.37 * math.cos(a), s * 0.37 * math.sin(a), 0.0)
+            for o in (-1, 1):
+                off = (o * 0.04 * -math.sin(a), o * 0.04 * math.cos(a), 0)
+                part.sphere(P["skull"], matrix=m((end[0] + off[0], end[1] + off[1], 0), scale=(0.06, 0.06, 0.06)),
+                            segs=10, rings=8)
+    part.sphere(P["skull"], matrix=m((0, 0.06, 0.05), scale=(0.25, 0.23, 0.12)), segs=24, rings=14)
+    part.box(P["skull"], matrix=m((0, -0.14, 0.05)), size=(0.26 * size, 0.14 * size, 0.18 * size), bevel=0.04 * size)
+    for x in (-0.09, 0.09):
+        part.sphere(P["black"], matrix=m((x, 0.04, 0.15), scale=(0.07, 0.075, 0.03)), segs=14, rings=8)
+    part.extrude(P["black"], [(-0.03, -0.06), (0.03, -0.06), (0, 0.0)], depth=0.05 * size,
+                 matrix=m((0, 0, 0.15)), scale=(size, size, 1))
+    for x in (-0.06, 0.0, 0.06):
+        part.box(P["black"], matrix=m((x, -0.15, 0.14)), size=(0.012 * size, 0.08 * size, 0.02 * size), bevel=0)
+
+
+def enemy_tail(part, P, body, x_join, x_end, r_join, accent="enemy_red"):
+    part.lathe(P["enemy_plate"], [(x_end + 0.04, 0.0), (x_end, r_join * 0.38), (x_join - 0.2, r_join * 0.8),
+                                  (x_join, r_join)], segs=36)
+    span = x_end - x_join
+    fin = [(x_join + span * 0.1, 0.2 * r_join), (x_join + span * 0.55, 1.45 * r_join),
+           (x_end + span * 0.12, 1.5 * r_join), (x_end + 0.02, 0.2 * r_join)]
+    tip = [(x_join + span * 0.48, 1.3 * r_join), (x_join + span * 0.56, 1.5 * r_join),
+           (x_end + span * 0.14, 1.55 * r_join), (x_end + span * 0.1, 1.3 * r_join)]
+    for sz in (1, -1):
+        for rot in ((math.pi / 2, 0, 0), (0, 0, 0)):
+            part.extrude(P["enemy_hull"], [(x, z * sz) for x, z in fin], depth=0.1, rot=rot, bevel=0.03)
+            part.extrude(P[accent], [(x, z * sz) for x, z in tip], depth=0.13, rot=rot, bevel=0.03)
+
+
+def red_light(part, P, matrix, radius=0.07):
+    part.torus(P["gunmetal"], matrix=matrix, major=radius, minor=radius * 0.3, segs=16, tube_segs=8)
+    part.sphere(P["enemy_light"], matrix=matrix @ trs(scale=(radius * 0.9, radius * 0.9, radius * 0.5)), segs=12,
+                rings=8)
+
+
+def enemy_sub(P, name="enemy_sub", length=3.4, radius=0.85, face_scale=1.0, tower=True, skull_mark=False,
+              spikes=0, turret=False):
+    root = empty(name)
+    b = Body(length=length, radius=radius, p_front=2.2, p_back=2.7)
+    h = length / 2
+    part = Part()
+    part.lathe(P["enemy_hull"], b.profile(), segs=48)
+    band(part, P["enemy_red"], b, h * 0.42, h * 0.52, lift=0.02)
+    band(part, P["enemy_plate"], b, -h * 0.45, -h * 0.38, lift=0.015, samples=3)
+    band(part, P["enemy_plate"], b, h * 0.05, h * 0.12, lift=0.015, samples=3)
+    rivet_ring(part, P["enemy_plate"], b, -h * 0.3, count=20, size=0.03)
+    rivet_ring(part, P["enemy_plate"], b, h * 0.2, count=20, size=0.03)
+    enemy_tail(part, P, b, h * 0.75, h * 1.38, b.r(h * 0.75))
+    angry_face(part, P, b, (-h * 0.45, 0, 0), yaw=-90, pitch=2, scale=face_scale * radius / 0.85)
+
+    for mirror in (False, True):
+        side = (lambda a: math.pi - a) if mirror else (lambda a: a)
+        hatch = b.frame(h * 0.28, side(math.radians(10)))
+        part.box(P["enemy_red"], matrix=hatch @ trs((0, 0, 0.02)), size=(0.32 * radius, 0.32 * radius, 0.08),
+                 bevel=0.03)
+        part.sphere(P["gunmetal"], matrix=hatch @ trs((0, 0, 0.07), scale=(0.05, 0.05, 0.03)), segs=10, rings=6)
+        for x in (-h * 0.05, h * 0.62):
+            red_light(part, P, b.frame(x, side(math.radians(-25))), radius=0.06 * radius / 0.85)
+
+    if tower:
+        tx = -h * 0.05
+        tz = b.r(tx)
+        t_h = 0.75 * radius
+        part.cylinder(P["enemy_hull"], loc=(tx, 0, tz + t_h * 0.35), radius=0.42 * radius, depth=t_h,
+                      scale=(1.35, 0.8, 1), segs=32, bevel=0.06)
+        part.cylinder(P["enemy_plate"], loc=(tx, 0, tz + t_h * 0.82), radius=0.44 * radius, depth=0.08,
+                      scale=(1.35, 0.8, 1), segs=32)
+        for side in (-1, 1):
+            for dx in (-0.22, 0.05, 0.32):
+                red_light(part, P, frame(Vector((tx + dx * radius, 0.33 * radius * side, tz + t_h * 0.45)),
+                                         Vector((0, side, 0))), radius=0.065 * radius)
+        scope = [(tx + 0.15, 0, tz + t_h * 0.8), (tx + 0.15, 0, tz + t_h * 1.35), (tx + 0.05, 0, tz + t_h * 1.45),
+                 (tx - 0.15, 0, tz + t_h * 1.45)]
+        part.tube(P["gunmetal"], scope, radius=0.06 * radius, segs=12)
+        part.cylinder(P["gunmetal"], loc=(tx - 0.2, 0, tz + t_h * 1.45), radius=0.09 * radius, depth=0.15,
+                      rot=(0, math.pi / 2, 0), bevel=0.02)
+        part.cylinder(P["enemy_light"], loc=(tx - 0.28, 0, tz + t_h * 1.45), radius=0.06 * radius, depth=0.02,
+                      rot=(0, math.pi / 2, 0))
+
+    if skull_mark:
+        for theta in (math.radians(12), math.radians(168)):
+            skull(part, P, b.frame(h * 0.18, theta, lift=0.02, up=(0, 0, 1)), size=radius * 0.95)
+
+    for i in range(spikes):
+        x = -h * 0.55 + h * 1.1 * i / max(spikes - 1, 1)
+        for theta in (math.radians(65), math.radians(115)):
+            m = b.frame(x, theta)
+            part.cylinder(P["enemy_plate"], matrix=m @ trs((0, 0, 0.12)), radius=0.1, radius2=0.0, depth=0.3, segs=10)
+
+    if turret:
+        tx = h * 0.4
+        tz = b.r(tx)
+        part.cylinder(P["enemy_plate"], loc=(tx, 0, tz + 0.08), radius=0.3, depth=0.2, segs=24, bevel=0.04)
+        part.sphere(P["enemy_hull"], loc=(tx, 0, tz + 0.2), scale=(0.28, 0.26, 0.2), segs=20, rings=10)
+        for y in (-0.1, 0.1):
+            part.cylinder(P["gunmetal"], loc=(tx - 0.45, y, tz + 0.25), radius=0.05, depth=0.6,
+                          rot=(0, math.pi / 2, 0), segs=12)
+            part.cylinder(P["enemy_light"], loc=(tx - 0.76, y, tz + 0.25), radius=0.03, depth=0.01,
+                          rot=(0, math.pi / 2, 0), segs=10)
+
+    part.build(f"{name}_body", root)
+    propeller(P, "propeller", root, (h * 1.45, 0, 0), size=0.95 * radius, hub_mat="gunmetal", blade_mat="enemy_red")
+    empty("muzzle", root, (-h * 1.02, 0, -0.1 * radius))
+    return root
+
+
+def enemy_scout(P):
+    return enemy_sub(P, "enemy_scout", length=2.3, radius=0.66, face_scale=1.1)
+
+
+def enemy_gunner(P):
+    return enemy_sub(P, "enemy_gunner", length=3.4, radius=0.85, turret=True)
+
+
+def enemy_boss(P):
+    return enemy_sub(P, "enemy_boss", length=5.8, radius=1.45, face_scale=1.05, skull_mark=True, spikes=5, turret=True)
+
+
+def mine(P):
+    root = empty("mine")
+    part = Part()
+    part.sphere(P["mine"], scale=0.5, segs=32, rings=18)
+    part.torus(P["enemy_plate"], major=0.505, minor=0.035, segs=40, tube_segs=8)
+    golden = math.pi * (3 - math.sqrt(5))
+    count = 14
+    for i in range(count):
+        y = 1 - 2 * (i + 0.5) / count
+        r = math.sqrt(1 - y * y)
+        d = Vector((math.cos(golden * i) * r, y, math.sin(golden * i) * r))
+        m = frame(d * 0.45, d)
+        part.cylinder(P["enemy_plate"], matrix=m @ trs((0, 0, 0.13)), radius=0.07, radius2=0.035, depth=0.22, segs=10)
+        part.sphere(P["enemy_light"], matrix=m @ trs((0, 0, 0.27), scale=0.05), segs=10, rings=8)
+    for i in range(10):
+        a = 2 * math.pi * i / 10
+        d = Vector((math.cos(a), math.sin(a) * 0.3 - 0.5, math.sin(a) * 0.6)).normalized()
+        part.sphere(P["enemy_light"], matrix=frame(d * 0.495, d) @ trs(scale=(0.03, 0.03, 0.015)), segs=8, rings=6)
+    part.build("mine_mesh", root)
+    return root
+

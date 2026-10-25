@@ -281,7 +281,29 @@ def export_glb(root, path):
         obj.select_set(True)
     bpy.context.view_layer.objects.active = root
     bpy.ops.export_scene.gltf(filepath=path, export_format="GLB", use_selection=True, export_apply=True,
-                              export_yup=True, export_animations=False)
+                              export_yup=True, export_animations=False, export_vertex_color="ACTIVE",
+                              export_active_vertex_color_when_no_material=True)
+
+
+def bake_ao(root, distance=0.6, samples=48):
+    """Bake ambient occlusion into a point color attribute so crevices stay dark in the game."""
+    scene = bpy.context.scene
+    previous = scene.render.engine
+    scene.render.engine = "CYCLES"
+    scene.cycles.samples = samples
+    scene.cycles.device = "CPU"
+    if scene.world is None:
+        scene.world = bpy.data.worlds.new("bake_world")
+    scene.world.light_settings.distance = distance
+    meshes = [o for o in descendants(root) if o.type == "MESH"]
+    bpy.ops.object.select_all(action="DESELECT")
+    for obj in meshes:
+        attr = obj.data.color_attributes.new("ao", "BYTE_COLOR", "POINT")
+        obj.data.color_attributes.active_color = attr
+        obj.select_set(True)
+    bpy.context.view_layer.objects.active = meshes[0]
+    bpy.ops.object.bake(type="AO", target="VERTEX_COLORS")
+    scene.render.engine = previous
 
 
 def points_on_arc(radius, start, end, count, center=(0, 0)):

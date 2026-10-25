@@ -12,8 +12,11 @@ from mathutils import Vector
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from kit import descendants, export_glb  # noqa: E402
+from kit import bake_ao, descendants, export_glb  # noqa: E402
 from palette import palette  # noqa: E402
+import assets_enemies  # noqa: E402
+import assets_env  # noqa: E402
+import assets_parts  # noqa: E402
 import assets_player  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -21,7 +24,17 @@ MODEL_DIR = os.path.join(ROOT, "public", "models")
 
 ASSETS = {
     "player_hull": assets_player.player_hull,
+    **{name: getattr(assets_parts, name) for name in (
+        "part_cannon", "part_torpedo", "part_missile", "part_shield", "part_grapple", "part_sonar", "part_thruster",
+        "junk_crate", "junk_ammo", "junk_toolbox", "junk_canister", "junk_barrel", "junk_duck",
+        "proj_torpedo", "proj_missile", "proj_player_missile", "pickup_coin",
+    )},
+    **{name: getattr(assets_enemies, name) for name in ("enemy_scout", "enemy_gunner", "enemy_boss", "mine")},
+    **{name: getattr(assets_env, name) for name in assets_env.ENV_ASSETS},
 }
+
+
+AO_DISTANCE = {"ruin": 1.4, "rock": 1.2, "coral": 0.5, "seaweed": 0.8, "anchor": 1.0, "chain": 0.3, "enemy": 0.8}
 
 
 def parse_args():
@@ -31,6 +44,7 @@ def parse_args():
     ap.add_argument("--preview", default="")
     ap.add_argument("--no-export", action="store_true")
     ap.add_argument("--blend", default="")
+    ap.add_argument("--no-bake", action="store_true")
     return ap.parse_args(argv)
 
 
@@ -76,6 +90,7 @@ def setup_preview_scene():
 
 
 def render_preview(root, cam, path, yaw=25, pitch=12):
+    bpy.context.scene.render.engine = "BLENDER_EEVEE"
     lo, hi = world_bounds(root)
     center = (lo + hi) / 2
     size = (hi - lo).length
@@ -104,10 +119,12 @@ def main():
     offset = 0.0
     for name in names:
         root = ASSETS[name](P)
+        if not args.no_bake:
+            bake_ao(root, distance=AO_DISTANCE.get(name.split("_")[0], 0.6))
         if not args.no_export:
             export_glb(root, os.path.join(MODEL_DIR, f"{name}.glb"))
         if cam:
-            render_preview(root, cam, os.path.join(args.preview, f"{name}.png"))
+            render_preview(root, cam, os.path.join(args.preview, f"{name}.png"), yaw=-35 if name.startswith("enemy") else 35)
         lo, hi = world_bounds(root)
         root.location.x = offset - lo.x
         offset += (hi.x - lo.x) + 1.0

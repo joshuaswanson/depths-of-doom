@@ -76,13 +76,14 @@ def player_hull(P):
         part.extrude(P["orange"], [(x, z * sz) for x, z in fin], depth=0.12, rot=(math.pi / 2, 0, 0), bevel=0.04)
         part.extrude(P["orange"], [(x, y * sz) for x, y in fin], depth=0.12, bevel=0.04)
 
-    cartoon_face(part, P, b, (1.0, 0, 0.05), yaw=38, pitch=4, scale=1.2)
-    porthole(part, P, b, 0.35, math.radians(4))
-    porthole(part, P, b, -0.3, math.radians(4), radius=0.14)
+    cartoon_face(part, P, b, (1.0, 0, 0.05), yaw=90, pitch=2, scale=1.25)
+    for theta in (math.radians(4), math.radians(176)):
+        porthole(part, P, b, 0.35, theta)
+        porthole(part, P, b, -0.3, theta, radius=0.14)
 
-    lamp = b.frame(1.25, math.radians(-42))
-    part.cylinder(P["steel_dark"], matrix=lamp @ trs((0, 0, 0.04)), radius=0.15, depth=0.14, bevel=0.03)
-    part.cylinder(P["lamp"], matrix=lamp @ trs((0, 0, 0.11)), radius=0.11, depth=0.03, segs=20)
+    lamp = frame(b.ray((1.0, 0, -0.3), (1, 0, -0.55))[0], Vector((1, 0, -0.45)))
+    part.cylinder(P["steel_dark"], matrix=lamp @ trs((0, 0, 0.02)), radius=0.17, depth=0.14, bevel=0.03)
+    part.cylinder(P["lamp"], matrix=lamp @ trs((0, 0, 0.09)), radius=0.13, depth=0.03, segs=20)
 
     tower = [(0.62, 1.12, "yellow"), (1.12, 1.26, "red"), (1.26, 1.38, "white"), (1.38, 1.5, "red")]
     for z0, z1, color in tower:
@@ -90,9 +91,10 @@ def player_hull(P):
                       segs=32)
     part.sphere(P["yellow"], loc=(0.25, 0, 1.5), scale=(0.55, 0.36, 0.16), segs=32, rings=12)
     part.torus(P["yellow_dark"], loc=(0.25, 0, 1.5), major=0.42, minor=0.03, scale=(1.3, 0.85, 1), segs=40)
-    tower_window = frame(Vector((0.5, -0.31, 0.98)), Vector((0.35, -1, 0)))
-    part.torus(P["brass"], matrix=tower_window, major=0.11, minor=0.03, segs=20, tube_segs=8)
-    part.cylinder(P["glass"], matrix=tower_window, radius=0.095, depth=0.05, segs=16)
+    for side in (-1, 1):
+        tower_window = frame(Vector((0.5, 0.31 * side, 0.98)), Vector((0.35, side, 0)))
+        part.torus(P["brass"], matrix=tower_window, major=0.11, minor=0.03, segs=20, tube_segs=8)
+        part.cylinder(P["glass"], matrix=tower_window, radius=0.095, depth=0.05, segs=16)
 
     scope = [(0.05, 0, 1.45), (0.05, 0, 2.0), (0.08, 0, 2.12), (0.2, 0, 2.2), (0.32, 0, 2.22)]
     part.tube(P["yellow"], scope, radius=0.085, segs=16)
