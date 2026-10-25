@@ -16,6 +16,7 @@ def palette():
         "brass": mat("brass", "#C9973F", rough=0.3, metal=0.9),
         "glass": mat("glass", "#7FD8F0", rough=0.05, emit=0.6, emit_color="#9EEBFF"),
         "lamp": mat("lamp", "#FFE9A8", rough=0.2, emit=3.0, emit_color="#FFD36B"),
+        "glow_tip": mat("glow_tip", "#8FF3FF", rough=0.2, emit=4.0, emit_color="#5FE8FF"),
         "spot_lens": mat("spot_lens", "#FFF6D8", rough=0.05, emit=5.0, emit_color="#FFE7A3"),
         "green": mat("green", "#3E9A3A", rough=0.4),
         "green_dark": mat("green_dark", "#2D6B2E", rough=0.5),

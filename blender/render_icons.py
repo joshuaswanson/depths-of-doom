@@ -25,7 +25,7 @@ ICONS = {
     "torpedo": (assets_parts.proj_torpedo, (0, -0.6, 0), 10),
     "missile": (assets_parts.proj_player_missile, (0, -0.6, 0), 10),
     "shield": (assets_parts.icon_shield, (0, 0, 0), 15),
-    "grapple": (assets_parts.part_grapple, (math.pi, 0, 0), 20),
+    "grapple": (assets_parts.part_grapple_3, (math.pi, 0, 0), 20),
     "sonar": (assets_parts.icon_sonar, (0, 0, 0), 5),
     "propulsion": (assets_parts.icon_propeller, (0, 0, math.pi / 2), 0),
     "coin": (assets_parts.pickup_coin, (0, 0, 0), 0),

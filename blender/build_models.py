@@ -28,7 +28,8 @@ MODEL_DIR = os.path.join(ROOT, "public", "models")
 ASSETS = {
     "player_hull": assets_player.player_hull,
     **{name: getattr(assets_parts, name) for name in (
-        "part_cannon", "part_torpedo", "part_missile", "part_shield", "part_grapple", "part_sonar", "part_thruster",
+        "part_cannon", "part_torpedo", "part_missile", "part_shield", "part_grapple_1", "part_grapple_2", "part_grapple_3",
+        "part_grapple_4", "part_sonar", "part_thruster",
         "part_spotlight",
         "junk_crate", "junk_ammo", "junk_toolbox", "junk_canister", "junk_barrel", "junk_duck",
         "proj_torpedo", "proj_missile", "proj_player_missile", "pickup_coin",

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { findNode, findNodes, ownMaterials, spawn } from './assets.js';
-import { HULL_CAPACITY, JUNK_PER_HULL, PART_MODEL, SOCKETS, UPGRADES, needsMount, partCount } from './upgrades.js';
+import { HULL_CAPACITY, JUNK_PER_HULL, PART_MODEL, SOCKETS, UPGRADES, needsMount, partCount, partModel } from './upgrades.js';
 import { SURFACE_Y } from './water.js';
 
 // The sub shows its full profile facing left or right. Yaw stays within [-PI, 0], so every turn swings the nose past
@@ -348,7 +348,7 @@ export class Player {
     if (animate) pivot.scale.setScalar(0.01);
     this.rig.add(pivot);
     const part = {
-      cat, obj, pivot, socket: [x, angle], envelope, pop: animate ? 0 : 1, muzzle: findNode(obj, 'muzzle'),
+      cat, model, obj, pivot, socket: [x, angle], envelope, pop: animate ? 0 : 1, muzzle: findNode(obj, 'muzzle'),
       props: findNodes(obj, 'thruster_prop'), dish: findNode(obj, 'sonar_dish'),
       arm: findNode(obj, 'grapple_arm'), claw: findNode(obj, 'grapple_claw'), timer: Math.random(),
       barrels: findNode(obj, 'cannon_barrels'),
@@ -370,12 +370,16 @@ export class Player {
     if (!animate) this.fat = { ...this.fatTarget };
     this.duck.visible = L >= 2;
     const added = [];
+    for (const part of this.parts.filter((q) => q.model !== partModel(q.cat, this.levels[q.cat]) && q.cat !== 'junk')) {
+      part.pivot.removeFromParent();
+      this.parts.splice(this.parts.indexOf(part), 1);
+    }
     for (const cat of Object.keys(PART_MODEL)) {
       const have = this.parts.filter((p) => p.cat === cat).length;
       const want = Math.min(partCount(cat, this.levels[cat]), SOCKETS[cat].length);
       for (let i = have; i < want; i++) {
         const [x, angle] = SOCKETS[cat][i];
-        added.push(this.addPart(cat, PART_MODEL[cat], x, angle, animate));
+        added.push(this.addPart(cat, partModel(cat, this.levels[cat]), x, angle, animate));
       }
     }
     const junkHave = this.parts.filter((p) => p.cat === 'junk').length;

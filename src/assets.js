@@ -5,7 +5,7 @@ import { applySurfaceDetail } from './surface.js';
 import { addSkullDecals } from './decals.js';
 
 const MODEL_NAMES = [
-  'player_hull', 'part_cannon', 'part_torpedo', 'part_missile', 'part_shield', 'part_grapple', 'part_sonar',
+  'player_hull', 'part_cannon', 'part_torpedo', 'part_missile', 'part_shield', 'part_grapple_1', 'part_grapple_2', 'part_grapple_3', 'part_grapple_4', 'part_sonar',
   'part_thruster', 'part_spotlight', 'junk_crate', 'junk_ammo', 'junk_toolbox', 'junk_canister', 'junk_barrel', 'junk_duck',
   'proj_torpedo', 'proj_missile', 'proj_player_missile', 'pickup_coin', 'enemy_scout', 'enemy_gunner', 'enemy_boss',
   'mine', 'ruin_pillar_a', 'ruin_pillar_b', 'ruin_arch', 'ruin_wall', 'ruin_pier', 'ruin_tower', 'anchor', 'chain',

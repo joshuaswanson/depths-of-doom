@@ -50,7 +50,7 @@ export const PART_MODEL = {
   torpedo: 'part_torpedo',
   missile: 'part_missile',
   shield: 'part_shield',
-  grapple: 'part_grapple',
+  grapple: 'part_grapple_1',
   sonar: 'part_sonar',
   propulsion: 'part_thruster',
   spotlight: 'part_spotlight',
@@ -61,6 +61,11 @@ export const HULL_CAPACITY = [0, 4, 8, 12, 17, 23, 31];
 
 export function needsMount(id, level) {
   return id in PART_MODEL && partCount(id, level + 1) > partCount(id, level);
+}
+
+// The model bolted on for a category at a given level; the grapple gets a new look every level.
+export function partModel(cat, level) {
+  return cat === 'grapple' ? `part_grapple_${Math.max(1, level)}` : PART_MODEL[cat];
 }
 
 export function partCount(cat, level) {

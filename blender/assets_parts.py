@@ -156,33 +156,79 @@ def part_shield(P):
     return root
 
 
-def part_grapple(P):
-    root = empty("part_grapple")
+GRAPPLE_STYLES = {
+    1: dict(scale=1.0, fingers=3, arm="steel", claw="red", knuckle="steel", stripes=False, piston=False, lights=False,
+            glow=False),
+    2: dict(scale=1.15, fingers=3, arm="yellow", claw="orange", knuckle="steel", stripes=True, piston=True, lights=False,
+            glow=False),
+    3: dict(scale=1.3, fingers=4, arm="gunmetal", claw="gold", knuckle="brass", stripes=True, piston=True, lights=True,
+            glow=False),
+    4: dict(scale=1.45, fingers=5, arm="blue_dark", claw="steel", knuckle="gold", stripes=False, piston=True,
+            lights=True, glow=True),
+}
+
+
+def grapple(P, level):
+    """The grapple claw. Each level is bigger and fancier: hazard stripes, a piston, more fingers, lamps, then
+    glowing electro-tips."""
+    st = GRAPPLE_STYLES[level]
+    k = st["scale"]
+    root = empty(f"part_grapple_{level}")
     base = Part()
-    mount_plate(base, P, size=(0.3, 0.3, 0.1))
-    base.sphere(P["gunmetal"], loc=(0, 0, 0.12), scale=0.11, segs=16, rings=10)
+    mount_plate(base, P, size=(0.3 * k, 0.3 * k, 0.1))
+    base.sphere(P["gunmetal"], loc=(0, 0, 0.12), scale=0.11 * k, segs=16, rings=10)
+    if st["lights"]:
+        for sx in (-1, 1):
+            base.cylinder(P["gunmetal"], loc=(sx * 0.13 * k, 0.1 * k, 0.12), radius=0.04, depth=0.05,
+                          rot=(-math.pi / 2, 0, 0), segs=12)
+            base.cylinder(P["lamp"], loc=(sx * 0.13 * k, 0.126 * k, 0.12), radius=0.03, depth=0.01,
+                          rot=(-math.pi / 2, 0, 0), segs=12)
     base.build("grapple_base", root)
 
     arm = empty("grapple_arm", root, (0, 0, 0.12))
     a = Part()
-    a.cylinder(P["steel"], loc=(0, 0, 0.25), radius=0.055, depth=0.5, segs=14)
-    a.cylinder(P["gunmetal"], loc=(0, 0, 0.12), radius=0.075, depth=0.12, segs=14, bevel=0.015)
+    a.cylinder(P[st["arm"]], loc=(0, 0, 0.25), radius=0.055 * k, depth=0.5, segs=14)
+    a.cylinder(P["gunmetal"], loc=(0, 0, 0.12), radius=0.075 * k, depth=0.12, segs=14, bevel=0.015)
+    if st["stripes"]:
+        for i in range(4):
+            a.cylinder(P["black"], loc=(0, 0, 0.2 + i * 0.08), radius=0.057 * k, depth=0.03, segs=14)
+    if st["piston"]:
+        a.cylinder(P["steel"], loc=(0.075 * k, 0, 0.26), radius=0.02 * k, depth=0.36, segs=8)
+        a.cylinder(P["gunmetal"], loc=(0.075 * k, 0, 0.14), radius=0.03 * k, depth=0.14, segs=8)
     a.build("grapple_arm_mesh", arm)
 
     claw = empty("grapple_claw", arm, (0, 0, 0.5))
     c = Part()
-    c.sphere(P["gunmetal"], loc=(0, 0, 0.05), scale=0.1, segs=16, rings=10)
-    c.cylinder(P["red"], loc=(0, 0, 0.12), radius=0.12, depth=0.08, bevel=0.02, segs=20)
-    for i in range(3):
-        ang = 2 * math.pi * i / 3 + math.pi / 2
+    c.sphere(P["gunmetal"], loc=(0, 0, 0.05), scale=0.1 * k, segs=16, rings=10)
+    c.cylinder(P[st["claw"]], loc=(0, 0, 0.12), radius=0.12 * k, depth=0.08, bevel=0.02, segs=20)
+    for i in range(st["fingers"]):
+        ang = 2 * math.pi * i / st["fingers"] + math.pi / 2
         d = (math.cos(ang), math.sin(ang))
         prof = [(0.06, 0.13), (0.18, 0.22), (0.23, 0.36), (0.18, 0.5), (0.1, 0.56)]
-        pts = [(r * d[0], r * d[1], z) for r, z in prof]
-        c.tube(P["red"], pts, radius=lambda t: 0.05 - 0.025 * t, segs=10)
-        c.sphere(P["gunmetal"], loc=pts[-1], scale=0.03, segs=8, rings=6)
-        c.sphere(P["steel"], loc=pts[1], scale=0.045, segs=10, rings=8)
+        pts = [(r * k * d[0], r * k * d[1], z * k) for r, z in prof]
+        c.tube(P[st["claw"]], pts, radius=lambda t: (0.05 - 0.025 * t) * k, segs=10)
+        c.sphere(P["glow_tip" if st["glow"] else "gunmetal"], loc=pts[-1], scale=0.032 * k, segs=8, rings=6)
+        c.sphere(P[st["knuckle"]], loc=pts[1], scale=0.045 * k, segs=10, rings=8)
+    if st["glow"]:
+        c.torus(P["glow_tip"], loc=(0, 0, 0.17 * k), major=0.1 * k, minor=0.015, segs=24, tube_segs=6)
     c.build("grapple_claw_mesh", claw)
     return root
+
+
+def part_grapple_1(P):
+    return grapple(P, 1)
+
+
+def part_grapple_2(P):
+    return grapple(P, 2)
+
+
+def part_grapple_3(P):
+    return grapple(P, 3)
+
+
+def part_grapple_4(P):
+    return grapple(P, 4)
 
 
 def part_sonar(P):
