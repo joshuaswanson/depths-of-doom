@@ -1,3 +1,4 @@
+import { logoSVG } from './logo.js';
 import { UPGRADES, upgradeCost } from './upgrades.js';
 
 const ICON = (name) => `${import.meta.env.BASE_URL}icons/${name}.png`;
@@ -81,14 +82,14 @@ export class Hud {
 
   showLoading(progress) {
     this.overlay.className = 'overlay show';
-    this.overlay.innerHTML = `<div class="panel"><div class="logo">Depths of Doom</div>
+    this.overlay.innerHTML = `<div class="panel">${logoSVG()}
       <div class="loading"><div class="loading-fill" style="width:${Math.round(progress * 100)}%"></div></div></div>`;
   }
 
   showTitle() {
     this.overlay.className = 'overlay show';
     this.overlay.innerHTML = `<div class="panel">
-      <div class="logo">Depths of Doom</div>
+      ${logoSVG()}
       <div class="subtitle">A very serious submarine war</div>
       <button class="big-btn">Dive!</button>
       <div class="controls">

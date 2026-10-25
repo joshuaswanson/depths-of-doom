@@ -554,8 +554,9 @@ export class Player {
     this.yaw += THREE.MathUtils.clamp(step, -dt * TURN_MAX_SPEED, dt * TURN_MAX_SPEED);
     this.yawPivot.rotation.y = this.yaw;
     this.updateExtents();
-    // In the water the nose points where you push; in the air it follows the arc of the jump.
-    let wantPitch = 0;
+    // In the water the nose points where you push and holds that tilt when you let go; in the air it follows the
+    // arc of the jump.
+    let wantPitch = this.pitch;
     if (this.airborne) wantPitch = Math.atan2(this.vel.y, Math.abs(this.vel.x) + 0.3);
     else if (pushDir) wantPitch = Math.atan2(pushDir.y, Math.abs(pushDir.x));
     wantPitch = THREE.MathUtils.clamp(wantPitch, -MAX_PITCH, MAX_PITCH);

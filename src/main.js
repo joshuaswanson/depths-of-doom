@@ -175,7 +175,7 @@ function frame() {
     }
   } else if (state === 'title' || state === 'gameover') {
     titleT += dt;
-    const auto = { x: Math.sin(titleT * 0.5) * 0.15, y: Math.sin(titleT * 0.8) * 0.5 };
+    const auto = { x: 0, y: 0 };
     if (state === 'title') player.update(dt, auto, { left: -4, right: 4, top: 6, bottom: () => -1 });
     if (state === 'gameover') game.update(dt, { x: 0, y: 0 });
   }
