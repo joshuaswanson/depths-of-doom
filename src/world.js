@@ -356,9 +356,6 @@ const JELLY_CEILING = 96;
 const JELLY_LAYER = [-122, -100];
 const JELLY_DEEP = [-200, -128];
 const JELLY_STRAGGLERS = 3;
-// Anglerfish lurk just above the floor of the deepest trenches.
-const ANGLER_FLOOR = -170;
-const ANGLER_BAND = [3, 16];
 const JELLY_COLORS = ['#ff5fd2', '#5fe8ff', '#b47bff', '#7dffb4', '#ffb35f'];
 
 // Jelly flesh: see-through in the middle, glowing at the silhouette, with tentacles rippling down their length.
@@ -463,22 +460,6 @@ function updateJellyGlow(jelly, dt, sub) {
   setJellyGlow(jelly, u.glow * u.glow * (3 - 2 * u.glow));
 }
 
-function makeAngler() {
-  const fish = spawn('anglerfish');
-  const scale = rand(1.4, 2.4);
-  fish.scale.setScalar(scale);
-  const halo = new THREE.Sprite(new THREE.SpriteMaterial({
-    map: softDot(), color: new THREE.Color(0.9, 2.4, 2.6), blending: THREE.AdditiveBlending, depthWrite: false,
-    transparent: true, fog: false, opacity: 0.8,
-  }));
-  halo.scale.setScalar(0.55);
-  findNode(fish, 'lure_tip').add(halo);
-  fish.userData = {
-    halo, jaw: findNode(fish, 'jaw'), lure: findNode(fish, 'lure'), phase: rand(0, 6), dir: Math.random() < 0.5 ? -1 : 1,
-    speed: rand(0.5, 0.9), yaw: 0,
-  };
-  return fish;
-}
 
 // Bake a cluster of placed models into one mesh per material, anchored at the cluster's lowest point.
 function mergeCluster(pieces) {
@@ -559,12 +540,6 @@ export class World {
       j.position.set(rand(-40, 40), rand(...j.userData.band), rand(-25, -2));
       scene.add(j);
       return j;
-    });
-    this.anglers = Array.from({ length: 3 }, () => {
-      const a = makeAngler();
-      a.position.set(rand(-45, 45), -200, rand(-22, -4));
-      scene.add(a);
-      return a;
     });
     this.wrecks = WRECKS.map((w) => {
       const wreck = spawn('wreck_sub');
@@ -798,27 +773,6 @@ export class World {
       j.position.x = wrapped;
       j.visible = floorY(j.position.x) < -JELLY_CEILING - 10 && this.dark > 0.45;
       if (j.visible) updateJellyGlow(j, dt, sub);
-    }
-    for (const a of this.anglers) {
-      const u = a.userData;
-      const ahead = floorY(a.position.x + u.dir * 6);
-      if (ahead > ANGLER_FLOOR) u.dir *= -1;
-      a.position.x += u.dir * u.speed * dt;
-      const floor = floorY(a.position.x);
-      const cruise = floor + (ANGLER_BAND[0] + ANGLER_BAND[1]) / 2 + Math.sin(t * 0.25 + u.phase) * 3;
-      a.position.y += (cruise - a.position.y) * (1 - Math.exp(-dt * 0.4));
-      u.yaw += ((u.dir > 0 ? 0 : -Math.PI) - u.yaw) * (1 - Math.exp(-dt * 0.7));
-      a.rotation.y = u.yaw + Math.sin(t * 3.4 + u.phase) * 0.03;
-      a.rotation.z = Math.sin(t * 0.5 + u.phase) * 0.05;
-      u.jaw.rotation.z = -(0.1 + Math.max(0, Math.sin(t * 0.6 + u.phase)) * 0.22);
-      u.lure.rotation.z = Math.sin(t * 1.3 + u.phase) * 0.08;
-      u.halo.material.opacity = 0.6 + Math.sin(t * 2.4 + u.phase) * 0.2;
-      const wrapped = wrap(a.position.x, cx, 50);
-      if (Math.abs(wrapped - a.position.x) > 1) {
-        a.position.x = wrapped;
-        a.position.y = floorY(wrapped) + ANGLER_BAND[1] - 2;
-      }
-      a.visible = floor < ANGLER_FLOOR && this.dark > 0.5;
     }
     const m = new THREE.Matrix4();
     const q = new THREE.Quaternion();

@@ -16,7 +16,6 @@ const PROFILE_BY_MATERIAL = {
   coral: ['coral_pink', 'coral_purple', 'coral_orange', 'coral_yellow', 'coral_teal', 'coral_red', 'sponge_orange',
     'sponge_purple'],
   weed: ['kelp_stipe', 'kelp_blade', 'kelp_bladder'],
-  angler: ['angler_belly', 'angler_fin', 'angler_spine'],
 };
 
 const PROFILES = {
@@ -31,7 +30,6 @@ const PROFILES = {
   rust: { scale: 2.5, mottle: 0.25, scratch: 0.2, grime: 0.3, rust: 0.8, bump: 1.0, crack: 0.0, rough: 0.1 },
   coral: { scale: 9.0, mottle: 0.25, scratch: 0.0, grime: 0.25, rust: 0.0, bump: 1.4, crack: 0.0, rough: 0.0 },
   weed: { scale: 4.0, mottle: 0.22, scratch: 0.0, grime: 0.2, rust: 0.0, bump: 0.6, crack: 0.0, rough: 0.0 },
-  angler: { scale: 5.0, mottle: 0.3, scratch: 0.0, grime: 0.25, rust: 0.0, bump: 1.3, crack: 0.0, rough: 0.0 },
 };
 
 export const NOISE_GLSL = /* glsl */ `
@@ -147,55 +145,7 @@ function glass(color, opacity) {
 // Shared clock for animated surface effects; main bumps it every frame.
 export const SHADER_TIME = { value: 0 };
 
-// Anglerfish skin: wet and warty, mottled indigo fading to a pale belly, with photophores pulsing along the flanks.
-function anglerSkin() {
-  const m = new THREE.MeshPhysicalMaterial({
-    color: '#ffffff', roughness: 0.5, clearcoat: 0.25, clearcoatRoughness: 0.35, vertexColors: true,
-    sheen: 0.12, sheenColor: new THREE.Color('#4a3fb0'), sheenRoughness: 0.6,
-  });
-  m.onBeforeCompile = (shader) => {
-    shader.uniforms.uTime = SHADER_TIME;
-    shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nvarying vec3 vDetailPos;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvDetailPos = transformed;');
-    shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', `#include <common>\nvarying vec3 vDetailPos;\nuniform float uTime;\n${NOISE_GLSL}`)
-      .replace('#include <color_fragment>', /* glsl */ `#include <color_fragment>
-        vec3 ap = vDetailPos * 3.2;
-        float aMottle = dFbm( ap );
-        float aSpots = smoothstep( 0.6, 0.7, dNoise( ap * 2.3 + 4.0 ) );
-        float aWart = pow( dNoise( ap * 5.0 ), 4.0 );
-        float aBelly = smoothstep( 0.05, -0.42, vDetailPos.y );
-        vec3 aCol = mix( vec3( 0.045, 0.035, 0.11 ), vec3( 0.14, 0.1, 0.26 ), aMottle * 0.9 );
-        aCol = mix( aCol, vec3( 0.26, 0.21, 0.36 ), aBelly * 0.7 );
-        aCol *= 1.0 - aSpots * 0.55;
-        aCol += vec3( 0.12, 0.1, 0.2 ) * aWart;
-        diffuseColor.rgb *= aCol;`)
-      .replace('#include <normal_fragment_maps>', /* glsl */ `#include <normal_fragment_maps>
-        float aHeight = aWart * 1.2 + aMottle * 0.4 - aSpots * 0.2 + dNoise( ap * 11.0 ) * 0.15;
-        normal = dPerturb( - vViewPosition, normal, vec2( dFdx( aHeight ), dFdy( aHeight ) ) * 0.16, faceDirection );`)
-      .replace('#include <emissivemap_fragment>', /* glsl */ `#include <emissivemap_fragment>
-        vec3 cellP = vDetailPos * vec3( 6.0, 9.0, 9.0 );
-        vec3 cell = floor( cellP );
-        vec3 centre = cell + 0.5 + ( vec3( dHash( cell ), dHash( cell + 7.1 ), dHash( cell + 3.3 ) ) - 0.5 ) * 0.6;
-        float dot2 = smoothstep( 0.2, 0.05, length( cellP - centre ) );
-        float flank = smoothstep( 0.35, 0.55, abs( vDetailPos.z ) ) * smoothstep( 0.35, -0.1, vDetailPos.y )
-          * step( 0.55, dHash( cell + 11.0 ) );
-        float pulse = 0.55 + 0.45 * sin( uTime * 2.2 + dHash( cell ) * 6.28 );
-        totalEmissiveRadiance += vec3( 0.35, 1.0, 1.0 ) * dot2 * flank * pulse * 2.2;
-        totalEmissiveRadiance += vec3( 0.2, 0.15, 0.6 ) * pow( 1.0 - saturate( dot( normal, normalize( vViewPosition ) ) ), 3.0 ) * 0.1;`);
-  };
-  m.customProgramCacheKey = () => 'angler-skin';
-  return m;
-}
-
-function toothMaterial() {
-  return new THREE.MeshStandardMaterial({ color: '#e9dfc4', roughness: 0.55, vertexColors: true });
-}
-
 const REPLACEMENTS = {
-  angler_skin: anglerSkin,
-  tooth: toothMaterial,
   viewport_glass: () => glass('#bff3ff', 0.18),
   enemy_glass: () => glass('#7a2a2a', 0.35),
 };
@@ -204,29 +154,6 @@ const lookup = new Map();
 for (const [profile, names] of Object.entries(PROFILE_BY_MATERIAL)) for (const n of names) lookup.set(n, profile);
 
 const patched = new WeakSet();
-
-// Anglerfish parts that swish with the tail: the rear of the body bends in a travelling wave, fading out toward
-// the head so the jaw, eyes, and lure stay steady.
-const SWAY_MATERIALS = new Set(['angler_skin', 'angler_fin', 'angler_spine', 'angler_speck', 'angler_spot']);
-const SWAY_GLSL = /* glsl */ `
-  float swayRear = smoothstep( 0.2, -1.6, transformed.x );
-  float swaySeed = modelMatrix[ 3 ].x * 0.37 + modelMatrix[ 3 ].y * 0.21;
-  transformed.z += sin( uTime * 3.4 - transformed.x * 2.4 + swaySeed ) * 0.2 * swayRear * swayRear;
-`;
-
-function addSway(material) {
-  const previous = material.onBeforeCompile;
-  const key = material.customProgramCacheKey?.() ?? material.name;
-  material.onBeforeCompile = (shader, renderer) => {
-    previous.call(material, shader, renderer);
-    shader.uniforms.uTime = SHADER_TIME;
-    shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nuniform float uTime;')
-      .replace('#include <begin_vertex>', `#include <begin_vertex>\n${SWAY_GLSL}`);
-  };
-  material.customProgramCacheKey = () => `${key}-sway`;
-  material.needsUpdate = true;
-}
 
 // Kelp and anemone tentacles bend in the current: still at the root, swaying more with height.
 export const CURRENT_MATERIALS = new Set(['kelp_stipe', 'kelp_blade', 'kelp_bladder', 'anemone_tentacle', 'anemone_tip']);
@@ -271,10 +198,6 @@ export function applySurfaceDetail(root) {
     } else if (!patched.has(o.material) && lookup.has(name)) {
       patch(o.material, lookup.get(name));
       patched.add(o.material);
-    }
-    if (SWAY_MATERIALS.has(name) && !swaying.has(o.material)) {
-      addSway(o.material);
-      swaying.add(o.material);
     }
     if (CURRENT_MATERIALS.has(name) && !swaying.has(o.material)) {
       addCurrent(o.material);

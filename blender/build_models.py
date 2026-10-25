@@ -37,12 +37,11 @@ ASSETS = {
     **{name: getattr(assets_env, name) for name in assets_env.ENV_ASSETS},
     **{name: getattr(assets_reef, name) for name in assets_reef.REEF_ASSETS},
     "deep_jelly": assets_deep.deep_jelly,
-    "anglerfish": assets_deep.anglerfish,
     "wreck_sub": assets_extra.wreck_sub,
 }
 
 
-AO_DISTANCE = {"kelp": 0.3, "reef": 0.6, "sponge": 0.4, "anemone": 0.3, "wreck": 1.2, "deep": 0.5, "anglerfish": 0.6, "ruin": 1.4, "rock": 1.2, "coral": 0.5, "seaweed": 0.8, "anchor": 1.0, "chain": 0.3, "enemy": 0.8}
+AO_DISTANCE = {"kelp": 0.3, "reef": 0.6, "sponge": 0.4, "anemone": 0.3, "wreck": 1.2, "deep": 0.5, "ruin": 1.4, "rock": 1.2, "coral": 0.5, "seaweed": 0.8, "anchor": 1.0, "chain": 0.3, "enemy": 0.8}
 
 
 def parse_args():
