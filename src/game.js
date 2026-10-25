@@ -5,7 +5,7 @@ import { WATER, addWaterline } from './surface.js';
 import { sfx } from './audio.js';
 import { UPGRADES, upgradeCost } from './upgrades.js';
 import { CAMERA_Z, SURFACE_Y, TAN_HALF_FOV } from './water.js';
-import { seabedAt } from './world.js';
+import { murkAt, seabedAt } from './world.js';
 
 const rand = (a, b) => a + Math.random() * (b - a);
 const WHITE = new THREE.Color(1, 1, 1);
@@ -505,8 +505,18 @@ export class Game {
       let x = spec.pos?.x;
       let y = spec.pos?.y;
       if (!spec.pos) {
-        const side = Math.random() < 0.7 ? this.player.facing : -this.player.facing;
-        x = this.cam.x + side * (this.halfW + rand(3, 14));
+        // Mines gather in the murky water toward the cliffs, and only a few drift over the reefs mid-shelf.
+        let best = -1;
+        for (let i = 0; i < 6; i++) {
+          const side = Math.random() < 0.7 ? this.player.facing : -this.player.facing;
+          const cx = this.cam.x + side * (this.halfW + rand(3, 14));
+          const score = murkAt(cx) + rand(0, 0.15);
+          if (score > best) {
+            best = score;
+            x = cx;
+          }
+        }
+        if (!spec.prewarm && best < 0.25 && Math.random() < 0.65) return null;
         y = pc.y + rand(-4, 4);
       }
       const floor = seabedAt(x);
