@@ -6,7 +6,7 @@ export const UPGRADES = [
   { id: 'torpedo', name: 'Torpedos', icon: 'torpedo', start: 0, max: 5, base: 55, growth: 1.65,
     blurb: 'Adds a torpedo rack. Torpedoes shoot dead straight ahead and hit hard with a splash, but they can miss.' },
   { id: 'missile', name: 'Missiles', icon: 'missile', start: 0, max: 5, base: 120, growth: 1.7,
-    blurb: 'Missiles chase down the nearest enemy and rarely miss, but do less damage.' },
+    blurb: 'Fire and forget. Missiles chase down the nearest enemy, but do less damage.' },
   { id: 'shield', name: 'Shield', icon: 'shield', start: 0, max: 5, base: 60, growth: 1.7,
     blurb: 'Adds a shield charge. Each charge blocks one hit and refills over time.' },
   { id: 'grapple', name: 'Grapple', icon: 'grapple', start: 0, max: 4, base: 45, growth: 1.8,
