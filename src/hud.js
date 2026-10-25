@@ -90,7 +90,6 @@ export class Hud {
     this.overlay.className = 'overlay show';
     this.overlay.innerHTML = `<div class="panel">
       ${logoSVG()}
-      <div class="subtitle">A very serious submarine war</div>
       <button class="big-btn">Dive!</button>
       <div class="controls">
         <div><kbd>WASD</kbd> / <kbd>Arrows</kbd> swim</div>
