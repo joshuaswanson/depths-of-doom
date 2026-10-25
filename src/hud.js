@@ -18,7 +18,7 @@ function el(tag, cls, html) {
 }
 
 export class Hud {
-  constructor(root, { onBuy, onStart, onResume }) {
+  constructor(root, { onBuy, onStart, onResume, onPause }) {
     this.root = root;
     this.onBuy = onBuy;
 
@@ -39,6 +39,12 @@ export class Hud {
     this.waveTag = el('div', 'wave-tag');
     topLeft.append(this.waveTag);
 
+    this.pauseBtn = el('button', 'pause-btn', '<span></span><span></span>');
+    this.pauseBtn.setAttribute('aria-label', 'Pause');
+    this.pauseBtn.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      onPause();
+    });
     this.radar = el('canvas', 'radar');
     this.radar.width = this.radar.height = 320;
     this.radarCtx = this.radar.getContext('2d');
@@ -68,7 +74,7 @@ export class Hud {
     });
 
     this.overlay = el('div', 'overlay');
-    root.append(topLeft, this.radar, this.bossBar, this.banner, this.toast, this.bar, this.overlay);
+    root.append(topLeft, this.pauseBtn, this.radar, this.bossBar, this.banner, this.toast, this.bar, this.overlay);
     this.onStart = onStart;
     this.onResume = onResume;
     this.lastPips = '';

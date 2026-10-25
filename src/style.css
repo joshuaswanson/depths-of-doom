@@ -111,6 +111,26 @@ html, body {
   color: #bfe9ff;
 }
 
+.pause-btn {
+  position: absolute;
+  top: 2.2vh;
+  right: calc(1.4vw + max(10.5vw, 110px) + 1vw);
+  width: 3.4vw;
+  min-width: 40px;
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18%;
+  background: var(--navy);
+  border: 0.2vw solid var(--edge);
+  border-radius: 50%;
+  cursor: pointer;
+  pointer-events: auto;
+  transition: transform 0.12s, border-color 0.2s;
+}
+.pause-btn:hover { transform: scale(1.08); border-color: var(--gold); }
+.pause-btn span { width: 16%; height: 42%; background: #e6f6ff; border-radius: 2px; }
 .radar {
   position: absolute;
   top: 1.6vh;

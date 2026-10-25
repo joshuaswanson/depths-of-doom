@@ -982,7 +982,7 @@ export class Game {
   }
 
   hullContact(e) {
-    const r = e.def.ry;
+    const r = e.def.ry * 0.82;
     return this.hullPoints(e).find((q) => this.player.bodyTest(q.x, q.y, r)) ?? null;
   }
 
@@ -1003,11 +1003,11 @@ export class Game {
     e.vel.addScaledVector(n, -j / mEnemy);
     // Push the hulls apart until they no longer overlap, the lighter sub moving further.
     const share = mEnemy / (mPlayer + mEnemy);
-    for (let i = 0; i < 30 && this.hullContact(e); i++) {
-      pl.group.position.x += n.x * 0.05 * share;
-      pl.group.position.y += n.y * 0.05 * share;
-      p.x -= n.x * 0.05 * (1 - share);
-      p.y -= n.y * 0.05 * (1 - share);
+    for (let i = 0; i < 60 && this.hullContact(e); i++) {
+      pl.group.position.x += n.x * 0.02 * share;
+      pl.group.position.y += n.y * 0.02 * share;
+      p.x -= n.x * 0.02 * (1 - share);
+      p.y -= n.y * 0.02 * (1 - share);
     }
     const hard = Math.min(1, Math.abs(approach) / 8);
     e.stunned = Math.max(e.stunned ?? 0, STUN_TIME[0] + (STUN_TIME[1] - STUN_TIME[0]) * hard);

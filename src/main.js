@@ -78,6 +78,9 @@ const hud = new Hud(hudRoot, {
   },
   onStart: () => startGame(),
   onResume: () => resume(),
+  onPause: () => {
+    if (state === 'playing') pause();
+  },
 });
 hud.showLoading(0);
 

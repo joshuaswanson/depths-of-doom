@@ -461,12 +461,14 @@ export class Player {
     return { x: lx, y: ly };
   }
 
-  // A fuller silhouette than hitTest, used for hull-to-hull contact so subs touch before they visibly overlap.
+  // The hull capsule itself, nose to tail, used for sub-to-sub contact; bolted-on parts may overlap a little.
   bodyTest(x, y, r = 0) {
-    const e = this.extents;
     const p = this.toLocal(x, y);
-    const dx = (p.x - e.cx) / (e.hx * 0.97 + r);
-    const dy = (p.y - e.cy) / (e.hy * 0.92 + r);
+    const turn = Math.abs(Math.cos(this.yaw));
+    const hx = Math.max(2.15 * this.fat.x * RIG_SCALE * turn, 1.0 * this.fat.yz * RIG_SCALE);
+    const hy = 1.0 * this.fat.yz * RIG_SCALE;
+    const dx = p.x / (hx + r);
+    const dy = p.y / (hy + r);
     return dx * dx + dy * dy < 1;
   }
 
