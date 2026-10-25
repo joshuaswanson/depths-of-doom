@@ -116,6 +116,12 @@ const LAYERS = [
 const CHAIN_Z = [-70, -26];
 // The foam line floats in front of the action; each frame it is placed so it lines up with the true surface behind.
 const WATERLINE_Z = 3.5;
+// Rough ground radius of each seafloor piece, used to find clear spots for sinking wrecks.
+const FOOTPRINT = {
+  reef_large: 2.4, reef_small: 1.5, kelp_tall: 0.8, kelp_short: 0.7, coral_staghorn: 0.9, coral_fan: 0.7,
+  coral_table: 1.1, sponge_cluster: 0.6, anemone_patch: 0.8, coral_brain: 0.8, rock_a: 1.5, rock_b: 0.9,
+  ruin_pillar_a: 1.0, ruin_pillar_b: 1.0, ruin_arch: 2.8, ruin_wall: 2.8, ruin_pier: 7, ruin_tower: 1.6, anchor: 1.0,
+};
 const CORALS = ['coral_staghorn', 'coral_fan', 'coral_table', 'sponge_cluster', 'anemone_patch', 'coral_brain'];
 // Fixed resting places for sunken enemy subs: one on the sunlit shelf near the start, one on a trench floor.
 const WRECKS = [{ x: -48, z: -16, yaw: 0.5, roll: 0.18 }, { x: 236, z: -12, yaw: -0.4, roll: -0.12 }];
@@ -708,6 +714,7 @@ export class World {
       if (prop.obj) this.scene.remove(prop.obj);
       const name = pick(deep ? layer.deep : layer.props);
       prop.obj = spawn(name);
+      prop.obj.userData.model = name;
       if (layer.plain) plainMaterials(prop.obj);
       if (layer.tint) tint(prop.obj, layer.tint[0], layer.tint[1]);
       else if (deep) tint(prop.obj, '#1c2233', 0.45);
@@ -736,6 +743,28 @@ export class World {
   }
 
   // Chains hang from mooring buoys bobbing at the waterline.
+  // The depth behind the play plane where a wreck of this size can rest at x without overlapping anything.
+  clearSpot(x, halfLength, halfWidth, preferred, extra = []) {
+    const blockers = [...extra];
+    for (const prop of this.props) {
+      const name = prop.obj.userData.model;
+      blockers.push({ x: prop.obj.position.x, z: prop.obj.position.z, r: (FOOTPRINT[name] ?? 1.2) * prop.obj.scale.x });
+    }
+    for (const objs of this.clusters.values()) blockers.push(...(objs.footprints ?? []));
+    const clear = (z) => blockers.every((b) => {
+      const dx = Math.max(0, Math.abs(b.x - x) - halfLength);
+      const dz = Math.max(0, Math.abs(b.z - z) - halfWidth);
+      return dx * dx + dz * dz > b.r * b.r;
+    });
+    for (let step = 0; step <= 40; step++) {
+      for (const dir of step ? [1, -1] : [0]) {
+        const z = preferred + dir * step * 0.4;
+        if (z <= 3 && z >= -15 && clear(z)) return z;
+      }
+    }
+    return Math.min(3, preferred + 6);
+  }
+
   // Reefs and kelp forests come in fixed clusters per stretch of seafloor, spawned as the stretch scrolls into view.
   updateClusters(cx) {
     const span = halfWidthAt(-16, this.aspect) + MOUND_CELL;
@@ -765,7 +794,9 @@ export class World {
       return hash(seed, 7);
     };
     const pieces = new THREE.Group();
+    const footprints = [];
     const place = (name, x, z, scale) => {
+      footprints.push({ x, z, r: (FOOTPRINT[name] ?? 1) * scale });
       const obj = spawn(name);
       obj.scale.setScalar(scale);
       obj.position.set(x, seabedAt(x, z) - 0.2, z);
@@ -775,7 +806,7 @@ export class World {
     const deep = floorY(m.x) < SHELF_Y - 6;
     if (deep) {
       for (let i = 0; i < 2; i++) place(r() < 0.5 ? 'rock_a' : 'rock_b', m.x + (r() - 0.5) * 8, -6 - r() * 8, 0.8 + r() * 0.6);
-      return [mergeCluster(pieces)];
+      return Object.assign([mergeCluster(pieces)], { footprints });
     }
     if (m.reef) {
       place('reef_large', m.x, MOUND_Z, 1.5 + r() * 0.5);
@@ -802,7 +833,7 @@ export class World {
       }
       place(r() < 0.5 ? 'rock_a' : 'rock_b', m.x + (r() - 0.5) * 6, MOUND_Z, 0.7 + r() * 0.5);
     }
-    return [mergeCluster(pieces)];
+    return Object.assign([mergeCluster(pieces)], { footprints });
   }
 
   spawnChain(x) {

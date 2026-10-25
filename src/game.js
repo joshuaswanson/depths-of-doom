@@ -624,10 +624,29 @@ export class Game {
     e.obj.traverse((o) => {
       if (o.name.startsWith('muzzle')) o.visible = false;
     });
+    const halfLength = e.def.rx * e.def.scale * 1.3;
+    const halfWidth = e.def.ry * e.def.scale * 1.2;
     this.wrecks.push({
-      e, t: 0, vy: 1.5, vx: e.vel.x * 0.3, settled: false, bounced: false, leak: 0,
+      e, t: 0, vy: 1.5, vx: e.vel.x * 0.3, settled: false, bounced: false, leak: 0, halfLength, halfWidth,
+      targetZ: this.world.clearSpot(e.obj.position.x + e.vel.x * 0.6, halfLength, halfWidth, WRECK_Z,
+        this.wrecks.map((o) => ({ x: o.e.obj.position.x, z: o.targetZ, r: o.halfLength }))),
       spinZ: (Math.random() - 0.5) * 1.2, spinX: (Math.random() - 0.5) * 1.6, rv: 0, lv: 0,
     });
+  }
+
+  // The plane a hull of this footprint rests on: tilted to the ground's slope and raised until no point of the
+  // ground beneath it pokes through, so wrecks sit on top of mounds instead of sinking into them.
+  groundUnder(x, z, halfLength, halfWidth) {
+    const left = seabedAt(x - halfLength, z);
+    const right = seabedAt(x + halfLength, z);
+    const slope = Math.atan2(right - left, halfLength * 2);
+    const rise = Math.tan(slope);
+    let y = -Infinity;
+    for (let i = -4; i <= 4; i++) {
+      const dx = (i / 4) * halfLength;
+      for (const dz of [-halfWidth, 0, halfWidth]) y = Math.max(y, seabedAt(x + dx, z + dz) - rise * dx);
+    }
+    return { y, slope };
   }
 
   updateWrecks(dt) {
@@ -636,13 +655,14 @@ export class Game {
       const { e } = w;
       const p = e.obj.position;
       w.t += dt;
-      const rest = seabedAt(p.x, p.z) + e.def.ry * e.def.scale * 0.55;
+      const ground = this.groundUnder(p.x, p.z, w.halfLength, w.halfWidth);
+      const rest = ground.y + e.def.ry * e.def.scale * 0.55;
       if (!w.settled) {
         w.vy = Math.max(-3.2, w.vy - dt * 4);
         w.vx *= Math.exp(-dt * 1.2);
         p.x += w.vx * dt;
         p.y += w.vy * dt;
-        p.z += (WRECK_Z - p.z) * (1 - Math.exp(-dt * 0.8));
+        p.z += (w.targetZ - p.z) * (1 - Math.exp(-dt * 0.8));
         if (p.y <= rest) {
           p.y = rest;
           if (!w.bounced && w.vy < -1.5) {
@@ -655,9 +675,7 @@ export class Game {
           }
           w.settled = true;
           // Lie with the seabed's slope, rolled onto one side, a little sunk into the sand.
-          const reach = e.def.rx * e.def.scale;
-          const slope = Math.atan2(seabedAt(p.x + reach, p.z) - seabedAt(p.x - reach, p.z), reach * 2);
-          w.restZ = nearestAngle(e.obj.rotation.z, slope);
+          w.restZ = nearestAngle(e.obj.rotation.z, ground.slope);
           const side = Math.sign(Math.sin(e.tilt.rotation.x)) || (Math.random() < 0.5 ? -1 : 1);
           w.restX = nearestAngle(e.tilt.rotation.x, side * (0.45 + Math.random() * 0.35));
           w.restY = rest - e.def.ry * e.def.scale * 0.2;
