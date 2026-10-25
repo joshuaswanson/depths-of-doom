@@ -332,7 +332,7 @@ html, body {
 .badge {
   display: table;
   position: relative;
-  margin: -4.3vw auto 0;
+  margin: -3.3vw auto 0;
   transition: transform 0.25s ease, filter 0.25s ease;
   filter: drop-shadow(0 0.4vw 0.6vw rgba(0, 0, 0, 0.45));
 }
