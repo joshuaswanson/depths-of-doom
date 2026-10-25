@@ -2,8 +2,9 @@
 
     blender --background ~/Developer/seagull/seagull.blend --python blender/import_seagull.py
 
-Keeps the rig and its 300-frame animation (floating, takeoff, flight), drops the water, cameras and lights,
-reduces the very dense mesh, and bakes the animation so feather bones moved by drivers are exported too.
+Keeps the rig and the first 240 frames of its animation (floating, takeoff, flight), which is all the game plays.
+Drops the water, cameras and lights, reduces the very dense mesh, and bakes the animation so feather bones moved by
+drivers are exported too.
 """
 import os
 
@@ -11,7 +12,7 @@ import bpy
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "models-src", "seagull.glb")
-TARGET_FACES = 9000
+TARGET_FACES = 4500
 
 for o in list(bpy.data.objects):
     if o.type in {"CAMERA", "LIGHT"} or o.name in {"Water", "CamTarget"}:
@@ -29,7 +30,7 @@ bpy.ops.object.modifier_move_to_index(modifier=decimate.name, index=0)
 bpy.ops.object.modifier_apply(modifier=decimate.name)
 
 scene = bpy.context.scene
-scene.frame_start, scene.frame_end = 1, 300
+scene.frame_start, scene.frame_end = 1, 240
 
 bpy.ops.object.select_all(action="DESELECT")
 gull.select_set(True)
