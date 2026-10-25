@@ -1583,6 +1583,19 @@ export class Game {
     this.hud.showToast('Buy a spotlight for better visibility!');
   }
 
+  // Racing along half out of the water throws spray off the hull.
+  planeSpray(dt) {
+    const pl = this.player;
+    if (!pl.alive) return;
+    const pc = pl.center;
+    const straddle = Math.abs(pc.y - SURFACE_Y) < pl.extents.hy * 0.9;
+    const strength = THREE.MathUtils.smoothstep(Math.abs(pl.vel.x), 4, 9);
+    if (!straddle || strength <= 0) return;
+    const dir = Math.sign(pl.vel.x);
+    const hx = pl.extents.hx;
+    this.effects.surfaceSpray(pc.x + dir * hx * 0.85, pc.x - dir * hx * 0.9, dir, strength, dt);
+  }
+
   splashCheck() {
     const pc = this.player.center;
     const above = this.player.group.position.y > SURFACE_Y;
@@ -1613,6 +1626,7 @@ export class Game {
     this.updateWaves(dt);
     this.updateCamera(dt);
     this.splashCheck();
+    this.planeSpray(dt);
     this.spotlightHint();
 
     if (pl.alive) {

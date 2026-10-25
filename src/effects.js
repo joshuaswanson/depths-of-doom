@@ -107,7 +107,7 @@ class ParticlePool {
       size0: o.size ?? 0.5, size1: o.size1 ?? o.size ?? 0.5,
       c0: new THREE.Color(o.color ?? '#ffffff'), c1: new THREE.Color(o.color1 ?? o.color ?? '#ffffff'),
       a0: o.alpha ?? 1, a1: o.alpha1 ?? 0,
-      drag: o.drag ?? 0, rise: o.rise ?? 0, scroll: o.scroll ?? 1,
+      drag: o.drag ?? 0, rise: o.rise ?? 0, floor: o.floor ?? -Infinity, scroll: o.scroll ?? 1,
       wobble: o.wobble ?? 0, seed: Math.random() * 10,
     });
   }
@@ -118,7 +118,7 @@ class ParticlePool {
     const alive = [];
     for (const q of this.p) {
       q.life += dt;
-      if (q.life >= q.maxLife || q.y > this.ceiling) continue;
+      if (q.life >= q.maxLife || q.y > this.ceiling || (q.y < q.floor && q.vy < 0)) continue;
       alive.push(q);
       const damp = Math.exp(-q.drag * dt);
       q.vx *= damp;
@@ -150,7 +150,7 @@ export class Effects {
     this.bubbles = new ParticlePool(scene, {
       max: 4000, texture: bubbleTexture, blending: THREE.NormalBlending, ceiling: SURFACE_Y - 0.15,
     });
-    this.puffs = new ParticlePool(scene, { max: 900, texture: puffTexture, blending: THREE.NormalBlending });
+    this.puffs = new ParticlePool(scene, { max: 1400, texture: puffTexture, blending: THREE.NormalBlending });
     this.glow = new ParticlePool(scene, { max: 700, texture: softTexture, blending: THREE.AdditiveBlending });
     this.puffs.points.renderOrder = 5;
     this.glow.points.renderOrder = 6;
@@ -264,10 +264,38 @@ export class Effects {
       const s = rand(2, 7) * scale;
       this.puffs.emit({ pos: { x: pos.x + rand(-1.2, 1.2), y: pos.y, z: pos.z ?? 0.5 },
         vel: { x: Math.cos(a) * s * 0.6, y: Math.sin(a) * s }, life: rand(0.5, 0.9), size: rand(0.25, 0.6) * scale,
-        size1: rand(0.1, 0.3), color: '#ffffff', color1: '#bfefff', alpha: 0.95, alpha1: 0, rise: -14, drag: 0.5 });
+        size1: rand(0.1, 0.3), color: '#ffffff', color1: '#bfefff',
+        alpha: 0.95, alpha1: 0, rise: -14, floor: SURFACE_Y, drag: 0.5 });
     }
     for (let i = 0; i < 16 * scale; i++) {
       this.bubble({ x: pos.x + rand(-1.5, 1.5), y: pos.y - rand(0.3, 1.5), z: pos.z }, { spread: 0.3 });
+    }
+  }
+
+  // Planing along the surface at speed: a fan thrown up off the bow, sheets peeling off the hull, and a tail kicked
+  // up behind. `dir` is the travel direction; emission scales with `strength` and the frame time.
+  surfaceSpray(bow, stern, dir, strength, dt) {
+    const n = strength * 240 * dt;
+    for (let i = 0; i < n; i++) {
+      const z = rand(-0.9, 1.0);
+      const s = rand(0.6, 1) * (3 + 5 * strength);
+      this.puffs.emit({ pos: { x: bow + dir * rand(-0.3, 0.2), y: SURFACE_Y, z },
+        vel: { x: dir * rand(-1.4, 0.6) * s * 0.5, y: s }, life: rand(0.5, 0.9), size: rand(0.3, 0.6),
+        size1: rand(0.12, 0.28), color: '#ffffff', color1: '#c9f2ff',
+        alpha: 1, alpha1: 0, rise: -14, floor: SURFACE_Y, drag: 0.6 });
+      const t = Math.random();
+      this.puffs.emit({ pos: { x: bow + (stern - bow) * t, y: SURFACE_Y, z: Math.random() < 0.5 ? -0.8 : 0.9 },
+        vel: { x: -dir * rand(1, 3.5), y: rand(1.5, 4) * strength }, life: rand(0.45, 0.8), size: rand(0.25, 0.45),
+        size1: 0.12, color: '#f2fdff', alpha: 0.95, alpha1: 0, rise: -12, floor: SURFACE_Y, drag: 1.2 });
+    }
+    for (let i = 0; i < n * 0.6; i++) {
+      this.puffs.emit({ pos: { x: stern - dir * rand(0, 0.6), y: SURFACE_Y, z: rand(-0.5, 0.6) },
+        vel: { x: -dir * rand(2, 5) * strength, y: rand(2, 5.5) * strength }, life: rand(0.55, 0.95),
+        size: rand(0.3, 0.55), size1: 0.14, color: '#ffffff', color1: '#d6f6ff',
+        alpha: 0.9, alpha1: 0, rise: -13, floor: SURFACE_Y, drag: 0.8 });
+      this.puffs.emit({ pos: { x: stern - dir * rand(0, 3), y: SURFACE_Y + 0.05, z: rand(-0.6, 0.8) },
+        vel: { x: -dir * rand(0, 0.6), y: 0 }, life: rand(0.8, 1.4), size: rand(0.25, 0.45), size1: rand(0.5, 0.8),
+        color: '#ffffff', color1: '#dff7ff', alpha: 0.45, alpha1: 0, drag: 2.5 });
     }
   }
 
@@ -281,13 +309,14 @@ export class Effects {
       const s = rand(3, 9) * scale * (0.5 + tall);
       this.puffs.emit({ pos: { x: pos.x + rand(-width, width), y: pos.y, z },
         vel: { x: Math.cos(a) * s * 0.75, y: Math.sin(a) * s }, life: rand(0.7, 1.3), size: rand(0.3, 0.75) * scale,
-        size1: rand(0.12, 0.35), color: '#ffffff', color1: '#c9f2ff', alpha: 1, alpha1: 0, rise: -15, drag: 0.4 });
+        size1: rand(0.12, 0.35), color: '#ffffff', color1: '#c9f2ff',
+        alpha: 1, alpha1: 0, rise: -15, floor: SURFACE_Y, drag: 0.4 });
     }
     for (let i = 0; i < 24 * scale; i++) {
       const dir = Math.random() < 0.5 ? -1 : 1;
       this.puffs.emit({ pos: { x: pos.x + rand(-width, width) * 0.5, y: pos.y + rand(0, 0.2), z },
         vel: { x: dir * rand(3, 8) * scale, y: rand(0.5, 2.5) }, life: rand(0.5, 0.9), size: rand(0.25, 0.5) * scale,
-        size1: 0.1, color: '#f2fdff', alpha: 0.9, alpha1: 0, rise: -10, drag: 1.2 });
+        size1: 0.1, color: '#f2fdff', alpha: 0.9, alpha1: 0, rise: -10, floor: SURFACE_Y, drag: 1.2 });
     }
     for (let i = 0; i < 12 * scale; i++) {
       this.puffs.emit({ pos: { x: pos.x + rand(-width * 1.4, width * 1.4), y: pos.y + rand(-0.05, 0.1), z: z + 0.3 },
@@ -326,7 +355,7 @@ export class Effects {
 
   droplet(pos) {
     this.glow.emit({ pos, vel: { x: rand(-0.3, 0.3), y: rand(-0.5, 0) }, life: rand(0.35, 0.6), size: rand(0.06, 0.11),
-      size1: 0.05, color: '#dff6ff', alpha: 0.85, alpha1: 0.4, rise: -16, drag: 0.2 });
+      size1: 0.05, color: '#dff6ff', alpha: 0.85, alpha1: 0.4, rise: -16, floor: SURFACE_Y, drag: 0.2 });
   }
 
   debris(pos) {
