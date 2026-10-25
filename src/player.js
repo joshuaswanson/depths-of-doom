@@ -13,6 +13,8 @@ const AIR_DRAG = 0.15;
 const TURN_SPEED = Math.PI / 0.7;
 const TURN_ACCEL = 14;
 const TURN_DRAG = 3.5;
+const PITCH_SPEED = 2.6;
+const PITCH_ACCEL = 9;
 const MAX_PITCH = 1.52;
 const CRUISE_BUILD = 0.32;
 const CRUISE_BOOST = 0.9;
@@ -236,6 +238,7 @@ export class Player {
     this.facing = 1;
     this.yaw = YAW.right;
     this.yawVel = 0;
+    this.pitchVel = 0;
     this.pitch = 0;
     this.airborne = false;
     this.invuln = 0;
@@ -560,13 +563,21 @@ export class Player {
     }
     this.yawPivot.rotation.y = this.yaw;
     this.updateExtents();
-    // In the water the nose points where you push and holds that tilt when you let go; in the air it follows the
-    // arc of the jump.
-    let wantPitch = this.pitch;
+    // The nose tips toward where you push with some momentum, and coasts to a stop at whatever tilt it reached when
+    // you let go. In the air it follows the arc of the jump.
+    let wantPitch = null;
     if (this.airborne) wantPitch = Math.atan2(this.vel.y, Math.abs(this.vel.x) + 0.3);
     else if (pushDir) wantPitch = Math.atan2(pushDir.y, Math.abs(pushDir.x));
-    wantPitch = THREE.MathUtils.clamp(wantPitch, -MAX_PITCH, MAX_PITCH);
-    this.pitch = THREE.MathUtils.lerp(this.pitch, wantPitch, 1 - Math.exp(-dt * (this.airborne ? 6 : 3.5)));
+    if (wantPitch === null) {
+      this.pitchVel *= Math.exp(-dt * TURN_DRAG);
+    } else {
+      wantPitch = THREE.MathUtils.clamp(wantPitch, -MAX_PITCH, MAX_PITCH);
+      const rate = THREE.MathUtils.clamp((wantPitch - this.pitch) * 5, -PITCH_SPEED, PITCH_SPEED);
+      const accel = this.airborne ? PITCH_ACCEL * 2 : PITCH_ACCEL;
+      this.pitchVel += THREE.MathUtils.clamp(rate - this.pitchVel, -dt * accel, dt * accel);
+    }
+    this.pitch = THREE.MathUtils.clamp(this.pitch + this.pitchVel * dt, -MAX_PITCH, MAX_PITCH);
+    if (Math.abs(this.pitch) >= MAX_PITCH) this.pitchVel = 0;
     this.pitchPivot.rotation.z = this.pitch;
     this.pitchPivot.rotation.x = Math.sin(this.time * 1.7) * 0.03;
     this.rig.position.y = Math.sin(this.time * 2.1) * 0.08;
