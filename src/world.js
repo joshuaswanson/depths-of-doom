@@ -321,6 +321,9 @@ const JELLY_CEILING = 96;
 const JELLY_LAYER = [-122, -100];
 const JELLY_DEEP = [-200, -128];
 const JELLY_STRAGGLERS = 3;
+// Anglerfish lurk just above the floor of the deepest trenches.
+const ANGLER_FLOOR = -170;
+const ANGLER_BAND = [3, 16];
 const JELLY_COLORS = ['#ff5fd2', '#5fe8ff', '#b47bff', '#7dffb4', '#ffb35f'];
 
 // Jelly flesh: see-through in the middle, glowing at the silhouette, with tentacles rippling down their length.
@@ -383,20 +386,6 @@ function makeAngler() {
   return fish;
 }
 
-function makeEyes() {
-  const group = new THREE.Group();
-  const color = new THREE.Color(pick(['#ff3b2f', '#ffd13b', '#9bff3b'])).multiplyScalar(3);
-  const mat = new THREE.MeshBasicMaterial({ color });
-  for (const s of [-1, 1]) {
-    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.28, 12, 8), mat);
-    eye.position.x = s * 0.7;
-    eye.scale.set(1.3, 0.8, 1);
-    group.add(eye);
-  }
-  group.userData = { blink: rand(2, 6), phase: rand(0, 6) };
-  return group;
-}
-
 function wrap(value, center, half) {
   const span = half * 2;
   return center + ((((value - center + half) % span) + span) % span) - half;
@@ -444,7 +433,7 @@ export class World {
     });
     this.anglers = Array.from({ length: 6 }, () => {
       const a = makeAngler();
-      a.position.set(rand(-45, 45), rand(-190, -40), rand(-22, -4));
+      a.position.set(rand(-45, 45), -200, rand(-22, -4));
       scene.add(a);
       return a;
     });
@@ -465,12 +454,6 @@ export class World {
       this.landGull(gull, rand(-40, 40));
       scene.add(gull);
       return gull;
-    });
-    this.eyes = Array.from({ length: 10 }, () => {
-      const e = makeEyes();
-      e.position.set(rand(-60, 60), rand(-200, -35), rand(-70, -35));
-      scene.add(e);
-      return e;
     });
   }
 
@@ -675,24 +658,12 @@ export class World {
       u.lure.rotation.z = Math.sin(t * 2.1 + u.phase) * 0.12;
       u.halo.material.opacity = 0.6 + Math.sin(t * 3.3 + u.phase) * 0.25;
       a.position.x = wrap(a.position.x, cx, 50);
-      const floor = floorY(a.position.x) + 4;
-      if (Math.abs(a.position.y - cy) > 40 || a.position.y < floor || a.position.y > -35) {
-        a.position.y = Math.max(floor + 2, Math.min(-38, cy + rand(-20, 20)));
+      const floor = floorY(a.position.x);
+      if (a.position.y < floor + ANGLER_BAND[0] || a.position.y > floor + ANGLER_BAND[1]) {
+        a.position.y = floor + rand(ANGLER_BAND[0] + 1, ANGLER_BAND[1] - 1);
       }
-      a.visible = floorY(a.position.x) < -40 && this.dark > 0.2;
+      a.visible = floor < ANGLER_FLOOR && this.dark > 0.5;
     }
-    for (const e of this.eyes) {
-      const u = e.userData;
-      u.blink -= dt;
-      const closing = u.blink < 0.15 && u.blink > 0;
-      e.scale.y = closing ? 0.1 : 1;
-      if (u.blink < 0) u.blink = rand(2, 7);
-      e.position.x = wrap(e.position.x, cx, 60);
-      e.position.y += Math.sin(t * 0.3 + u.phase) * dt * 0.3;
-      if (Math.abs(e.position.y - cy) > 35) e.position.y = Math.min(-35, cy + rand(-25, 15));
-      e.visible = this.dark > 0.25 && floorY(e.position.x) < e.position.y - 4;
-    }
-
     const m = new THREE.Matrix4();
     const q = new THREE.Quaternion();
     const sc = new THREE.Vector3(0.7, 0.7, 0.7);
