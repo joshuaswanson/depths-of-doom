@@ -470,11 +470,18 @@ function updateAngler(a, dt, t, cx, sub, world) {
   a.rotation.z = THREE.MathUtils.clamp(Math.atan2(u.vel.y, Math.abs(u.vel.x) + 0.3), -0.35, 0.35) * u.facing * 0.8;
   // Mostly dark: now and then the lure flares for a couple of seconds, lighting the fish up before it vanishes again.
   const near = sub && a.position.distanceTo(sub) < 12 * a.scale.x;
-  u.untilFlash -= dt * (near ? 3 : 1);
+  // A sub swimming up sets the lure off straight away; otherwise it flares now and then on its own.
+  if (near && !u.wasNear && u.flash <= 0) u.untilFlash = 0;
+  u.wasNear = near;
+  u.untilFlash -= dt;
   if (u.flash > 0) u.flash += dt;
-  else if (u.untilFlash <= 0 && !world.anglerLight.userData.owner) {
-    u.flash = 0.001;
-    world.anglerLight.userData.owner = a;
+  else if (u.untilFlash <= 0) {
+    const owner = world.anglerLight.userData.owner;
+    if (!owner || near) {
+      if (owner && owner !== a) owner.userData.flash = 0;
+      u.flash = 0.001;
+      world.anglerLight.userData.owner = a;
+    }
   }
   if (u.flash >= FLASH_TIME) {
     u.flash = 0;

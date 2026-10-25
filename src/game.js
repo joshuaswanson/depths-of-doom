@@ -167,6 +167,7 @@ function dizzyStars() {
   return group;
 }
 const MINE_LANE = 2.6;
+const MAX_CHAIN = 70;
 const LOOSE_COIN_RANGE = 70;
 
 const ENEMY_TYPES = {
@@ -495,18 +496,23 @@ export class Game {
     }
     if (spec.type === 'mine') obj.position.z = rand(-0.5, 0.5);
     let anchor = null;
-    if (spec.type === 'mine' && !spec.pos) {
-      // Wave mines are moored to the seabed just out of view, mostly ahead of the sub, so they scroll into sight.
+    if (spec.type === 'mine') {
+      // Every mine is moored to the seabed. Wave mines hang just out of view, mostly ahead of the sub; mines the
+      // boss drops are chained to the floor beneath them. Where the water is too deep for a chain, none appear.
       const pc = this.player.center;
-      const side = Math.random() < 0.7 ? this.player.facing : -this.player.facing;
-      const x = this.cam.x + side * (this.halfW + rand(3, 14));
-      const floor = seabedAt(x);
-      const y = THREE.MathUtils.clamp(pc.y + rand(-4, 4), floor + 3, ENEMY_TOP);
-      if (y - floor < 70) {
-        anchor = { x, y: floor };
-        // Moored mines hang a little behind or in front of the sub's lane so their chains never cut through it.
-        obj.position.set(x, y, (Math.random() < 0.7 ? -1 : 1) * MINE_LANE);
+      let x = spec.pos?.x;
+      let y = spec.pos?.y;
+      if (!spec.pos) {
+        const side = Math.random() < 0.7 ? this.player.facing : -this.player.facing;
+        x = this.cam.x + side * (this.halfW + rand(3, 14));
+        y = pc.y + rand(-4, 4);
       }
+      const floor = seabedAt(x);
+      y = THREE.MathUtils.clamp(y, floor + 3, Math.min(ENEMY_TOP, floor + MAX_CHAIN));
+      if (!spec.prewarm && Math.abs(y - (spec.pos?.y ?? pc.y)) > 12) return null;
+      anchor = { x, y: floor };
+      // Moored mines hang a little behind or in front of the sub's lane so their chains never cut through it.
+      obj.position.set(x, y, (Math.random() < 0.7 ? -1 : 1) * MINE_LANE);
     }
     this.scene.add(obj);
     const bossTier = Math.floor(this.wave / 5);
@@ -1187,7 +1193,7 @@ export class Game {
   prewarm() {
     const before = this.enemies.length;
     for (const type of ['scout', 'gunner', 'boss', 'mine']) {
-      const e = this.spawnEnemy({ type, pos: { x: 0, y: 0 } });
+      const e = this.spawnEnemy({ type, pos: { x: 0, y: 0 }, prewarm: true });
       if (e.bar) e.bar.group.visible = true;
       e.model.traverse((o) => {
         if (o.name.startsWith('skull_mark')) o.visible = true;
