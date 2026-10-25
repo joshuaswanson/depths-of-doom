@@ -118,6 +118,8 @@ const BAR_MID = new THREE.Color('#ffc93a');
 const BAR_HIGH = new THREE.Color('#5dff6a');
 
 // A capsule health bar with a dark rim, glossy fill, quarter ticks, and a pale trail showing recent damage.
+const barGeometry = new Map();
+
 function healthBar(type) {
   const width = BAR_WIDTH[type];
   const mat = new THREE.ShaderMaterial({
@@ -157,7 +159,8 @@ function healthBar(type) {
         gl_FragColor = vec4( col, alpha * 0.96 );
       }`,
   });
-  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(width, BAR_HEIGHT), mat);
+  if (!barGeometry.has(width)) barGeometry.set(width, new THREE.PlaneGeometry(width, BAR_HEIGHT));
+  const mesh = new THREE.Mesh(barGeometry.get(width), mat);
   mesh.renderOrder = 20;
   mesh.visible = false;
   return { group: mesh, mat, lag: 1 };

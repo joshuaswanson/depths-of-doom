@@ -165,10 +165,15 @@ function makeShieldBubble() {
   return new THREE.Mesh(new THREE.SphereGeometry(1, 48, 32), mat);
 }
 
-export function makeBeam(color = '#fff0b8') {
+const beamGeometry = (() => {
   const geo = new THREE.ConeGeometry(3.2, 13, 32, 1, true);
   geo.translate(0, -6.5, 0);
   geo.rotateZ(Math.PI / 2);
+  return geo;
+})();
+
+export function makeBeam(color = '#fff0b8') {
+  const geo = beamGeometry;
   const mat = new THREE.ShaderMaterial({
     transparent: true,
     depthWrite: false,
