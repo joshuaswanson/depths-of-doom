@@ -212,23 +212,52 @@ for (const [profile, names] of Object.entries(PROFILE_BY_MATERIAL)) for (const n
 
 const patched = new WeakSet();
 
+// Anglerfish parts that swish with the tail: the rear of the body bends in a travelling wave, fading out toward
+// the head so the jaw, eyes, and lure stay steady.
+const SWAY_MATERIALS = new Set(['angler_skin', 'angler_fin', 'angler_membrane', 'angler_speck', 'angler_spot']);
+const SWAY_GLSL = /* glsl */ `
+  float swayRear = smoothstep( 0.2, -1.6, transformed.x );
+  float swaySeed = modelMatrix[ 3 ].x * 0.37 + modelMatrix[ 3 ].y * 0.21;
+  transformed.z += sin( uTime * 3.4 - transformed.x * 2.4 + swaySeed ) * 0.2 * swayRear * swayRear;
+`;
+
+function addSway(material) {
+  const previous = material.onBeforeCompile;
+  const key = material.customProgramCacheKey?.() ?? material.name;
+  material.onBeforeCompile = (shader, renderer) => {
+    previous.call(material, shader, renderer);
+    shader.uniforms.uTime = SHADER_TIME;
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nuniform float uTime;')
+      .replace('#include <begin_vertex>', `#include <begin_vertex>\n${SWAY_GLSL}`);
+  };
+  material.customProgramCacheKey = () => `${key}-sway`;
+  material.needsUpdate = true;
+}
+
 const replaced = new Map();
+const swaying = new WeakSet();
 
 export function applySurfaceDetail(root) {
   root.traverse((o) => {
     if (!o.isMesh) return;
-    const make = REPLACEMENTS[o.material.name];
+    const name = o.material.name;
+    const make = REPLACEMENTS[name];
     if (make) {
-      if (!replaced.has(o.material.name)) replaced.set(o.material.name, make());
-      const transparent = replaced.get(o.material.name).transparent;
-      o.material = replaced.get(o.material.name);
-      if (transparent) o.renderOrder = 2;
-      return;
+      if (!replaced.has(name)) {
+        const m = make();
+        m.name = name;
+        replaced.set(name, m);
+      }
+      o.material = replaced.get(name);
+      if (o.material.transparent) o.renderOrder = 2;
+    } else if (!patched.has(o.material) && lookup.has(name)) {
+      patch(o.material, lookup.get(name));
+      patched.add(o.material);
     }
-    if (patched.has(o.material)) return;
-    const profile = lookup.get(o.material.name);
-    if (!profile) return;
-    patch(o.material, profile);
-    patched.add(o.material);
+    if (SWAY_MATERIALS.has(name) && !swaying.has(o.material)) {
+      addSway(o.material);
+      swaying.add(o.material);
+    }
   });
 }

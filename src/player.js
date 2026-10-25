@@ -21,13 +21,21 @@ const CRUISE_BUILD = 0.32;
 const CRUISE_BOOST = 0.9;
 const RIG_SCALE = 0.82;
 const REGEN_DELAY = 5;
-// Portholes that bolted-on parts must leave visible, as [x, angle around the hull, radius], plus how far toward the
-// nose viewport a part may sit.
+// Portholes that bolted-on parts must not sit on, as [x, angle around the hull, radius], plus how far toward the
+// nose viewport a part may sit. Only a part's mounting base counts: barrels and other overhangs may hang over a
+// window as long as the base stays off it.
 const KEEP_CLEAR = [[0.35, 4, 0.22], [-0.3, 4, 0.19], [0.35, 176, 0.22], [-0.3, 176, 0.19]];
 const NOSE_LIMIT = 1.35;
-const FOOTPRINT = {
-  cannon: 0.42, torpedo: 0.5, missile: 0.42, shield: 0.28, grapple: 0.2, sonar: 0.2, propulsion: 0.32,
-  spotlight: 0.28, junk: 0.3,
+// Rough space each part takes on the hull: how far it reaches back and forward along the hull from its mount, and
+// how wide it is around the hull. Used to keep parts from bolting into each other.
+const ENVELOPE = {
+  cannon: [-0.45, 1.45, 0.42], torpedo: [-0.6, 0.75, 0.4], missile: [-0.45, 0.6, 0.36], shield: [-0.3, 0.3, 0.3],
+  grapple: [-0.15, 0.15, 0.15], sonar: [-0.35, 0.35, 0.3], propulsion: [-0.75, 0.5, 0.3], spotlight: [-0.35, 0.4, 0.25],
+  junk: [-0.3, 0.3, 0.3],
+};
+const BASE_RADIUS = {
+  cannon: 0.24, torpedo: 0.45, missile: 0.25, shield: 0.26, grapple: 0.15, sonar: 0.14, propulsion: 0.15,
+  spotlight: 0.18, junk: 0.25,
 };
 const REGEN_RATE = 3;
 
@@ -188,10 +196,10 @@ export class Player {
     this.lamp.add(this.beam);
     // A fixed pool of searchlights keeps the scene's light count constant, so buying one never recompiles shaders.
     this.spots = Array.from({ length: MAX_SPOTLIGHTS }, () => {
-      const light = new THREE.SpotLight('#fff1c9', 0, 50, 0.3, 0.5, 1.0);
+      const light = new THREE.SpotLight('#fff1c9', 0, 60, 0.5, 0.55, 1.2);
       light.target.position.set(10, 0, 0);
       const beam = makeBeam();
-      beam.scale.set(1.6, 0.75, 0.75);
+      beam.scale.set(1.7, 1.55, 1.55);
       beam.userData.light = true;
       const holder = new THREE.Group();
       holder.add(light, light.target, beam);
@@ -282,17 +290,30 @@ export class Player {
     };
   }
 
-  // Slide a mount around the hull until its footprint leaves every porthole uncovered.
+  // Slide a mount around the hull until its base sits clear of every porthole and its body clear of other parts.
   clearSocket(cat, x, angle) {
-    const r = FOOTPRINT[cat] ?? 0.3;
+    const r = BASE_RADIUS[cat] ?? 0.25;
+    const [back, front, width] = ENVELOPE[cat] ?? ENVELOPE.junk;
     const sx = Math.min(x, NOSE_LIMIT);
-    const blocked = (a) => KEEP_CLEAR.some(([kx, ka, kr]) => {
-      const da = THREE.MathUtils.degToRad(((a - ka + 540) % 360) - 180);
-      return (sx - kx) ** 2 + (da * hullRadius(sx)) ** 2 < (r + kr) ** 2;
+    const fx = this.fatTarget.x;
+    const around = hullRadius(sx) * this.fatTarget.yz;
+    const gap = (a, b) => Math.abs(THREE.MathUtils.degToRad(((a - b + 540) % 360) - 180));
+    const onWindow = (a) => KEEP_CLEAR.some(([kx, ka, kr]) => (sx - kx) ** 2 + (gap(a, ka) * hullRadius(sx)) ** 2
+      < (r + kr) ** 2);
+    const bumps = (a) => this.parts.some((p) => {
+      const e = p.envelope;
+      const overlapAlong = sx * fx + back < e.x1 && sx * fx + front > e.x0;
+      return overlapAlong && gap(a, e.angle) * Math.min(around, e.around) < width + e.width;
     });
+    for (let step = 0; step <= 20; step++) {
+      for (const dir of [1, -1]) {
+        const a = angle + dir * step * 6;
+        if (!onWindow(a) && !bumps(a)) return [sx, a];
+      }
+    }
     for (let step = 0; step <= 15; step++) {
       for (const dir of [1, -1]) {
-        if (!blocked(angle + dir * step * 6)) return [sx, angle + dir * step * 6];
+        if (!onWindow(angle + dir * step * 6)) return [sx, angle + dir * step * 6];
       }
     }
     return [sx, angle];
@@ -300,6 +321,11 @@ export class Player {
 
   addPart(cat, model, x, angle, animate) {
     [x, angle] = this.clearSocket(cat, x, angle);
+    const [back, front, width] = ENVELOPE[cat] ?? ENVELOPE.junk;
+    const envelope = {
+      x0: x * this.fatTarget.x + back, x1: x * this.fatTarget.x + front, angle, width,
+      around: hullRadius(Math.min(x, NOSE_LIMIT)) * this.fatTarget.yz,
+    };
     const pivot = new THREE.Group();
     const obj = spawn(model);
     pivot.add(obj);
@@ -310,7 +336,7 @@ export class Player {
     if (animate) pivot.scale.setScalar(0.01);
     this.rig.add(pivot);
     const part = {
-      cat, obj, pivot, socket: [x, angle], pop: animate ? 0 : 1, muzzle: findNode(obj, 'muzzle'),
+      cat, obj, pivot, socket: [x, angle], envelope, pop: animate ? 0 : 1, muzzle: findNode(obj, 'muzzle'),
       props: findNodes(obj, 'thruster_prop'), dish: findNode(obj, 'sonar_dish'),
       arm: findNode(obj, 'grapple_arm'), claw: findNode(obj, 'grapple_claw'), timer: Math.random(),
       barrels: findNode(obj, 'cannon_barrels'),
@@ -328,7 +354,7 @@ export class Player {
 
   syncParts(animate) {
     const L = this.levels.hull;
-    this.fatTarget = { x: 1 + 0.07 * (L - 1), yz: 1 + 0.16 * (L - 1) };
+    this.fatTarget = { x: 1 + 0.14 * (L - 1), yz: 1 + 0.16 * (L - 1) };
     if (!animate) this.fat = { ...this.fatTarget };
     this.duck.visible = L >= 2;
     const added = [];
@@ -450,15 +476,17 @@ export class Player {
   }
 
   setDarkness(dark) {
-    this.headlight.intensity = 40 * dark;
-    this.beam.material.uniforms.uStrength.value = 0.22 * dark;
+    this.headlight.intensity = 9 * dark;
+    this.beam.material.uniforms.uStrength.value = 0.035 * dark;
     this.beam.visible = dark > 0.02;
-    this.glow.intensity = 14 * dark;
-    const power = 1 + 0.3 * this.levels.spotlight;
+    const lamps = this.levels.spotlight;
+    this.glow.intensity = (2.5 + 9 * lamps) * dark;
+    this.glow.distance = 12 + 4 * lamps;
+    const power = 1 + 0.35 * lamps;
     for (const spot of this.spots) {
-      spot.light.intensity = spot.holder.visible ? (6 + 90 * dark) * power : 0;
-      spot.light.distance = 40 + 8 * this.levels.spotlight;
-      spot.beam.material.uniforms.uStrength.value = 0.02 + 0.12 * dark;
+      spot.light.intensity = spot.holder.visible ? (10 + 190 * dark) * power : 0;
+      spot.light.distance = 50 + 10 * lamps;
+      spot.beam.material.uniforms.uStrength.value = 0.02 + 0.1 * dark;
     }
   }
 

@@ -431,7 +431,7 @@ export class World {
       scene.add(j);
       return j;
     });
-    this.anglers = Array.from({ length: 6 }, () => {
+    this.anglers = Array.from({ length: 3 }, () => {
       const a = makeAngler();
       a.position.set(rand(-45, 45), -200, rand(-22, -4));
       scene.add(a);
@@ -597,8 +597,10 @@ export class World {
     bu.uDark.value = this.dark;
     bu.uLine.value = 0.5 + 0.5 * (SURFACE_Y - cy) / (CAMERA_Z * TAN_HALF_FOV);
     this.scene.fog.color.setRGB(shift, this.dark, 0);
-    this.scene.fog.near = THREE.MathUtils.lerp(20, 6, this.dark);
-    this.scene.fog.far = THREE.MathUtils.lerp(125, 45, this.dark);
+    // The play area sits about 20 units from the camera; fog starts behind it so darkness in the depths comes from
+    // missing light, and whatever a lamp hits still shows.
+    this.scene.fog.near = THREE.MathUtils.lerp(20, 19, this.dark);
+    this.scene.fog.far = THREE.MathUtils.lerp(125, 42, this.dark);
     this.surface.material.uniforms.uTime.value = t;
     this.surface.position.x = cx;
     this.waterline.material.uniforms.uTime.value = t;
@@ -637,7 +639,7 @@ export class World {
       dpos.setXY(i, x, y);
     }
     dpos.needsUpdate = true;
-    this.dust.material.color.set('#bff4ff').lerp(new THREE.Color('#5dffd8'), this.dark).multiplyScalar(1 + this.dark * 2);
+    this.dust.material.color.set('#bff4ff').lerp(new THREE.Color('#5dffd8'), this.dark).multiplyScalar(1 + this.dark * 0.6);
     this.dust.material.size = 0.12 + this.dark * 0.1;
 
     for (const j of this.jellies) {
@@ -661,7 +663,7 @@ export class World {
       const cruise = floor + (ANGLER_BAND[0] + ANGLER_BAND[1]) / 2 + Math.sin(t * 0.25 + u.phase) * 3;
       a.position.y += (cruise - a.position.y) * (1 - Math.exp(-dt * 0.4));
       u.yaw += ((u.dir > 0 ? 0 : -Math.PI) - u.yaw) * (1 - Math.exp(-dt * 0.7));
-      a.rotation.y = u.yaw + Math.sin(t * 1.4 + u.phase) * 0.06;
+      a.rotation.y = u.yaw + Math.sin(t * 3.4 + u.phase) * 0.03;
       a.rotation.z = Math.sin(t * 0.5 + u.phase) * 0.05;
       u.jaw.rotation.z = -Math.max(0, Math.sin(t * 0.6 + u.phase)) * 0.28;
       u.lure.rotation.z = Math.sin(t * 1.3 + u.phase) * 0.08;

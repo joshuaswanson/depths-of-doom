@@ -627,7 +627,7 @@ export class Game {
       for (const c of cones) {
         const to = new THREE.Vector2(e.obj.position.x - c.origin.x, e.obj.position.y - c.origin.y);
         const d = to.length();
-        if (d < range && to.dot(c.dir) > d * Math.cos(0.32)) e.dazzled = 0.3;
+        if (d < range && to.dot(c.dir) > d * Math.cos(0.45)) e.dazzled = 0.3;
       }
     }
   }

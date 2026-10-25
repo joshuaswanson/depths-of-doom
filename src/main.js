@@ -53,9 +53,9 @@ scene.add(under);
 const SUNLIGHT = [[hemi, 1.25], [sun, 2.1], [rim, 2.2], [under, 0.6]];
 
 function lightForDepth(dark) {
-  for (const [light, base] of SUNLIGHT) light.intensity = base * (1 - dark * 0.88);
+  for (const [light, base] of SUNLIGHT) light.intensity = base * (1 - dark * 0.975);
   rim.color.set('#7fdcff').lerp(new THREE.Color('#7a5cff'), dark);
-  scene.environmentIntensity = 0.7 * (1 - dark * 0.8);
+  scene.environmentIntensity = 0.7 * (1 - dark * 0.97);
 }
 
 const composer = new EffectComposer(renderer);
