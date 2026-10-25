@@ -278,17 +278,25 @@ function makeSeabedMaterial(uniforms) {
         varying vec3 vSeaWorld;
         uniform float uTime;
         ${NOISE_GLSL}
-        float caustic( vec2 p ) {
-          vec2 i = p;
-          float c = 1.0;
-          for ( int n = 0; n < 3; n++ ) {
-            float t = uTime * ( 1.0 - ( 3.5 / float( n + 1 ) ) ) * 0.6;
-            i = p + vec2( cos( t - i.x ) + sin( t + i.y ), sin( t - i.y ) + cos( t + i.x ) );
-            c += 1.0 / length( vec2( p.x / ( sin( i.x + t ) / 0.005 ), p.y / ( cos( i.y + t ) / 0.005 ) ) );
+        // Caustic net: bright lines along the borders of slowly wobbling cells, like light focused by surface waves.
+        vec2 cHash( vec2 p ) {
+          p = vec2( dot( p, vec2( 127.1, 311.7 ) ), dot( p, vec2( 269.5, 183.3 ) ) );
+          return fract( sin( p ) * 43758.5453 );
+        }
+        float caustic( vec2 p, float speed ) {
+          vec2 i = floor( p );
+          vec2 f = fract( p );
+          float d1 = 8.0;
+          float d2 = 8.0;
+          for ( int y = -1; y <= 1; y++ ) {
+            for ( int x = -1; x <= 1; x++ ) {
+              vec2 g = vec2( float( x ), float( y ) );
+              vec2 o = 0.5 + 0.42 * sin( uTime * speed + 6.2831 * cHash( i + g ) );
+              float d = length( g + o - f );
+              if ( d < d1 ) { d2 = d1; d1 = d; } else if ( d < d2 ) { d2 = d; }
+            }
           }
-          c /= 3.0;
-          c = 1.17 - pow( c, 1.4 );
-          return pow( abs( c ), 8.0 );
+          return 1.0 - smoothstep( 0.0, 0.11, d2 - d1 );
         }`)
       .replace('#include <color_fragment>', /* glsl */ `#include <color_fragment>
         vec3 sp = vec3( vSeaWorld.x, vSeaWorld.y * 0.5, vSeaWorld.z );
@@ -306,8 +314,17 @@ function makeSeabedMaterial(uniforms) {
         float sHeight = sRipple * 0.4 * ( 1.0 - sSteep ) + sPebble * 0.8 + dNoise( sp * 7.0 ) * 0.25 + sPatch * sSteep * 1.2;
         normal = dPerturb( - vViewPosition, normal, vec2( dFdx( sHeight ), dFdy( sHeight ) ) * 0.25, faceDirection );`)
       .replace('#include <emissivemap_fragment>', /* glsl */ `#include <emissivemap_fragment>
-        float fadeC = smoothstep( -70.0, -5.0, vSeaWorld.z ) * smoothstep( -28.0, -8.0, vSeaWorld.y );
-        totalEmissiveRadiance += vec3( 0.3, 0.7, 0.75 ) * clamp( caustic( vSeaWorld.xz * 0.35 ), 0.0, 1.0 ) * 0.22 * fadeC;`);
+        // Two drifting layers of caustics at different scales, so the sunlit floor ripples with light.
+        float fadeC = smoothstep( -90.0, -4.0, vSeaWorld.z ) * smoothstep( -32.0, -6.0, vSeaWorld.y );
+        vec2 cA = vSeaWorld.xz * vec2( 0.42, 0.3 ) + vec2( uTime * 0.05, uTime * 0.03 );
+        cA += 0.45 * vec2( sin( cA.y * 1.9 + uTime * 0.6 ), cos( cA.x * 1.6 - uTime * 0.5 ) );
+        vec2 cB = vSeaWorld.xz * vec2( 0.78, 0.55 ) - vec2( uTime * 0.04, -uTime * 0.06 ) + 7.0;
+        cB += 0.4 * vec2( sin( cB.y * 2.3 - uTime * 0.7 ), cos( cB.x * 2.1 + uTime * 0.6 ) );
+        float cNet = caustic( cA, 0.7 );
+        float cFine = caustic( cB, 1.1 );
+        float cLight = cNet * cNet * 0.8 + cNet * cFine * 0.6;
+        float cBand = 0.35 + 0.9 * dNoise( vec3( vSeaWorld.xz * 0.18 + uTime * 0.08, uTime * 0.15 ) );
+        totalEmissiveRadiance += vec3( 0.5, 0.9, 0.95 ) * cLight * 0.6 * fadeC * cBand;`);
   };
   return mat;
 }

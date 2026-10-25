@@ -122,6 +122,8 @@ const DAMAGE = { missile: 12, mine: 22 };
 const GRAVITY = 20;
 const LOOSE_COIN_MAX = 10;
 const ENEMY_MASS = { scout: 0.9, gunner: 1.6, boss: 6 };
+// How big each enemy is in hull levels: a ram only dazes subs no bigger than yours.
+const ENEMY_SIZE = { scout: 1, gunner: 2, boss: 5 };
 const BUMP_BOUNCE = 0.6;
 const STUN_TIME = [1.2, 3.0];
 
@@ -1010,8 +1012,10 @@ export class Game {
       p.y -= n.y * 0.02 * (1 - share);
     }
     const hard = Math.min(1, Math.abs(approach) / 8);
-    e.stunned = Math.max(e.stunned ?? 0, STUN_TIME[0] + (STUN_TIME[1] - STUN_TIME[0]) * hard);
-    e.spinVel = (e.spinVel ?? 0) + (Math.random() < 0.5 ? -1 : 1) * (3 + 6 * hard);
+    if (ENEMY_SIZE[e.type] <= pl.levels.hull) {
+      e.stunned = Math.max(e.stunned ?? 0, STUN_TIME[0] + (STUN_TIME[1] - STUN_TIME[0]) * hard);
+      e.spinVel = (e.spinVel ?? 0) + (Math.random() < 0.5 ? -1 : 1) * (3 + 6 * hard);
+    }
     if (e.bumpCooldown > 0) return;
     e.bumpCooldown = 0.25;
     const hit = { x: (pc.x + p.x) / 2, y: (pc.y + p.y) / 2, z: 0.8 };
