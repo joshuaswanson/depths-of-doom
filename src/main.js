@@ -26,6 +26,7 @@ WATER.surface.value = SURFACE_Y;
 const canvas = document.getElementById('game');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
 const MAX_PIXEL_RATIO = Math.min(window.devicePixelRatio, 1.5);
+const MIN_PIXEL_RATIO = 0.75;
 let pixelRatio = MAX_PIXEL_RATIO;
 renderer.setPixelRatio(pixelRatio);
 renderer.toneMapping = THREE.NeutralToneMapping;
@@ -132,15 +133,15 @@ function adaptResolution(dt) {
   if (fpsWindow.locked || document.hidden || dt > 0.5) return;
   fpsWindow.time += dt;
   fpsWindow.frames++;
-  if (fpsWindow.time < 1) return;
+  if (fpsWindow.time < 0.5) return;
   const fps = fpsWindow.frames / fpsWindow.time;
   fpsWindow.time = 0;
   fpsWindow.frames = 0;
   let next = pixelRatio;
   if (fps < 52) {
-    next = Math.max(1, pixelRatio - 0.15);
+    next = Math.max(MIN_PIXEL_RATIO, pixelRatio - (fps < 40 ? 0.25 : 0.1));
     fpsWindow.good = 0;
-  } else if (fps > 58 && ++fpsWindow.good >= 3) {
+  } else if (fps > 58 && ++fpsWindow.good >= 6) {
     next = Math.min(MAX_PIXEL_RATIO, pixelRatio + 0.1);
     fpsWindow.good = 0;
   }
