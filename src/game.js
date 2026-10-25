@@ -25,6 +25,7 @@ const MAX_BROKEN_CHAINS = 12;
 const MAX_WRECKS = 14;
 const MAX_COINS = 400;
 const FIRST_WAVE_DELAY = 22;
+const COMBAT_HOLD = 6;
 // Where each enemy hull carries its missile drum, in model space (the nose points to -X).
 const POD_MOUNT = { scout: { x: -0.45, y: 0.55, scale: 0.8 }, gunner: { x: -0.6, y: 0.74, scale: 0.95 },
   boss: { x: -1.1, y: 1.3, scale: 1.4 } };
@@ -506,6 +507,7 @@ export class Game {
     this.spawnTimer = 0;
     // A calm stretch before the first wave, so the dive opens with the sunlit music and time to look around.
     this.waveBreak = FIRST_WAVE_DELAY;
+    this.combatHold = 0;
     this.looseCoinTimer = 1;
     this.boss = null;
     this.over = false;
@@ -1831,6 +1833,7 @@ export class Game {
     this.updateWaves(dt);
     this.updateCamera(dt);
     this.splashCheck();
+    this.updateCombatHold(dt);
     this.planeSpray(dt);
     this.spotlightHint();
 
@@ -1986,8 +1989,15 @@ export class Game {
     if (big !== null) sfx.blip(big);
   }
 
+  // Combat lasts a few seconds past the last enemy sub leaving the screen, so the music does not flicker between
+  // tracks as subs dart in and out of view.
   get inCombat() {
-    return this.enemies.some((e) => e.type !== 'mine' && this.onScreen(e.obj.position.x, e.obj.position.y, 8));
+    return this.combatHold > 0;
+  }
+
+  updateCombatHold(dt) {
+    const engaged = this.enemies.some((e) => e.type !== 'mine' && this.onScreen(e.obj.position.x, e.obj.position.y, 8));
+    this.combatHold = engaged ? COMBAT_HOLD : Math.max(0, (this.combatHold ?? 0) - dt);
   }
 
   get radarRange() {
