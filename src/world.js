@@ -706,7 +706,8 @@ function settleAnchor(obj) {
 // Jellies gather in one glowing layer in the dark trenches, with a few stragglers drifting deeper.
 const JELLY_CEILING = 96;
 const JELLY_LAYER = [-122, -100];
-const JELLY_DEEP = [-200, -128];
+// Stragglers stay well above the anglerfish prowling just over the deepest trench floor.
+const JELLY_DEEP = [-150, -128];
 const JELLY_STRAGGLERS = 3;
 const JELLY_COLORS = ['#ff5fd2', '#5fe8ff', '#b47bff', '#7dffb4', '#ffb35f'];
 
