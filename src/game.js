@@ -360,11 +360,8 @@ export class Game {
     if (spec.pos) {
       obj.position.set(spec.pos.x, spec.pos.y, 0);
     } else {
-      const angle = spec.angle ?? rand(0, Math.PI * 2);
-      const dist = Math.hypot(this.halfW, this.halfH) + 3 + (spec.type === 'boss' ? 4 : 0);
-      const pc = this.player.center;
-      const x = pc.x + Math.cos(angle) * dist;
-      obj.position.set(x, THREE.MathUtils.clamp(pc.y + Math.sin(angle) * dist * 0.6, enemyFloor(x), ENEMY_TOP), 0);
+      const { x, y } = this.offscreenSpot(spec.angle ?? rand(0, Math.PI * 2), type.rx * type.scale + 2);
+      obj.position.set(x, y, 0);
     }
     if (spec.type === 'mine') obj.position.z = rand(-0.5, 0.5);
     let anchor = null;
@@ -409,6 +406,22 @@ export class Game {
     if (spec.type === 'boss') this.boss = e;
     this.enemies.push(e);
     return e;
+  }
+
+  // A spawn point just outside the visible window in the given direction, kept in the water and never on screen.
+  offscreenSpot(angle, margin) {
+    const hw = this.halfW + margin;
+    const hh = this.halfH + margin;
+    const dx = Math.cos(angle);
+    const dy = Math.sin(angle);
+    const t = Math.min(Math.abs(dx) > 1e-3 ? hw / Math.abs(dx) : Infinity, Math.abs(dy) > 1e-3 ? hh / Math.abs(dy) : Infinity);
+    let x = this.cam.x + dx * t;
+    let y = THREE.MathUtils.clamp(this.cam.y + dy * t, enemyFloor(x), ENEMY_TOP);
+    if (Math.abs(y - this.cam.y) < hh && Math.abs(x - this.cam.x) < hw) {
+      x = this.cam.x + (dx >= 0 ? 1 : -1) * hw;
+      y = THREE.MathUtils.clamp(y, enemyFloor(x), ENEMY_TOP);
+    }
+    return { x, y };
   }
 
   enemyHit(e, x, y, r = 0) {
