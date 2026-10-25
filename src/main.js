@@ -12,16 +12,17 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 
 import { loadModels, warmUp } from './assets.js';
-import { SHADER_TIME } from './surface.js';
+import { SHADER_TIME, WATER } from './surface.js';
 import { toggleMute, unlockAudio } from './audio.js';
 import { Effects } from './effects.js';
 import { Game } from './game.js';
 import { Hud } from './hud.js';
 import { Player } from './player.js';
-import { CAMERA_FOV, CAMERA_Z, installWaterFog } from './water.js';
+import { CAMERA_FOV, CAMERA_Z, SURFACE_Y, installWaterFog } from './water.js';
 import { World } from './world.js';
 
 installWaterFog();
+WATER.surface.value = SURFACE_Y;
 
 const canvas = document.getElementById('game');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });

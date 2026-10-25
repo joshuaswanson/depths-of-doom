@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { findNode, findNodes, ownMaterials, spawn } from './assets.js';
+import { addWaterline } from './surface.js';
 import { HULL_CAPACITY, JUNK_PER_HULL, PART_MODEL, SOCKETS, UPGRADES, needsMount, partCount, partModel } from './upgrades.js';
 import { SURFACE_Y } from './water.js';
 
@@ -306,7 +307,10 @@ export class Player {
     this.hull = spawn(name);
     this.hullModel = name;
     this.hullPivot.add(this.hull);
-    for (const m of ownMaterials(this.hull)) this.mats.push({ m, e: m.emissive.clone(), hull: true });
+    for (const m of ownMaterials(this.hull)) {
+      addWaterline(m);
+      this.mats.push({ m, e: m.emissive.clone(), hull: true });
+    }
     this.propeller = findNode(this.hull, 'propeller');
     this.hull.add(this.duck);
   }
@@ -368,7 +372,10 @@ export class Player {
     const pivot = new THREE.Group();
     const obj = spawn(model);
     pivot.add(obj);
-    for (const m of ownMaterials(obj)) this.mats.push({ m, e: m.emissive.clone() });
+    for (const m of ownMaterials(obj)) {
+      addWaterline(m);
+      this.mats.push({ m, e: m.emissive.clone() });
+    }
     const { rotX } = this.socketTransform(0, angle);
     if (cat === 'grapple') obj.rotation.x = rotX;
     else pivot.rotation.x = rotX;

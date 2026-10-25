@@ -280,6 +280,11 @@ export class Effects {
     for (let i = 0; i < 8 * strength; i++) this.bubble({ x: pos.x + rand(-spread, spread), y: pos.y + 0.3, z: pos.z });
   }
 
+  droplet(pos) {
+    this.glow.emit({ pos, vel: { x: rand(-0.3, 0.3), y: rand(-0.5, 0) }, life: rand(0.35, 0.6), size: rand(0.06, 0.11),
+      size1: 0.05, color: '#dff6ff', alpha: 0.85, alpha1: 0.4, rise: -16, drag: 0.2 });
+  }
+
   debris(pos) {
     for (let i = 0; i < 8; i++) {
       const a = Math.random() * Math.PI * 2;

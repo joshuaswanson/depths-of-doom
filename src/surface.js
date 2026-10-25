@@ -166,6 +166,68 @@ for (const [profile, names] of Object.entries(PROFILE_BY_MATERIAL)) for (const n
 
 const patched = new WeakSet();
 
+// Subs look different either side of the waterline: tinted and softened underwater, and glossy, darker, and
+// streaked with running water above it while they are still wet.
+export const WATER = { surface: { value: 26 }, wet: { value: 0 } };
+
+const WATERLINE_GLSL = /* glsl */ `
+  float wHash( vec3 p ) {
+    p = fract( p * 0.3183099 + 0.1 );
+    p *= 17.0;
+    return fract( p.x * p.y * p.z * ( p.x + p.y + p.z ) );
+  }
+  float wNoise( vec3 x ) {
+    vec3 i = floor( x );
+    vec3 f = fract( x );
+    f = f * f * ( 3.0 - 2.0 * f );
+    return mix( mix( mix( wHash( i ), wHash( i + vec3( 1, 0, 0 ) ), f.x ),
+                     mix( wHash( i + vec3( 0, 1, 0 ) ), wHash( i + vec3( 1, 1, 0 ) ), f.x ), f.y ),
+                mix( mix( wHash( i + vec3( 0, 0, 1 ) ), wHash( i + vec3( 1, 0, 1 ) ), f.x ),
+                     mix( wHash( i + vec3( 0, 1, 1 ) ), wHash( i + vec3( 1, 1, 1 ) ), f.x ), f.y ), f.z );
+  }
+`;
+
+export function addWaterline(material) {
+  if (material.userData.waterline) return;
+  material.userData.waterline = true;
+  const previous = material.onBeforeCompile;
+  const key = material.customProgramCacheKey?.() ?? material.name;
+  material.onBeforeCompile = (shader, renderer) => {
+    previous?.call(material, shader, renderer);
+    shader.uniforms.uSurface = WATER.surface;
+    shader.uniforms.uWet = WATER.wet;
+    shader.uniforms.uTime = SHADER_TIME;
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vWaterPos;')
+      .replace('#include <project_vertex>', '#include <project_vertex>\nvWaterPos = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', `#include <common>
+        varying vec3 vWaterPos;
+        uniform float uSurface, uWet, uTime;
+        ${WATERLINE_GLSL}`)
+      .replace('#include <roughnessmap_fragment>', /* glsl */ `#include <roughnessmap_fragment>
+        float above = smoothstep( uSurface - 0.05, uSurface + 0.08, vWaterPos.y );
+        vec3 wp = vWaterPos;
+        float runs = smoothstep( 0.62, 0.82, wNoise( vec3( wp.x * 9.0, wp.y * 0.9 + uTime * 1.1, wp.z * 9.0 ) ) );
+        float beads = smoothstep( 0.72, 0.8, wNoise( wp * 14.0 + vec3( 0.0, uTime * 0.4, 0.0 ) ) );
+        float wet = above * uWet;
+        diffuseColor.rgb *= mix( 1.0, 0.64 - runs * 0.15, wet );
+        roughnessFactor = mix( roughnessFactor, mix( 0.08, 0.02, max( runs, beads ) ), wet );
+        diffuseColor.rgb = mix( diffuseColor.rgb, diffuseColor.rgb * vec3( 0.55, 0.8, 0.95 ) + vec3( 0.0, 0.03, 0.06 ),
+          1.0 - above );`)
+      .replace('#include <emissivemap_fragment>', /* glsl */ `#include <emissivemap_fragment>
+        float meniscus = smoothstep( uSurface + 0.18, uSurface + 0.02, vWaterPos.y ) * above;
+        totalEmissiveRadiance += vec3( 0.55, 0.8, 0.9 ) * meniscus * 0.35 * uWet;
+        totalEmissiveRadiance += vec3( 0.7, 0.85, 0.9 ) * max( runs, beads ) * wet * 0.12;
+        vec3 cp = vec3( wp.x * 2.2 + uTime * 0.25, wp.y * 2.2 - uTime * 0.5, wp.z * 2.2 );
+        float ripple = pow( 1.0 - abs( wNoise( cp ) * 2.0 - 1.0 ), 7.0 ) + pow( 1.0 - abs( wNoise( cp * 1.9 + 5.0 ) * 2.0 - 1.0 ), 9.0 ) * 0.6;
+        float shallow = smoothstep( uSurface - 26.0, uSurface - 1.0, wp.y );
+        totalEmissiveRadiance += vec3( 0.45, 0.85, 0.95 ) * ripple * ( 1.0 - above ) * shallow * 0.22;`);
+  };
+  material.customProgramCacheKey = () => `${key}-waterline`;
+  material.needsUpdate = true;
+}
+
 // The anglerfish swims by bending the rear of its body in a travelling wave, fading out toward the head so the
 // jaws, eyes, and lure stay steady.
 const SWAY_GLSL = /* glsl */ `

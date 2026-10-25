@@ -100,6 +100,8 @@ const LAYERS = [
 ];
 
 const CHAIN_Z = [-70, -26];
+// The foam line floats in front of the action; each frame it is placed so it lines up with the true surface behind.
+const WATERLINE_Z = 3.5;
 const CORALS = ['coral_staghorn', 'coral_fan', 'coral_table', 'sponge_cluster', 'anemone_patch', 'coral_brain'];
 // Fixed resting places for sunken enemy subs: one on the sunlit shelf near the start, one on a trench floor.
 const WRECKS = [{ x: -48, z: -16, yaw: 0.5, roll: 0.18 }, { x: 236, z: -12, yaw: -0.4, roll: -0.12 }];
@@ -211,11 +213,11 @@ function makeWaterline() {
       void main() {
         float foam = smoothstep( 0.55, 0.85, vUv.y ) * smoothstep( 1.0, 0.9, vUv.y );
         vec3 water = vec3( 0.25, 0.75, 0.95 );
-        gl_FragColor = vec4( mix( water, vec3( 0.95, 1.0, 1.0 ), foam ), 0.35 + foam * 0.6 );
+        gl_FragColor = vec4( mix( water, vec3( 0.95, 1.0, 1.0 ), foam ), 0.08 + foam * 0.75 );
       }`,
   });
   const strip = new THREE.Mesh(new THREE.PlaneGeometry(240, 0.9, 240, 1), mat);
-  strip.position.set(0, SURFACE_Y - 0.35, 0);
+  strip.position.set(0, SURFACE_Y - 0.35, WATERLINE_Z);
   strip.renderOrder = 8;
   return strip;
 }
@@ -763,6 +765,9 @@ export class World {
     this.surface.position.x = cx;
     this.waterline.material.uniforms.uTime.value = t;
     this.waterline.position.x = cx;
+    const parallax = (CAMERA_Z - WATERLINE_Z) / CAMERA_Z;
+    this.waterline.scale.setScalar(parallax);
+    this.waterline.position.y = cy + (SURFACE_Y - cy) * parallax - 0.2 * parallax;
 
     const base = Math.floor(cx / TILE_W);
     this.tiles.forEach((tile, i) => shapeTile(tile, (base + i - 2) * TILE_W));

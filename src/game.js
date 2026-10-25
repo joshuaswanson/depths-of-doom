@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { cloneMaterial, findNode, ownMaterials, spawn } from './assets.js';
 import { makeBeam } from './player.js';
+import { WATER, addWaterline } from './surface.js';
 import { sfx } from './audio.js';
 import { UPGRADES, upgradeCost } from './upgrades.js';
 import { CAMERA_Z, SURFACE_Y, TAN_HALF_FOV } from './water.js';
@@ -429,7 +430,10 @@ export class Game {
     model.traverse((o) => {
       if (o.name.startsWith('skull_mark_optional')) o.visible = skulled;
     });
-    const mats = ownMaterials(model).map((m) => ({ m, e: m.emissive.clone() }));
+    const mats = ownMaterials(model).map((m) => {
+      addWaterline(m);
+      return { m, e: m.emissive.clone() };
+    });
     const hpMult = 1 + 0.17 * (this.wave - 1);
     if (spec.pos) {
       obj.position.set(spec.pos.x, spec.pos.y, 0);
@@ -1370,6 +1374,7 @@ export class Game {
     }
 
     this.emitDamageSmoke();
+    this.updateWetness(dt);
     this.updateStatus(dt);
     this.kickUpSand(dt);
     this.radarSweep = (this.radarSweep + dt * 2.2) % (Math.PI * 2);
@@ -1389,6 +1394,23 @@ export class Game {
       pip.position.set((i - (max - 1) / 2) * 0.38, 0.36, 0);
       pip.material.opacity = i < pl.shieldCharges ? 1 : 0.25;
     });
+  }
+
+  // Surfacing soaks the sub; it drips and slowly dries while it stays above the water.
+  updateWetness(dt) {
+    const pl = this.player;
+    const top = pl.group.position.y + pl.extents.cy + pl.extents.hy;
+    const breaching = top > SURFACE_Y;
+    const submerged = pl.group.position.y + pl.extents.cy < SURFACE_Y - pl.extents.hy;
+    if (submerged || !breaching) WATER.wet.value = 1;
+    else WATER.wet.value = Math.max(0.15, WATER.wet.value - dt / 9);
+    if (!breaching || !pl.alive) return;
+    const drips = WATER.wet.value * 22 * dt;
+    for (let i = 0; i < drips || (Math.random() < drips % 1 && i === 0); i++) {
+      const x = pl.group.position.x + (Math.random() * 2 - 1) * pl.extents.hx * 0.8;
+      const y = Math.max(SURFACE_Y + 0.05, pl.group.position.y + pl.extents.cy + (Math.random() * 2 - 1) * pl.extents.hy * 0.8);
+      this.effects.droplet({ x, y, z: 0.9 });
+    }
   }
 
   // Slamming into the seabed throws up a cloud of sand; skimming along it trails dust.
