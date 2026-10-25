@@ -11,6 +11,32 @@ from kit import Part, empty, frame, trs
 UP = trs(rot=(0, -math.pi / 2, 0))
 
 
+def ribbon_arm(part, material, heading, length, rng, rows=70, cols=7):
+    """A long ruffled oral arm: a wide ribbon that spirals down from the bell, twisting and frilled at the edges."""
+    bm = part.bm
+    grid = []
+    for r in range(rows):
+        t = r / (rows - 1)
+        swirl = heading + t * 2.6
+        radius = 0.06 + 0.16 * t
+        centre = Vector((radius * math.cos(swirl), radius * math.sin(swirl), 0.05 - t * length))
+        twist = heading + t * 5.0
+        side = Vector((math.cos(twist), math.sin(twist), 0.0))
+        normal = Vector((-side.y, side.x, 0.0))
+        width = 0.13 * (1 - 0.75 * t) + 0.02
+        row = []
+        for c in range(cols):
+            u = -1 + 2 * c / (cols - 1)
+            ruffle = math.sin(t * 46 + u * 3.0) * 0.045 * abs(u) ** 1.5 * (1 - 0.5 * t)
+            row.append(bm.verts.new(centre + side * width * u + normal * ruffle))
+        grid.append(row)
+    faces = []
+    for a, b in zip(grid, grid[1:]):
+        for c in range(cols - 1):
+            faces.append(bm.faces.new((a[c], a[c + 1], b[c + 1], b[c])))
+    part._paint(faces, material, True)
+
+
 def deep_jelly(P):
     rng = random.Random(4)
     root = empty("deep_jelly")
@@ -31,14 +57,7 @@ def deep_jelly(P):
 
     arms = Part()
     for i in range(4):
-        a = i * math.pi / 2 + 0.3
-        pts = []
-        for k in range(30):
-            t = k / 29
-            swirl = a + t * 3.2
-            r = 0.08 + 0.12 * t
-            pts.append((r * math.cos(swirl), r * math.sin(swirl), 0.05 - t * 1.7))
-        arms.tube(P["jelly_arm"], pts, radius=lambda t: (0.07 + 0.035 * math.sin(t * 42)) * (1 - 0.6 * t), segs=8)
+        ribbon_arm(arms, P["jelly_arm"], i * math.pi / 2 + 0.3, rng.uniform(2.4, 3.2), rng)
     arms.build("jelly_arms", root)
 
     tentacles = Part()

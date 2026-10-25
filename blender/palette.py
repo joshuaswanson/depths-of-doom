@@ -68,6 +68,7 @@ def palette():
         "gull_white": mat("gull_white", "#F7F7F3", rough=0.7),
         "gull_gray": mat("gull_gray", "#9AA6B2", rough=0.65),
         "gull_leg": mat("gull_leg", "#E8A27A", rough=0.5),
+        "gull_eye": mat("gull_eye", "#F4E9A8", rough=0.2),
         "jelly_bell": mat("jelly_bell", "#FF7BE0", rough=0.15, emit=0.8, alpha=0.45),
         "jelly_glow": mat("jelly_glow", "#FFC2F2", rough=0.2, emit=6.0),
         "jelly_organ": mat("jelly_organ", "#FF9BEA", rough=0.2, emit=4.0),

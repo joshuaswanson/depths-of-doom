@@ -53,6 +53,7 @@ def parse_args():
     ap.add_argument("--blend", default="")
     ap.add_argument("--no-bake", action="store_true")
     ap.add_argument("--yaw", type=float, default=35)
+    ap.add_argument("--hide", default="", help="comma-separated object name prefixes to hide in previews")
     return ap.parse_args(argv)
 
 
@@ -132,6 +133,10 @@ def main():
         if not args.no_export:
             export_glb(root, os.path.join(MODEL_DIR, f"{name}.glb"))
         if cam:
+            hidden = [o for o in descendants(root) for h in args.hide.split(",") if h and o.name.startswith(h)]
+            for o in hidden:
+                for d in descendants(o):
+                    d.hide_render = True
             render_preview(root, cam, os.path.join(args.preview, f"{name}.png"), yaw=-args.yaw if name.startswith("enemy") else args.yaw)
         lo, hi = world_bounds(root)
         root.location.x = offset - lo.x

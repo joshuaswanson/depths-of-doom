@@ -327,7 +327,7 @@ const ANGLER_BAND = [3, 16];
 const JELLY_COLORS = ['#ff5fd2', '#5fe8ff', '#b47bff', '#7dffb4', '#ffb35f'];
 
 // Jelly flesh: see-through in the middle, glowing at the silhouette, with tentacles rippling down their length.
-function jellyMaterial(base, color, uniforms, wave) {
+function jellyMaterial(base, color, uniforms, wave, ribbon = false) {
   const m = base.clone();
   m.color = color.clone();
   m.emissive = color.clone();
@@ -337,6 +337,9 @@ function jellyMaterial(base, color, uniforms, wave) {
   m.side = THREE.DoubleSide;
   m.onBeforeCompile = (shader) => {
     shader.uniforms.uTime = uniforms.uTime;
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vJellyPos;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvJellyPos = position;');
     if (wave) {
       shader.vertexShader = shader.vertexShader
         .replace('#include <common>', '#include <common>\nuniform float uTime;')
@@ -346,13 +349,20 @@ function jellyMaterial(base, color, uniforms, wave) {
           transformed.x += sin( uTime * 1.7 + hang * 1.9 + seed ) * 0.07 * hang;
           transformed.z += cos( uTime * 1.3 + hang * 1.6 + seed ) * 0.05 * hang;`);
     }
-    shader.fragmentShader = shader.fragmentShader.replace('#include <opaque_fragment>', /* glsl */ `
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', `#include <common>\nvarying vec3 vJellyPos;\n${NOISE_GLSL}`)
+      .replace('#include <opaque_fragment>', /* glsl */ `
       float jellyRim = pow( 1.0 - abs( dot( normal, normalize( vViewPosition ) ) ), 2.0 );
       diffuseColor.a = clamp( diffuseColor.a * 0.6 + jellyRim * 0.7, 0.0, 1.0 );
       outgoingLight += emissive * jellyRim * 1.5;
+      ${ribbon ? `
+      float frill = dNoise( vJellyPos * vec3( 16.0, 4.0, 16.0 ) ) * 0.6 + dNoise( vJellyPos * 40.0 ) * 0.4;
+      float veins = smoothstep( 0.42, 0.5, abs( fract( vJellyPos.y * 7.0 + frill * 1.5 ) - 0.5 ) );
+      diffuseColor.a *= 0.45 + 0.65 * frill;
+      outgoingLight *= 0.65 + 0.7 * frill + veins * 0.5;` : ''}
       #include <opaque_fragment>`);
   };
-  m.customProgramCacheKey = () => `jelly-${wave}`;
+  m.customProgramCacheKey = () => `jelly-${wave}-${ribbon}`;
   return m;
 }
 
@@ -361,8 +371,9 @@ function makeJelly(uniforms) {
   const color = new THREE.Color(pick(JELLY_COLORS));
   jelly.traverse((o) => {
     if (!o.isMesh) return;
-    const wave = o.name.startsWith('jelly_arms') || o.name.startsWith('jelly_tentacles');
-    o.material = jellyMaterial(o.material, color, uniforms, wave);
+    const ribbon = o.name.startsWith('jelly_arms');
+    const wave = ribbon || o.name.startsWith('jelly_tentacles');
+    o.material = jellyMaterial(o.material, color, uniforms, wave, ribbon);
   });
   jelly.scale.setScalar(rand(1.0, 2.0));
   jelly.userData = { bell: findNode(jelly, 'jelly_bell'), phase: rand(0, 6), drift: rand(0.2, 0.5) };
@@ -448,7 +459,8 @@ export class World {
       const gull = spawn('seagull');
       gull.scale.setScalar(2.0);
       gull.userData = {
-        wings: [findNode(gull, 'wing_l'), findNode(gull, 'wing_r')], state: 'float', phase: rand(0, 6),
+        wings: [findNode(gull, 'wing_l'), findNode(gull, 'wing_r')], folded: findNode(gull, 'wings_folded'),
+        state: 'float', phase: rand(0, 6),
         vel: new THREE.Vector2(), dir: 1, timer: 0,
       };
       this.landGull(gull, rand(-40, 40));
@@ -477,9 +489,10 @@ export class World {
       const [wl, wr] = u.wings;
       if (u.state === 'float') {
         gull.position.y = SURFACE_Y - 0.05 + Math.sin(this.time * 1.6 + gull.position.x * 0.5) * 0.1;
+        gull.rotation.x = 0;
         gull.rotation.z = Math.sin(this.time * 1.3 + u.phase) * 0.08;
-        wl.rotation.set(0.15, 1.35, 0);
-        wr.rotation.set(-0.15, -1.35, 0);
+        u.folded.visible = true;
+        wl.visible = wr.visible = false;
         const near = sub && Math.abs(sub.x - gull.position.x) < GULL_SCARE && sub.y > SURFACE_Y - GULL_SCARE;
         if (near) {
           u.state = 'fly';
@@ -494,10 +507,17 @@ export class World {
         u.vel.y = Math.max(1.2, u.vel.y - dt * 1.5);
         gull.position.x += u.vel.x * dt;
         gull.position.y += u.vel.y * dt;
-        const flap = Math.sin(this.time * 16 + u.phase) * 0.9;
+        u.folded.visible = false;
+        wl.visible = wr.visible = true;
+        // Beat hard while climbing, then mix in glides; banked toward the camera so the wings read from the side.
+        const climbing = u.vel.y > 2.5;
+        const cycle = this.time * (climbing ? 15 : 10) + u.phase;
+        const gliding = !climbing && Math.sin(this.time * 0.9 + u.phase) > 0.35;
+        const flap = gliding ? 0.15 + Math.sin(cycle * 0.3) * 0.05 : Math.sin(cycle) * 1.05 + 0.25;
         wl.rotation.set(flap, 0, 0);
         wr.rotation.set(-flap, 0, 0);
-        gull.rotation.z = 0.2;
+        gull.rotation.x = 0.55;
+        gull.rotation.z = 0.15 + Math.max(0, u.vel.y) * 0.03;
         if (gull.position.y > SURFACE_Y + 22) this.landGull(gull, cx + (Math.random() < 0.5 ? -1 : 1) * rand(30, 44));
       }
     }
