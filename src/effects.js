@@ -256,6 +256,26 @@ export class Effects {
     }
   }
 
+  debris(pos) {
+    for (let i = 0; i < 8; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const s = rand(2, 5);
+      this.puffs.emit({ pos, vel: { x: Math.cos(a) * s, y: Math.sin(a) * s }, life: rand(0.5, 0.9), size: rand(0.25, 0.5),
+        size1: rand(0.6, 1.0), color: '#3a3230', color1: '#1c1a1c', alpha: 0.9, alpha1: 0, drag: 3, rise: 0.4 });
+    }
+  }
+
+  damageSmoke(pos, damage) {
+    const heavy = damage > 0.6;
+    this.puffs.emit({
+      pos: { x: pos.x + rand(-0.1, 0.1), y: pos.y + rand(-0.1, 0.1), z: pos.z }, vel: { x: rand(-0.3, 0.3), y: rand(0.6, 1.2) },
+      life: rand(1.0, 1.7), size: rand(0.45, 0.7), size1: rand(1.4, 2.1) * (heavy ? 1.3 : 1),
+      color: heavy ? '#2a2526' : '#7d828a', color1: heavy ? '#0e0c0e' : '#4c5158', alpha: 0.85, alpha1: 0, drag: 1, rise: 0.8,
+    });
+    if (heavy && Math.random() < 0.3) this.sparkle(pos, '#ffb347', 3, 3);
+    if (heavy && pos.y < SURFACE_Y) this.bubble(pos, { spread: 0.1, size: [0.06, 0.14] });
+  }
+
   coinBurst(pos) {
     this.sparkle(pos, '#ffe35c', 10, 5);
   }

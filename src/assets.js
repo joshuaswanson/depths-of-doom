@@ -8,7 +8,7 @@ const MODEL_NAMES = [
   'proj_torpedo', 'proj_missile', 'proj_player_missile', 'pickup_coin', 'enemy_scout', 'enemy_gunner', 'enemy_boss',
   'mine', 'ruin_pillar_a', 'ruin_pillar_b', 'ruin_arch', 'ruin_wall', 'ruin_pier', 'ruin_tower', 'anchor', 'chain',
   'seaweed_a', 'seaweed_b', 'coral_pink', 'coral_orange', 'coral_brain', 'rock_a', 'rock_b', 'deep_jelly',
-  'anglerfish',
+  'anglerfish', 'wreck_sub', 'seagull',
 ];
 
 const models = {};

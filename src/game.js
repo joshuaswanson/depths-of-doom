@@ -77,6 +77,7 @@ export class Game {
     this.aspect = 1.5;
     this.cam = new THREE.Vector2(0, 0);
     this.makeBulletMesh();
+    this.makeMineChains();
     this.tmp = new THREE.Vector3();
     this.radarSweep = 0;
     this.reset();
@@ -90,6 +91,47 @@ export class Game {
     this.bulletMesh.frustumCulled = false;
     this.bulletMesh.count = 0;
     this.scene.add(this.bulletMesh);
+  }
+
+  // One instanced mesh draws every link of every mine's mooring chain.
+  makeMineChains() {
+    let rust = null;
+    spawn('chain').traverse((o) => {
+      if (!rust && o.isMesh) rust = o.material;
+    });
+    const link = new THREE.TorusGeometry(0.16, 0.055, 6, 14);
+    link.scale(1, 1.5, 1);
+    this.chainMesh = new THREE.InstancedMesh(link, rust, 6000);
+    this.chainMesh.frustumCulled = false;
+    this.chainMesh.count = 0;
+    this.scene.add(this.chainMesh);
+  }
+
+  updateMineChains() {
+    const m = new THREE.Matrix4();
+    const q = new THREE.Quaternion();
+    const twist = new THREE.Quaternion();
+    const up = new THREE.Vector3(0, 1, 0);
+    const dir = new THREE.Vector3();
+    const pos = new THREE.Vector3();
+    const one = new THREE.Vector3(1, 1, 1);
+    let n = 0;
+    for (const e of this.enemies) {
+      if (!e.anchor || e.dead) continue;
+      const top = e.obj.position;
+      dir.set(top.x - e.anchor.x, top.y - e.anchor.y, 0);
+      const len = dir.length() - 0.45;
+      dir.normalize();
+      q.setFromUnitVectors(up, dir);
+      for (let i = 0, links = Math.floor(len / 0.36); i < links && n < 6000; i++) {
+        twist.setFromAxisAngle(dir, (i % 2) * Math.PI / 2);
+        pos.set(e.anchor.x, e.anchor.y, top.z).addScaledVector(dir, 0.18 + i * 0.36);
+        m.compose(pos, twist.clone().multiply(q), one);
+        this.chainMesh.setMatrixAt(n++, m);
+      }
+    }
+    this.chainMesh.count = n;
+    this.chainMesh.instanceMatrix.needsUpdate = true;
   }
 
   reset() {
@@ -143,12 +185,12 @@ export class Game {
       return;
     }
     const cost = upgradeCost(def, lvl);
-    if (this.coins < cost) {
+    if (this.coins < cost && !this.unlimited) {
       sfx.denied();
       this.hud.flashSlot(id, false);
       return;
     }
-    this.coins -= cost;
+    if (!this.unlimited) this.coins -= cost;
     const added = this.player.upgrade(id);
     sfx.upgrade();
     this.hud.flashSlot(id, true);
@@ -222,11 +264,23 @@ export class Game {
       obj.position.set(x, THREE.MathUtils.clamp(pc.y + Math.sin(angle) * dist * 0.6, enemyFloor(x), ENEMY_TOP), 0);
     }
     if (spec.type === 'mine') obj.position.z = rand(-0.5, 0.5);
+    let anchor = null;
+    if (spec.type === 'mine' && !spec.pos) {
+      // Wave mines are moored to the seabed near the player instead of drifting in from afar.
+      const pc = this.player.center;
+      const x = pc.x + rand(-1, 1) * rand(7, this.halfW + 6);
+      const floor = seabedAt(x);
+      const y = THREE.MathUtils.clamp(pc.y + rand(-4, 4), floor + 3, ENEMY_TOP);
+      if (y - floor < 70) {
+        anchor = { x, y: floor };
+        obj.position.set(x, y, obj.position.z);
+      }
+    }
     this.scene.add(obj);
     const bossTier = Math.floor(this.wave / 5);
     const toPlayer = new THREE.Vector2().subVectors(this.player.center, obj.position).normalize();
     const e = {
-      type: spec.type, def: type, obj, flip, tilt, model, mats, flash: 0, t: rand(0, 5), pitch: 0,
+      type: spec.type, def: type, obj, flip, tilt, model, mats, flash: 0, t: rand(0, 5), pitch: 0, anchor, lean: 0,
       hp: type.hp * hpMult * (spec.type === 'boss' ? 0.7 + bossTier * 0.45 : 1),
       fire: rand(1.0, 2.2), attack: 0, steer: 0, orbit: Math.random() < 0.5 ? -1 : 1,
       vel: toPlayer.multiplyScalar(type.speed), facing: 1, propeller: null, spin: rand(-1, 1),
@@ -284,7 +338,7 @@ export class Game {
       for (const other of this.enemies) {
         if (other !== e && !other.dead && other.obj.position.distanceTo(p) < 2.8) this.damageEnemy(other, 8);
       }
-      if (this.player.alive && this.player.hitTest(p.x, p.y, 1.4)) this.hurtPlayer(DAMAGE.mine);
+      if (this.player.alive && this.player.hitTest(p.x, p.y, 1.4)) this.hurtPlayer(DAMAGE.mine, p);
     }
     this.dropCoins(p, e.def.coins + (e.type === 'boss' ? this.wave * 6 : 0));
     this.scene.remove(e.obj);
@@ -306,9 +360,9 @@ export class Game {
     }
   }
 
-  hurtPlayer(amount) {
+  hurtPlayer(amount, from) {
     if (this.player.invuln > 0 || !this.player.alive) return;
-    const res = this.player.takeHit(amount * (1 + this.wave * 0.04));
+    const res = this.player.takeHit(amount * (1 + this.wave * 0.04), from);
     this.hud.flashHealth();
     const c = this.player.center;
     if (res === 'shield') {
@@ -318,7 +372,9 @@ export class Game {
     }
     sfx.hurt();
     this.effects.shake = Math.min(1.5, this.effects.shake + 0.8);
-    this.effects.sparkle({ x: c.x, y: c.y, z: 1 }, '#ffb08a', 14, 6);
+    const at = from ?? c;
+    this.effects.sparkle({ x: at.x, y: at.y, z: 1 }, '#ffcf7a', 22, 9);
+    this.effects.debris({ x: at.x, y: at.y, z: 0.8 });
     if (res === 'dead') {
       this.effects.explosion({ x: c.x, y: c.y, z: 0.5 }, 2.2);
       for (let i = 1; i <= 4; i++) {
@@ -561,6 +617,14 @@ export class Game {
             }
           }
         }
+      } else if (e.type === 'mine' && e.anchor) {
+        const length = e.length ?? (e.length = p.y - e.anchor.y);
+        const near = dist < 16 ? THREE.MathUtils.clamp(Math.atan2(pc.x - e.anchor.x, length) * 0.6, -0.4, 0.4) : 0;
+        e.lean = THREE.MathUtils.lerp(e.lean, near + Math.sin(e.t * 0.7) * 0.06, 1 - Math.exp(-dt * 0.8));
+        p.x = e.anchor.x + Math.sin(e.lean) * length;
+        p.y = e.anchor.y + Math.cos(e.lean) * length + Math.sin(e.t * 1.3) * 0.15;
+        e.vel.set(0, 0);
+        e.model.rotation.z += e.spin * dt * 0.3;
       } else if (e.type === 'mine') {
         desired.copy(dir).multiplyScalar(speed);
         desired.y += Math.sin(e.t * 1.5) * 0.4;
@@ -609,7 +673,7 @@ export class Game {
         if (e.type === 'mine') {
           this.killEnemy(e);
         } else {
-          this.hurtPlayer(DAMAGE.ram);
+          this.hurtPlayer(DAMAGE.ram, p);
           this.damageEnemy(e, 6);
         }
       }
@@ -620,6 +684,7 @@ export class Game {
       }
     }
     this.enemies = this.enemies.filter((e) => !e.dead);
+    this.updateMineChains();
   }
 
   muzzleOf(e) {
@@ -796,7 +861,7 @@ export class Game {
         em.dead = true;
         this.effects.explosion(p, 0.55);
         sfx.boom();
-        this.hurtPlayer(DAMAGE.missile);
+        this.hurtPlayer(DAMAGE.missile, p);
       }
       const floor = seabedAt(p.x);
       if (em.life <= 0 || p.y > SURFACE_Y + 0.5 || p.y < floor) {
@@ -925,8 +990,24 @@ export class Game {
       }
     }
 
+    this.emitDamageSmoke();
     this.radarSweep = (this.radarSweep + dt * 2.2) % (Math.PI * 2);
     if (this.over) this.overTimer -= dt;
+  }
+
+  // The worse the hull, the more it smokes, sparks, and leaks.
+  emitDamageSmoke() {
+    const pl = this.player;
+    if (!pl.alive) return;
+    const damage = 1 - pl.hp / pl.maxHp;
+    if (damage < 0.3) return;
+    const spots = pl.damageSpots();
+    for (const s of spots) {
+      if (Math.random() > damage * 0.55) continue;
+      s.getWorldPosition(this.tmp);
+      if (s === pl.hull) this.tmp.y += pl.extents.hy * 0.6;
+      this.effects.damageSmoke(this.tmp, damage);
+    }
   }
 
   radarEnemies() {

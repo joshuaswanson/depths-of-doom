@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { findNode, spawn, tint } from './assets.js';
+import { sfx } from './audio.js';
 import { NOISE_GLSL } from './surface.js';
 import {
   ABYSS_Y, CAMERA_Z, SHELF_Y, SURFACE_Y, TAN_HALF_FOV, WATER_GRADIENT_GLSL, darkness, depthShift,
@@ -66,6 +67,10 @@ const LAYERS = [
 ];
 
 const CHAIN_Z = [-70, -26];
+// Fixed resting places for sunken enemy subs: one on the sunlit shelf near the start, one on a trench floor.
+const WRECKS = [{ x: -48, z: -16, yaw: 0.5, roll: 0.18 }, { x: 236, z: -12, yaw: -0.4, roll: -0.12 }];
+const GULLS = 9;
+const GULL_SCARE = 7;
 
 function makeBackdrop() {
   const mat = new THREE.ShaderMaterial({
@@ -362,8 +367,14 @@ function makeAngler() {
   const fish = spawn('anglerfish');
   const scale = rand(1.4, 2.4);
   fish.scale.setScalar(scale);
+  const halo = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: softDot(), color: new THREE.Color(0.9, 2.4, 2.6), blending: THREE.AdditiveBlending, depthWrite: false,
+    transparent: true, fog: false, opacity: 0.8,
+  }));
+  halo.scale.setScalar(0.9);
+  findNode(fish, 'lure_tip').add(halo);
   fish.userData = {
-    jaw: findNode(fish, 'jaw'), lure: findNode(fish, 'lure'), phase: rand(0, 6), dir: Math.random() < 0.5 ? -1 : 1,
+    halo, jaw: findNode(fish, 'jaw'), lure: findNode(fish, 'lure'), phase: rand(0, 6), dir: Math.random() < 0.5 ? -1 : 1,
     speed: rand(0.6, 1.4), yaw: 0,
   };
   return fish;
@@ -433,6 +444,24 @@ export class World {
       scene.add(a);
       return a;
     });
+    this.wrecks = WRECKS.map((w) => {
+      const wreck = spawn('wreck_sub');
+      wreck.position.set(w.x, seabedAt(w.x, w.z) + 1.0, w.z);
+      wreck.rotation.set(0, w.yaw, w.roll);
+      scene.add(wreck);
+      return wreck;
+    });
+    this.gulls = Array.from({ length: GULLS }, () => {
+      const gull = spawn('seagull');
+      gull.scale.setScalar(1.6);
+      gull.userData = {
+        wings: [findNode(gull, 'wing_l'), findNode(gull, 'wing_r')], state: 'float', phase: rand(0, 6),
+        vel: new THREE.Vector2(), dir: 1, timer: 0,
+      };
+      this.landGull(gull, rand(-40, 40));
+      scene.add(gull);
+      return gull;
+    });
     this.eyes = Array.from({ length: 10 }, () => {
       const e = makeEyes();
       e.position.set(rand(-60, 60), rand(-200, -35), rand(-70, -35));
@@ -443,6 +472,49 @@ export class World {
 
   setAspect(aspect) {
     this.aspect = aspect;
+  }
+
+  landGull(gull, x) {
+    const u = gull.userData;
+    u.state = 'float';
+    u.dir = Math.random() < 0.5 ? -1 : 1;
+    gull.position.set(x, SURFACE_Y - 0.05, rand(-6, 2));
+    gull.rotation.set(0, u.dir > 0 ? 0 : Math.PI, 0);
+  }
+
+  // Gulls bob on the swell and flap off when the sub comes too close; returns how many just took off.
+  updateGulls(dt, cx, sub) {
+    let scared = 0;
+    for (const gull of this.gulls) {
+      const u = gull.userData;
+      const [wl, wr] = u.wings;
+      if (u.state === 'float') {
+        gull.position.y = SURFACE_Y - 0.05 + Math.sin(this.time * 1.6 + gull.position.x * 0.5) * 0.1;
+        gull.rotation.z = Math.sin(this.time * 1.3 + u.phase) * 0.08;
+        wl.rotation.set(0.15, 1.35, 0);
+        wr.rotation.set(-0.15, -1.35, 0);
+        const near = sub && Math.abs(sub.x - gull.position.x) < GULL_SCARE && sub.y > SURFACE_Y - GULL_SCARE;
+        if (near) {
+          u.state = 'fly';
+          u.dir = Math.sign(gull.position.x - sub.x) || 1;
+          u.vel.set(u.dir * rand(3, 5), rand(4, 6));
+          gull.rotation.y = u.dir > 0 ? 0 : Math.PI;
+          scared++;
+        }
+        const wrapped = wrap(gull.position.x, cx, 45);
+        if (Math.abs(wrapped - gull.position.x) > 1) this.landGull(gull, wrapped);
+      } else {
+        u.vel.y = Math.max(1.2, u.vel.y - dt * 1.5);
+        gull.position.x += u.vel.x * dt;
+        gull.position.y += u.vel.y * dt;
+        const flap = Math.sin(this.time * 16 + u.phase) * 0.9;
+        wl.rotation.set(flap, 0, 0);
+        wr.rotation.set(-flap, 0, 0);
+        gull.rotation.z = 0.2;
+        if (gull.position.y > SURFACE_Y + 22) this.landGull(gull, cx + (Math.random() < 0.5 ? -1 : 1) * rand(30, 44));
+      }
+    }
+    return scared;
   }
 
   placeProp(prop, x) {
@@ -518,10 +590,11 @@ export class World {
     }
   }
 
-  update(dt, camera) {
+  update(dt, camera, sub = null) {
     this.time += dt;
     const cx = camera.position.x;
     const cy = camera.position.y;
+    if (this.updateGulls(dt, cx, sub) > 0) sfx.gull();
     const t = this.time;
     this.uniforms.uTime.value = t;
     const shift = depthShift(cy);
@@ -596,6 +669,7 @@ export class World {
       a.rotation.z = Math.sin(t * 0.8 + u.phase) * 0.08;
       u.jaw.rotation.z = -Math.max(0, Math.sin(t * 0.9 + u.phase)) * 0.45;
       u.lure.rotation.z = Math.sin(t * 2.1 + u.phase) * 0.12;
+      u.halo.material.opacity = 0.6 + Math.sin(t * 3.3 + u.phase) * 0.25;
       a.position.x = wrap(a.position.x, cx, 50);
       const floor = floorY(a.position.x) + 4;
       if (Math.abs(a.position.y - cy) > 40 || a.position.y < floor || a.position.y > -35) {

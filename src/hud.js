@@ -169,7 +169,7 @@ export class Hud {
         (_, i) => `<span class="pip ${i < player.shieldCharges ? 'on' : ''}"></span>`).join('');
       this.lastPips = pips;
     }
-    this.coinText.textContent = coins;
+    this.coinText.textContent = state.unlimited ? '∞' : coins;
     this.waveTag.textContent = `Wave ${wave}`;
 
     for (const s of this.slots) {
@@ -177,9 +177,9 @@ export class Hud {
       const maxed = lvl >= s.def.max;
       const cost = upgradeCost(s.def, lvl);
       s.level.textContent = maxed ? 'MAX' : `Lv. ${lvl}`;
-      s.fill.style.width = `${maxed ? 100 : Math.min(100, (coins / cost) * 100)}%`;
+      s.fill.style.width = `${maxed || state.unlimited ? 100 : Math.min(100, (coins / cost) * 100)}%`;
       s.cost.textContent = maxed ? 'Fully bolted' : `Cost: ${cost} coins`;
-      s.slot.classList.toggle('affordable', !maxed && coins >= cost);
+      s.slot.classList.toggle('affordable', !maxed && (state.unlimited || coins >= cost));
       s.slot.classList.toggle('maxed', maxed);
     }
 

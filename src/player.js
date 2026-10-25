@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { findNode, findNodes, spawn } from './assets.js';
+import { findNode, findNodes, ownMaterials, spawn } from './assets.js';
 import { JUNK_PER_HULL, PART_MODEL, SOCKETS, UPGRADES, partCount } from './upgrades.js';
 import { SURFACE_Y } from './water.js';
 
@@ -34,6 +34,45 @@ function elasticOut(t) {
   if (t >= 1) return 1;
   return 1 + 2 ** (-10 * t) * Math.sin((t - 0.1) * 5 * Math.PI);
 }
+
+const HOT = new THREE.Color(1.0, 0.32, 0.08);
+const MAX_SCORCHES = 12;
+
+const sootTexture = (() => {
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 128;
+  const g = canvas.getContext('2d');
+  for (let i = 0; i < 26; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const d = Math.random() * 30;
+    const r = 14 + Math.random() * 26;
+    const x = 64 + Math.cos(a) * d;
+    const y = 64 + Math.sin(a) * d;
+    const grad = g.createRadialGradient(x, y, 0, x, y, r);
+    grad.addColorStop(0, 'rgba(14,10,9,0.85)');
+    grad.addColorStop(1, 'rgba(18,14,12,0)');
+    g.fillStyle = grad;
+    g.fillRect(0, 0, 128, 128);
+  }
+  g.strokeStyle = 'rgba(5,4,4,0.8)';
+  g.lineWidth = 2;
+  for (let i = 0; i < 5; i++) {
+    let x = 64;
+    let y = 64;
+    g.beginPath();
+    g.moveTo(x, y);
+    const a = Math.random() * Math.PI * 2;
+    for (let k = 0; k < 4; k++) {
+      x += Math.cos(a + (Math.random() - 0.5)) * 9;
+      y += Math.sin(a + (Math.random() - 0.5)) * 9;
+      g.lineTo(x, y);
+    }
+    g.stroke();
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+})();
 
 function makeShieldBubble() {
   const mat = new THREE.ShaderMaterial({
@@ -120,6 +159,8 @@ export class Player {
     this.rig.add(this.hullPivot);
     this.hull = spawn('player_hull');
     this.hullPivot.add(this.hull);
+    this.mats = ownMaterials(this.hull).map((m) => ({ m, e: m.emissive.clone(), hull: true }));
+    this.scorches = [];
     this.propeller = findNode(this.hull, 'propeller');
     this.duck = spawn('junk_duck');
     this.duck.position.set(0.5, 1.58, 0.05);
@@ -169,6 +210,11 @@ export class Player {
     this.levels = Object.fromEntries(UPGRADES.map((u) => [u.id, u.start]));
     for (const part of this.parts) part.pivot.removeFromParent();
     for (const spot of this.spots ?? []) spot.holder.visible = false;
+    for (const s of this.scorches ?? []) s.removeFromParent();
+    this.scorches = [];
+    this.mats = (this.mats ?? []).filter((x) => x.hull);
+    for (const x of this.mats) x.m.emissive.copy(x.e);
+    this.hurtFlash = 0;
     this.parts = [];
     this.group.position.set(0, 0, 0);
     this.vel.set(0, 0);
@@ -232,6 +278,7 @@ export class Player {
     const pivot = new THREE.Group();
     const obj = spawn(model);
     pivot.add(obj);
+    for (const m of ownMaterials(obj)) this.mats.push({ m, e: m.emissive.clone() });
     const { rotX } = this.socketTransform(0, angle);
     if (cat === 'grapple') obj.rotation.x = rotX;
     else pivot.rotation.x = rotX;
@@ -243,7 +290,6 @@ export class Player {
       arm: findNode(obj, 'grapple_arm'), claw: findNode(obj, 'grapple_claw'), timer: Math.random(),
       barrels: findNode(obj, 'cannon_barrels'),
     };
-    if (cat === 'cannon') obj.scale.setScalar(1.25);
     if (cat === 'spotlight') {
       const lens = findNode(obj, 'lens');
       part.spot = this.spots[this.parts.filter((q) => q.cat === 'spotlight').length];
@@ -487,11 +533,56 @@ export class Player {
     this.sinceHit += dt;
     if (this.alive && this.sinceHit > REGEN_DELAY) this.hp = Math.min(this.maxHp, this.hp + REGEN_RATE * dt);
     this.invuln = Math.max(0, this.invuln - dt);
-    this.rig.visible = this.alive && (this.invuln <= 0 || Math.floor(this.invuln * 14) % 2 === 0);
+    this.rig.visible = this.alive;
+
+    if (this.hurtFlash > 0) {
+      this.hurtFlash = Math.max(0, this.hurtFlash - dt * 3);
+      for (const { m, e } of this.mats) m.emissive.copy(e).lerp(HOT, this.hurtFlash * 0.55);
+    }
+    const repaired = this.hp >= this.maxHp - 0.01;
+    for (const s of this.scorches) {
+      s.material.opacity = Math.max(0, s.material.opacity - (repaired ? dt * 0.6 : 0));
+    }
+    this.scorches = this.scorches.filter((s) => {
+      if (s.material.opacity > 0.01) return true;
+      s.removeFromParent();
+      return false;
+    });
+  }
+
+  // A sooty burn on both flanks of the hull, roughly where the hit landed.
+  scorch(from) {
+    const local = this.hullPivot.worldToLocal(new THREE.Vector3(from.x, from.y, 0));
+    const x = THREE.MathUtils.clamp(local.x, -1.7, 1.6);
+    const a = Math.atan2(local.y, 0.8) + THREE.MathUtils.randFloatSpread(0.4);
+    const r = hullRadius(x);
+    const size = THREE.MathUtils.randFloat(0.65, 1.05);
+    for (const angle of [a, Math.PI - a]) {
+      const normal = new THREE.Vector3(0, Math.sin(angle), Math.cos(angle));
+      const decal = new THREE.Mesh(
+        new THREE.PlaneGeometry(size, size),
+        new THREE.MeshStandardMaterial({
+          map: sootTexture, transparent: true, depthWrite: false, roughness: 1, color: '#ffffff',
+          polygonOffset: true, polygonOffsetFactor: -4, opacity: 1,
+        }),
+      );
+      decal.position.set(x, 0, 0).addScaledVector(normal, r + 0.015);
+      decal.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), normal);
+      decal.rotateZ(Math.random() * Math.PI * 2);
+      this.hullPivot.add(decal);
+      this.scorches.push(decal);
+    }
+    while (this.scorches.length > MAX_SCORCHES * 2) this.scorches.shift().removeFromParent();
+  }
+
+  // Points on the camera-facing flank where damage smokes; the tower stands in until the hull is scorched.
+  damageSpots() {
+    const spots = this.scorches.filter((_, i) => i % 2 === (this.facingSign > 0 ? 0 : 1));
+    return spots.length ? spots : [this.hull];
   }
 
   // Returns 'shield', 'hit', or 'dead'.
-  takeHit(amount) {
+  takeHit(amount, from) {
     if (this.shieldCharges > 0) {
       this.shieldCharges--;
       this.shieldTimer = 0;
@@ -501,8 +592,15 @@ export class Player {
     }
     this.hp -= amount;
     this.sinceHit = 0;
-    this.invuln = 0.5;
+    this.invuln = 0.35;
     this.squash = 0.6;
+    this.hurtFlash = 1;
+    if (from) {
+      const c = this.center;
+      const push = new THREE.Vector2(c.x - from.x, c.y - from.y).normalize();
+      this.vel.addScaledVector(push, 4 + amount * 0.18);
+      this.scorch(from);
+    }
     if (this.hp <= 0) {
       this.hp = 0;
       this.alive = false;

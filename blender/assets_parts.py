@@ -52,31 +52,45 @@ def mount_plate(part, P, size=(0.36, 0.3, 0.1), mat="steel_dark"):
 
 
 def part_cannon(P):
+    """A cartoon gatling: a fat drum body, a huge ammo drum, and stubby barrels that flare like trumpets."""
     root = empty("part_cannon")
     part = Part()
-    mount_plate(part, P)
-    part.box(P["steel_dark"], loc=(0, 0, 0.18), size=(0.22, 0.16, 0.16), bevel=0.03)
-    part.cylinder(P["blue"], loc=(0.0, 0, 0.32), radius=0.2, depth=0.55, rot=ALONG_X, bevel=0.05, segs=28)
-    part.sphere(P["blue_dark"], loc=(-0.27, 0, 0.32), scale=(0.08, 0.17, 0.17), segs=20, rings=10)
-    part.cylinder(P["yellow"], loc=(0.22, 0, 0.32), radius=0.212, depth=0.09, rot=ALONG_X, segs=28)
-    part.cylinder(P["yellow"], loc=(-0.12, 0, 0.32), radius=0.212, depth=0.05, rot=ALONG_X, segs=28)
+    mount_plate(part, P, size=(0.42, 0.34, 0.1))
+    part.box(P["steel_dark"], loc=(0, 0, 0.2), size=(0.26, 0.2, 0.2), bevel=0.04)
+    part.sphere(P["blue"], loc=(-0.02, 0, 0.42), scale=(0.4, 0.3, 0.3), segs=28, rings=16)
+    part.cylinder(P["yellow"], loc=(0.2, 0, 0.42), radius=0.3, depth=0.1, rot=ALONG_X, bevel=0.03, segs=32)
+    part.cylinder(P["yellow"], loc=(-0.24, 0, 0.42), radius=0.26, depth=0.06, rot=ALONG_X, segs=32)
+    for i in range(8):
+        a = 2 * math.pi * i / 8
+        part.sphere(P["steel"], loc=(0.26, 0.29 * math.cos(a), 0.42 + 0.29 * math.sin(a)), scale=0.025, segs=8, rings=6)
+    part.cylinder(P["yellow"], loc=(-0.1, -0.36, 0.42), radius=0.24, depth=0.16, rot=(math.pi / 2, 0, 0), bevel=0.04,
+                  segs=28)
+    part.cylinder(P["red"], loc=(-0.1, -0.45, 0.42), radius=0.14, depth=0.03, rot=(math.pi / 2, 0, 0), segs=24)
+    for k in range(6):
+        a = math.pi / 2 + k * 0.32
+        part.box(P["brass"], loc=(-0.1 + 0.27 * math.cos(a) * 0.3, -0.3, 0.42 - 0.15 - k * 0.045),
+                 size=(0.07, 0.05, 0.035), rot=(0, 0, 0), bevel=0.01)
+    part.tube(P["steel_dark"], [(-0.3, 0.12, 0.62), (-0.28, 0.12, 0.8), (0.0, 0.12, 0.82), (0.05, 0.12, 0.66)],
+              radius=0.035, segs=10)
     part.build("cannon_body", root)
 
     barrels = Part()
     for i in range(6):
         a = 2 * math.pi * i / 6
-        y, z = 0.105 * math.cos(a), 0.105 * math.sin(a)
-        barrels.cylinder(P["steel"], loc=(0.65, y, z), radius=0.042, depth=0.8, rot=ALONG_X, segs=12)
-        barrels.cylinder(P["black"], loc=(1.051, y, z), radius=0.026, depth=0.01, rot=ALONG_X, segs=10)
-    barrels.cylinder(P["steel_dark"], loc=(0.65, 0, 0), radius=0.05, depth=0.8, rot=ALONG_X, segs=12)
-    for x in (0.55, 0.95):
-        barrels.torus(P["steel_dark"], loc=(x, 0, 0), major=0.15, minor=0.03, rot=ALONG_X, segs=24)
-        for i in range(3):
-            a = 2 * math.pi * i / 3
-            barrels.box(P["yellow"] if x > 0.9 else P["steel_dark"], loc=(x, 0.17 * math.cos(a), 0.17 * math.sin(a)),
-                        size=(0.05, 0.05, 0.05), bevel=0.012)
-    barrels.build("cannon_barrels", root, location=(0, 0, 0.32))
-    empty("muzzle", root, (1.08, 0, 0.32))
+        y, z = 0.13 * math.cos(a), 0.13 * math.sin(a)
+        barrels.cylinder(P["steel"], loc=(0.52, y, z), radius=0.06, depth=0.5, rot=ALONG_X, segs=14)
+        barrels.cylinder(P["steel"], loc=(0.8, y, z), radius=0.06, radius2=0.1, depth=0.1, rot=ALONG_X, segs=14)
+        barrels.cylinder(P["black"], loc=(0.851, y, z), radius=0.06, depth=0.01, rot=ALONG_X, segs=12)
+    barrels.cylinder(P["steel_dark"], loc=(0.5, 0, 0), radius=0.06, depth=0.55, rot=ALONG_X, segs=12)
+    barrels.cylinder(P["red"], loc=(0.82, 0, 0), radius=0.045, depth=0.08, rot=ALONG_X, segs=12)
+    for x, color in ((0.4, "steel_dark"), (0.68, "yellow")):
+        barrels.torus(P[color], loc=(x, 0, 0), major=0.2, minor=0.04, rot=ALONG_X, segs=28)
+    for i in range(3):
+        a = 2 * math.pi * i / 3
+        barrels.box(P["yellow"], loc=(0.68, 0.23 * math.cos(a), 0.23 * math.sin(a)), size=(0.07, 0.07, 0.07),
+                    bevel=0.015)
+    barrels.build("cannon_barrels", root, location=(0, 0, 0.42))
+    empty("muzzle", root, (0.88, 0, 0.42))
     return root
 
 
