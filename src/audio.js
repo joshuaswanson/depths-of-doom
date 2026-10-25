@@ -59,8 +59,8 @@ function noise({ dur = 0.3, vol = 0.4, freq = 800, to = 200, q = 1, delay = 0 })
   src.stop(t + dur + 0.02);
 }
 
-// Looping water beds: a low rumble that darkens with depth, a rush that grows with speed, and waves washing at the
-// surface. Bubbles pop now and then on top.
+// Looping water beds heard only at the surface: a low rumble, a rush that grows with speed, and waves washing.
+// Bubbles pop now and then on top.
 let amb = null;
 
 function waterBed(type, freq, q) {
@@ -80,7 +80,7 @@ function waterBed(type, freq, q) {
   return { filter, gain };
 }
 
-export function setAmbience(dt, { active = false, depth = 0, surface = 0, speed = 0 } = {}) {
+export function setAmbience(dt, { active = false, surface = 0, speed = 0 } = {}) {
   if (!ctx) return;
   if (!amb) {
     amb = { rumble: waterBed('lowpass', 500, 0.8), rush: waterBed('bandpass', 700, 0.9),
@@ -90,13 +90,13 @@ export function setAmbience(dt, { active = false, depth = 0, surface = 0, speed 
   const now = ctx.currentTime;
   const on = active ? 1 : 0;
   const swell = 0.5 + 0.5 * Math.sin(amb.t * 0.55) * Math.sin(amb.t * 0.23 + 1);
-  amb.rumble.gain.gain.setTargetAtTime(on * (0.16 + 0.12 * depth) * (1 - surface * 0.5), now, 0.4);
-  amb.rumble.filter.frequency.setTargetAtTime(480 - 360 * depth + 60 * Math.sin(amb.t * 0.4), now, 0.4);
-  amb.rush.gain.gain.setTargetAtTime(on * speed * 0.2, now, 0.15);
+  amb.rumble.gain.gain.setTargetAtTime(on * surface * 0.1, now, 0.4);
+  amb.rumble.filter.frequency.setTargetAtTime(420 + 60 * Math.sin(amb.t * 0.4), now, 0.4);
+  amb.rush.gain.gain.setTargetAtTime(on * surface * speed * 0.2, now, 0.15);
   amb.rush.filter.frequency.setTargetAtTime(500 + 1100 * speed, now, 0.15);
   amb.surf.gain.gain.setTargetAtTime(on * surface * (0.06 + 0.16 * swell), now, 0.3);
   amb.surf.filter.frequency.setTargetAtTime(700 + 500 * swell, now, 0.3);
-  if (active && Math.random() < dt * (0.35 + speed * 3)) {
+  if (active && Math.random() < dt * surface * (0.35 + speed * 3)) {
     const f = 500 + Math.random() * 900;
     tone({ type: 'sine', freq: f, to: f * (1.6 + Math.random() * 0.6), dur: 0.05 + Math.random() * 0.04,
       vol: 0.025 + Math.random() * 0.035 });
