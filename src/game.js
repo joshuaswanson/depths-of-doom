@@ -1853,7 +1853,9 @@ export class Game {
     this.updateWetness(dt);
     this.updateStatus(dt);
     this.kickUpSand(dt);
+    const sweepFrom = this.radarSweep;
     this.radarSweep = (this.radarSweep + dt * 2.2) % (Math.PI * 2);
+    if (this.player.alive) this.sonarSounds(sweepFrom, this.radarSweep);
     if (this.over) this.overTimer -= dt;
   }
 
@@ -1961,6 +1963,25 @@ export class Game {
 
   radarEnemies() {
     return this.enemies.map((e) => ({ x: e.obj.position.x, y: e.obj.position.y, type: e.type }));
+  }
+
+  // The scope pings once per sweep and blips as the sweep line crosses each contact in range.
+  sonarSounds(from, to) {
+    const TAU = Math.PI * 2;
+    const span = (to - from + TAU) % TAU;
+    if (to < from) sfx.sonar(1 + this.player.levels.sonar * 0.25);
+    const pc = this.player.center;
+    const range = this.radarRange;
+    let big = null;
+    for (const e of this.enemies) {
+      const dx = e.obj.position.x - pc.x;
+      const dy = e.obj.position.y - pc.y;
+      if (dx * dx + dy * dy > range * range) continue;
+      const bearing = (Math.atan2(-dy, dx) + TAU) % TAU;
+      if ((bearing - from + TAU) % TAU >= span) continue;
+      big = (big ?? false) || e.type === 'boss';
+    }
+    if (big !== null) sfx.blip(big);
   }
 
   get radarRange() {

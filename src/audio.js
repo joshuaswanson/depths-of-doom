@@ -59,6 +59,50 @@ function noise({ dur = 0.3, vol = 0.4, freq = 800, to = 200, q = 1, delay = 0 })
   src.stop(t + dur + 0.02);
 }
 
+// Looping water beds: a low rumble that darkens with depth, a rush that grows with speed, and waves washing at the
+// surface. Bubbles pop now and then on top.
+let amb = null;
+
+function waterBed(type, freq, q) {
+  const src = ctx.createBufferSource();
+  src.buffer = noiseBuffer;
+  src.loop = true;
+  src.loopEnd = noiseBuffer.duration;
+  src.playbackRate.value = 0.7 + Math.random() * 0.6;
+  const filter = ctx.createBiquadFilter();
+  filter.type = type;
+  filter.frequency.value = freq;
+  filter.Q.value = q;
+  const gain = ctx.createGain();
+  gain.gain.value = 0;
+  src.connect(filter).connect(gain).connect(master);
+  src.start();
+  return { filter, gain };
+}
+
+export function setAmbience(dt, { active = false, depth = 0, surface = 0, speed = 0 } = {}) {
+  if (!ctx) return;
+  if (!amb) {
+    amb = { rumble: waterBed('lowpass', 500, 0.8), rush: waterBed('bandpass', 700, 0.9),
+      surf: waterBed('bandpass', 900, 0.6), t: 0 };
+  }
+  amb.t += dt;
+  const now = ctx.currentTime;
+  const on = active ? 1 : 0;
+  const swell = 0.5 + 0.5 * Math.sin(amb.t * 0.55) * Math.sin(amb.t * 0.23 + 1);
+  amb.rumble.gain.gain.setTargetAtTime(on * (0.16 + 0.12 * depth) * (1 - surface * 0.5), now, 0.4);
+  amb.rumble.filter.frequency.setTargetAtTime(480 - 360 * depth + 60 * Math.sin(amb.t * 0.4), now, 0.4);
+  amb.rush.gain.gain.setTargetAtTime(on * speed * 0.2, now, 0.15);
+  amb.rush.filter.frequency.setTargetAtTime(500 + 1100 * speed, now, 0.15);
+  amb.surf.gain.gain.setTargetAtTime(on * surface * (0.06 + 0.16 * swell), now, 0.3);
+  amb.surf.filter.frequency.setTargetAtTime(700 + 500 * swell, now, 0.3);
+  if (active && Math.random() < dt * (0.35 + speed * 3)) {
+    const f = 500 + Math.random() * 900;
+    tone({ type: 'sine', freq: f, to: f * (1.6 + Math.random() * 0.6), dur: 0.05 + Math.random() * 0.04,
+      vol: 0.025 + Math.random() * 0.035 });
+  }
+}
+
 export const sfx = {
   torpedo() {
     noise({ dur: 0.5, vol: 0.25, freq: 1500, to: 300 });
@@ -141,7 +185,15 @@ export const sfx = {
       tone({ type: 'square', freq: 2300, to: 1450, dur: 0.12, vol: 0.018, delay: d });
     });
   },
-  sonar() {
-    tone({ type: 'sine', freq: 1500, to: 1400, dur: 0.6, vol: 0.06 });
+  // A classic sonar ping that rings out and comes back as fainter echoes.
+  sonar(strength = 1) {
+    [0, 0.38, 0.76].forEach((delay, i) => {
+      const vol = 0.05 * strength * [1, 0.35, 0.12][i];
+      tone({ type: 'sine', freq: 1180, to: 1120, dur: 1.3, vol, delay });
+      tone({ type: 'sine', freq: 2360, to: 2240, dur: 0.5, vol: vol * 0.25, delay });
+    });
+  },
+  blip(big = false) {
+    tone({ type: 'sine', freq: big ? 1250 : 1900, to: big ? 1150 : 1800, dur: 0.09, vol: 0.035 });
   },
 };

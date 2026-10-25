@@ -12,7 +12,7 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 
 import { loadModels, warmUp } from './assets.js';
 import { SHADER_TIME, WATER } from './surface.js';
-import { toggleMute, unlockAudio } from './audio.js';
+import { setAmbience, toggleMute, unlockAudio } from './audio.js';
 import { Effects } from './effects.js';
 import { Game } from './game.js';
 import { Hud } from './hud.js';
@@ -219,6 +219,12 @@ function frame() {
   camera.position.x = game.cam.x + (Math.random() - 0.5) * shake * 0.5;
   camera.position.y = game.cam.y + (Math.random() - 0.5) * shake * 0.5;
   if (state !== 'paused') world.update(dt, camera, player.alive ? player.group.position : null, player.alive ? player : null);
+  setAmbience(dt, state === 'playing' && {
+    active: true,
+    depth: world.dark,
+    surface: 1 - THREE.MathUtils.smoothstep(Math.abs(player.center.y - SURFACE_Y), 0.8, 5),
+    speed: THREE.MathUtils.clamp(player.vel.length() / 9, 0, 1),
+  });
   lightForDepth(world.dark);
   player.setDarkness(world.dark);
   if (state === 'playing' || state === 'gameover') {
