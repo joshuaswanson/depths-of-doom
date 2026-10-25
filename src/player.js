@@ -3,13 +3,9 @@ import { findNode, findNodes, ownMaterials, spawn } from './assets.js';
 import { HULL_CAPACITY, JUNK_PER_HULL, PART_MODEL, SOCKETS, UPGRADES, needsMount, partCount } from './upgrades.js';
 import { SURFACE_Y } from './water.js';
 
-// Swimming in any direction shows the sub in full profile; idling, it drifts round to show three quarters of its
-// face.
-// Yaw stays within [-PI, 0], so every turn swings the nose past the camera instead of showing the stern.
-const YAW = {
-  right: { swim: 0, idle: -0.75 },
-  left: { swim: -Math.PI, idle: -(Math.PI - 0.75) },
-};
+// The sub shows its full profile facing left or right. Yaw stays within [-PI, 0], so every turn swings the nose past
+// the camera instead of showing the stern.
+const YAW = { right: 0, left: -Math.PI };
 const DRAG = 1.9;
 const MAX_SPOTLIGHTS = 4;
 const GRAVITY = 18;
@@ -237,7 +233,7 @@ export class Player {
     this.cruise = 0;
     this.heading = new THREE.Vector2(1, 0);
     this.facing = 1;
-    this.yaw = YAW.right.idle;
+    this.yaw = YAW.right;
     this.pitch = 0;
     this.airborne = false;
     this.invuln = 0;
@@ -547,9 +543,7 @@ export class Player {
     this.airborne = p.y > SURFACE_Y + 0.3;
 
     if (Math.abs(input.x) > 0.1) this.facing = Math.sign(input.x);
-    const swimming = pushing || this.airborne;
-    const pose = this.facing > 0 ? YAW.right : YAW.left;
-    const wantYaw = swimming ? pose.swim : pose.idle;
+    const wantYaw = this.facing > 0 ? YAW.right : YAW.left;
     const step = (wantYaw - this.yaw) * (1 - Math.exp(-dt * TURN_RATE));
     this.yaw += THREE.MathUtils.clamp(step, -dt * TURN_MAX_SPEED, dt * TURN_MAX_SPEED);
     this.yawPivot.rotation.y = this.yaw;
