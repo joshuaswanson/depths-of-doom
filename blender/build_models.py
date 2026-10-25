@@ -23,7 +23,7 @@ import assets_parts  # noqa: E402
 import assets_player  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-MODEL_DIR = os.path.join(ROOT, "public", "models")
+MODEL_DIR = os.path.join(ROOT, "models-src")
 
 ASSETS = {
     "player_hull": assets_player.player_hull,

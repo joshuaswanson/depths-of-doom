@@ -11,8 +11,8 @@ import os
 import bpy
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-OUT = os.path.join(ROOT, "public", "models", "anglerfish.glb")
-TEX = 2048
+OUT = os.path.join(ROOT, "models-src", "anglerfish.glb")
+TEX = 1024
 TARGET_FACES = 14000
 
 SKINNED = ["AnglerBody", "DorsalSpines", "Eyelid_L", "Eyelid_R"]

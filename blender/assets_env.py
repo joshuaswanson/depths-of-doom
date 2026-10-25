@@ -175,7 +175,7 @@ def chain(P):
     part = Part()
     for i in range(14):
         part.torus(P["rust"], loc=(0, 0, 0.18 + i * 0.36), major=0.16, minor=0.055, scale=(1, 1, 1.5),
-                   rot=(math.pi / 2, 0, (math.pi / 2) * (i % 2)), segs=18, tube_segs=8)
+                   rot=(math.pi / 2, 0, (math.pi / 2) * (i % 2)), segs=10, tube_segs=5)
     part.build("chain_mesh", root)
     return root
 

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { applySurfaceDetail } from './surface.js';
@@ -17,7 +18,8 @@ const MODEL_NAMES = [
 const models = {};
 
 export async function loadModels(onProgress) {
-  const loader = new GLTFLoader();
+  const draco = new DRACOLoader().setDecoderPath(`${import.meta.env.BASE_URL}draco/`);
+  const loader = new GLTFLoader().setDRACOLoader(draco);
   let done = 0;
   await Promise.all(MODEL_NAMES.map(async (name) => {
     const gltf = await loader.loadAsync(`${import.meta.env.BASE_URL}models/${name}.glb`);
@@ -28,6 +30,7 @@ export async function loadModels(onProgress) {
     models[name] = gltf.scene;
     onProgress?.(++done / MODEL_NAMES.length);
   }));
+  draco.dispose();
   addSkullDecals(models);
   for (const model of Object.values(models)) mergeStatic(model);
 }
