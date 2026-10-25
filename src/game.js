@@ -239,14 +239,53 @@ export class Game {
     this.reset();
   }
 
+  // Underwater rounds: a dark brass slug riding inside a glassy pocket of trapped air, like a supercavitating bullet.
   makeBulletMesh() {
-    const geo = new THREE.CapsuleGeometry(0.05, 0.42, 4, 8);
-    geo.rotateZ(Math.PI / 2);
-    const mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.9, 1.4, 0.45) });
-    this.bulletMesh = new THREE.InstancedMesh(geo, mat, 500);
+    const slug = new THREE.LatheGeometry([
+      new THREE.Vector2(0, -0.17), new THREE.Vector2(0.045, -0.16), new THREE.Vector2(0.05, 0.04),
+      new THREE.Vector2(0.038, 0.12), new THREE.Vector2(0.012, 0.18), new THREE.Vector2(0, 0.19),
+    ], 10);
+    slug.rotateZ(-Math.PI / 2);
+    const slugMat = new THREE.MeshStandardMaterial({ color: '#b98a3c', metalness: 0.85, roughness: 0.3,
+      emissive: '#3a2408', emissiveIntensity: 1 });
+    this.bulletMesh = new THREE.InstancedMesh(slug, slugMat, 500);
     this.bulletMesh.frustumCulled = false;
     this.bulletMesh.count = 0;
     this.scene.add(this.bulletMesh);
+
+    const cavity = new THREE.SphereGeometry(1, 16, 10);
+    cavity.scale(0.42, 0.085, 0.085);
+    cavity.translate(-0.14, 0, 0);
+    const cavityMat = new THREE.ShaderMaterial({
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      vertexShader: /* glsl */ `
+        varying vec3 vNormal;
+        varying vec3 vView;
+        varying float vAlong;
+        void main() {
+          vAlong = position.x;
+          vec4 mv = modelViewMatrix * instanceMatrix * vec4( position, 1.0 );
+          vNormal = normalize( normalMatrix * mat3( instanceMatrix ) * normal );
+          vView = normalize( -mv.xyz );
+          gl_Position = projectionMatrix * mv;
+        }`,
+      fragmentShader: /* glsl */ `
+        varying vec3 vNormal;
+        varying vec3 vView;
+        varying float vAlong;
+        void main() {
+          float rim = pow( 1.0 - abs( dot( vNormal, vView ) ), 2.5 );
+          float tail = smoothstep( -0.56, -0.1, vAlong );
+          gl_FragColor = vec4( vec3( 0.75, 0.95, 1.0 ) * ( rim * 0.55 + 0.05 ) * tail, 1.0 );
+        }`,
+    });
+    this.cavityMesh = new THREE.InstancedMesh(cavity, cavityMat, 500);
+    this.cavityMesh.frustumCulled = false;
+    this.cavityMesh.count = 0;
+    this.cavityMesh.renderOrder = 4;
+    this.scene.add(this.cavityMesh);
   }
 
   // One instanced mesh draws every link of every mine's mooring chain.
@@ -363,12 +402,12 @@ export class Game {
       return;
     }
     const cost = upgradeCost(def, lvl);
-    if (this.coins < cost && !this.unlimited) {
+    if (this.coins < cost) {
       sfx.denied();
       this.hud.flashSlot(id, false);
       return;
     }
-    if (!this.unlimited) this.coins -= cost;
+    this.coins -= cost;
     const added = this.player.upgrade(id);
     sfx.upgrade();
     this.hud.flashSlot(id, true);
@@ -1083,6 +1122,7 @@ export class Game {
     const pl = this.player;
 
     let alive = 0;
+    let cavities = 0;
     const m = new THREE.Matrix4();
     const q = new THREE.Quaternion();
     const one = new THREE.Vector3(1, 1, 1);
@@ -1095,8 +1135,9 @@ export class Game {
       if (b.life <= 0) continue;
       b.trail -= dt;
       if (b.trail <= 0) {
-        b.trail = 0.035;
-        this.effects.trailBubble({ x: b.x, y: b.y, z: b.z });
+        b.trail = 0.012;
+        const back = Math.atan2(b.vy, b.vx);
+        this.effects.trailBubble({ x: b.x - Math.cos(back) * 0.45, y: b.y - Math.sin(back) * 0.45, z: b.z });
       }
       let hit = false;
       for (const e of this.enemies) {
@@ -1122,11 +1163,14 @@ export class Game {
       q.setFromAxisAngle(zAxis, Math.atan2(b.vy, b.vx));
       m.compose(v.set(b.x, b.y, b.z), q, one);
       this.bulletMesh.setMatrixAt(alive, m);
+      if (b.y < SURFACE_Y) this.cavityMesh.setMatrixAt(cavities++, m);
       this.bullets[alive++] = b;
     }
     this.bullets.length = alive;
     this.bulletMesh.count = alive;
     this.bulletMesh.instanceMatrix.needsUpdate = true;
+    this.cavityMesh.count = cavities;
+    this.cavityMesh.instanceMatrix.needsUpdate = true;
 
     for (const t of this.torpedoes) {
       t.life -= dt;

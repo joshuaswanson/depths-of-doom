@@ -174,7 +174,7 @@ export class Hud {
         (_, i) => `<span class="pip ${i < player.shieldCharges ? 'on' : ''}"></span>`).join('');
       this.lastPips = pips;
     }
-    this.coinText.textContent = state.unlimited ? '∞' : coins;
+    this.coinText.textContent = coins;
     this.waveTag.textContent = `Wave ${wave}`;
 
     for (const s of this.slots) {
@@ -185,9 +185,9 @@ export class Hud {
       const slots = s.def.id === 'hull' ? ` · ${player.mountsUsed}/${player.mountCapacity}` : '';
       s.level.textContent = maxed ? `MAX${slots}` : `Lv. ${lvl}${slots}`;
       s.slot.classList.toggle('noroom', !maxed && !room);
-      s.fill.style.width = `${maxed || state.unlimited ? 100 : Math.min(100, (coins / cost) * 100)}%`;
+      s.fill.style.width = `${maxed ? 100 : Math.min(100, (coins / cost) * 100)}%`;
       s.cost.textContent = maxed ? 'Fully bolted' : !room ? 'No room — upgrade the Hull' : `Cost: ${cost} coins`;
-      s.slot.classList.toggle('affordable', !maxed && room && (state.unlimited || coins >= cost));
+      s.slot.classList.toggle('affordable', !maxed && room && coins >= cost);
       s.slot.classList.toggle('maxed', maxed);
     }
 

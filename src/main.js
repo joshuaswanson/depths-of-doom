@@ -95,10 +95,6 @@ window.addEventListener('keydown', (e) => {
     else if (state === 'paused') resume();
   }
   if (e.code === 'KeyM') hud.showToast(toggleMute() ? 'Sound off' : 'Sound on');
-  if (e.code === 'KeyU' && game) {
-    game.unlimited = !game.unlimited;
-    hud.showToast(game.unlimited ? 'Unlimited coins on' : 'Unlimited coins off');
-  }
   if ((e.code === 'Enter' || e.code === 'Space') && (state === 'title' || state === 'gameover')) startGame();
 });
 window.addEventListener('keyup', (e) => keys.delete(e.code));
@@ -180,7 +176,6 @@ async function boot() {
   effects = new Effects(scene);
   player = new Player(scene);
   game = new Game({ scene, camera, world, effects, player, hud });
-  game.unlimited = import.meta.env.DEV;
   resize();
   const cleanup = game.prewarm();
   const hidden = world.jellies.filter((j) => !j.visible);
@@ -227,7 +222,7 @@ function frame() {
   lightForDepth(world.dark);
   player.setDarkness(world.dark);
   if (state === 'playing' || state === 'gameover') {
-    hud.update({ player, coins: game.coins, wave: game.wave, boss: game.boss, unlimited: game.unlimited });
+    hud.update({ player, coins: game.coins, wave: game.wave, boss: game.boss });
     hud.drawRadar(player, game.radarEnemies(), game.radarRange, game.radarSweep, game.radarCoins());
   }
   composer.render();

@@ -193,9 +193,9 @@ export class Effects {
   trailBubble(pos) {
     if (pos.y > SURFACE_Y) return;
     this.bubbles.emit({
-      pos: { x: pos.x + rand(-0.05, 0.05), y: pos.y + rand(-0.05, 0.05), z: pos.z },
-      vel: { x: rand(-0.2, 0.2), y: rand(0.1, 0.4) }, life: rand(0.35, 0.6), size: rand(0.05, 0.1), size1: 0.12,
-      alpha: 0.7, alpha1: 0, drag: 3, rise: 1.5,
+      pos: { x: pos.x + rand(-0.04, 0.04), y: pos.y + rand(-0.04, 0.04), z: pos.z },
+      vel: { x: rand(-0.3, 0.3), y: rand(0.05, 0.3) }, life: rand(0.4, 0.8), size: rand(0.03, 0.07), size1: 0.1,
+      alpha: 0.75, alpha1: 0, drag: 4, rise: 1.8, wobble: 0.6,
     });
   }
 
