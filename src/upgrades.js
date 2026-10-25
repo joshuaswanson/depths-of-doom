@@ -56,6 +56,13 @@ export const PART_MODEL = {
   spotlight: 'part_spotlight',
 };
 
+// Mount slots each hull level offers; every bolted-on weapon or tool takes one, so a crowded hull has to grow.
+export const HULL_CAPACITY = [0, 4, 8, 12, 17, 23, 31];
+
+export function needsMount(id, level) {
+  return id in PART_MODEL && partCount(id, level + 1) > partCount(id, level);
+}
+
 export function partCount(cat, level) {
   if (cat === 'propulsion') return Math.max(0, level - 1);
   if (cat === 'grapple' || cat === 'sonar') return level > 0 ? 1 : 0;

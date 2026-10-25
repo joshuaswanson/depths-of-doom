@@ -281,6 +281,12 @@ export class Game {
       this.hud.flashSlot(id, false);
       return;
     }
+    if (!this.player.hasRoomFor(id)) {
+      sfx.denied();
+      this.hud.flashSlot(id, false);
+      this.hud.showToast('No room on the hull! Upgrade your Hull');
+      return;
+    }
     const cost = upgradeCost(def, lvl);
     if (this.coins < cost && !this.unlimited) {
       sfx.denied();

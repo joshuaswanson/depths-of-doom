@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { findNode, findNodes, ownMaterials, spawn } from './assets.js';
-import { JUNK_PER_HULL, PART_MODEL, SOCKETS, UPGRADES, partCount } from './upgrades.js';
+import { HULL_CAPACITY, JUNK_PER_HULL, PART_MODEL, SOCKETS, UPGRADES, needsMount, partCount } from './upgrades.js';
 import { SURFACE_Y } from './water.js';
 
 // Swimming in any direction shows the sub in full profile; idling, it drifts round to show three quarters of its
@@ -259,6 +259,18 @@ export class Player {
   get speed() {
     const weight = this.parts.length * 0.11 + (this.levels.hull - 1) * 0.35;
     return Math.max(5, 9 + (this.levels.propulsion - 1) * 1.6 - weight);
+  }
+
+  get mountsUsed() {
+    return this.parts.filter((p) => p.cat !== 'junk').length;
+  }
+
+  get mountCapacity() {
+    return HULL_CAPACITY[this.levels.hull];
+  }
+
+  hasRoomFor(id) {
+    return !needsMount(id, this.levels[id]) || this.mountsUsed < this.mountCapacity;
   }
 
   get damageMult() {
