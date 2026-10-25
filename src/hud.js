@@ -1,9 +1,9 @@
 import { UPGRADES, upgradeCost } from './upgrades.js';
 
 const ICON = (name) => `${import.meta.env.BASE_URL}icons/${name}.png`;
-const LOGO = `<img class="logo-img" src="${import.meta.env.BASE_URL}logo.png" alt="Depths of Doom">
+const LOGO = `<div class="logo-wrap"><img class="logo-img" src="${import.meta.env.BASE_URL}logo.png" alt="Depths of Doom">
   <a class="badge" href="https://joshuaswanson.github.io" target="_blank" rel="noopener">
-    <img src="${import.meta.env.BASE_URL}badge.png" alt="by Joshua Swanson"></a>`;
+    <img src="${import.meta.env.BASE_URL}badge.png" alt="by Joshua Swanson"></a></div>`;
 
 const HEART = `<svg viewBox="0 0 34 31" class="heart-svg"><defs>
   <linearGradient id="hg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff6b6b"/>

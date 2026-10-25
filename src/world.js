@@ -62,6 +62,20 @@ function moundHeight(x, z) {
   return h;
 }
 
+// How close a point is to a reef: 1 at a reef's heart, fading out across the sand around it.
+function reefGlow(x, z) {
+  const cell = Math.floor(x / MOUND_CELL);
+  let g = 0;
+  for (let c = cell - 1; c <= cell + 1; c++) {
+    const m = moundOf(c);
+    if (!m.reef) continue;
+    const dx = (x - m.x) / (m.width * 2.4);
+    const dz = (z - MOUND_Z) / 16;
+    g = Math.max(g, Math.exp(-dx * dx - dz * dz));
+  }
+  return g * (1 - THREE.MathUtils.smoothstep(SHELF_Y - floorY(x), 2, 10));
+}
+
 function detailHeight(x, z) {
   const depth = Math.max(0, -z - 4);
   let h = 0.35 * Math.sin(x * 0.157 + z * 0.21) + 0.25 * Math.sin(x * 0.39 - z * 0.37 + 1.3)
@@ -223,7 +237,9 @@ function makeWaterline() {
 }
 
 const SHALLOW_COLORS = ['#1d5a55', '#2c7a60', '#4a9068', '#17474a'].map((c) => new THREE.Color(c));
-const RUBBLE = new THREE.Color('#5b6e6a');
+const RUBBLE = new THREE.Color('#5d8a95');
+const REEF_SAND = new THREE.Color('#3fb3c4');
+const REEF_LAGOON = new THREE.Color('#7fe3e6');
 const DEEP_COLORS = ['#1a2430', '#252f3d', '#2d3644', '#151b26'].map((c) => new THREE.Color(c));
 
 function makeSeabedTile(material) {
@@ -232,6 +248,7 @@ function makeSeabedTile(material) {
   geo.translate(0, 0, TILE_Z0 - TILE_D / 2);
   geo.userData.baseX = Float32Array.from({ length: geo.attributes.position.count }, (_, i) => geo.attributes.position.getX(i));
   geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(geo.attributes.position.count * 3), 3));
+  geo.setAttribute('aReef', new THREE.BufferAttribute(new Float32Array(geo.attributes.position.count), 1));
   const tile = new THREE.Mesh(geo, material);
   tile.frustumCulled = false;
   tile.userData.x0 = null;
@@ -247,6 +264,7 @@ function shapeTile(tile, x0) {
   const col = geo.attributes.color;
   const c = new THREE.Color();
   const d = new THREE.Color();
+  const glowAttr = geo.attributes.aReef.array;
   for (let i = 0; i < pos.count; i++) {
     const x = geo.userData.baseX[i] + x0;
     const z = pos.getZ(i);
@@ -259,11 +277,17 @@ function shapeTile(tile, x0) {
     d.copy(DEEP_COLORS[0]).lerp(DEEP_COLORS[1], n).lerp(DEEP_COLORS[2], m * 0.4);
     c.lerp(d, THREE.MathUtils.smoothstep(-y, 18, 45));
     const raised = moundHeight(x, z) * (1 - THREE.MathUtils.smoothstep(SHELF_Y - floorY(x), 2, 10));
-    c.lerp(RUBBLE, THREE.MathUtils.smoothstep(raised, 0.4, 2.0) * 0.6);
+    const glow = reefGlow(x, z);
+    const ripple = 0.5 + 0.5 * Math.sin(x * 0.9 + z * 0.4) * Math.sin(x * 0.37 - z * 1.1);
+    c.lerp(REEF_SAND, glow * 0.75);
+    c.lerp(REEF_LAGOON, glow * ripple * 0.35);
+    c.lerp(RUBBLE, THREE.MathUtils.smoothstep(raised, 0.4, 2.0) * 0.55);
+    glowAttr[i] = glow;
     col.setXYZ(i, c.r, c.g, c.b);
   }
   pos.needsUpdate = true;
   col.needsUpdate = true;
+  geo.attributes.aReef.needsUpdate = true;
   geo.computeVertexNormals();
 }
 
@@ -272,12 +296,13 @@ function makeSeabedMaterial(uniforms) {
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uTime = uniforms.uTime;
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nvarying vec3 vSeaWorld;')
+      .replace('#include <common>', '#include <common>\nvarying vec3 vSeaWorld;\nattribute float aReef;\nvarying float vReef;')
       .replace('#include <worldpos_vertex>',
-        '#include <worldpos_vertex>\nvSeaWorld = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;');
+        '#include <worldpos_vertex>\nvSeaWorld = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;\nvReef = aReef;');
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', /* glsl */ `#include <common>
         varying vec3 vSeaWorld;
+        varying float vReef;
         uniform float uTime;
         ${NOISE_GLSL}
         // Caustic net: bright lines along the borders of slowly wobbling cells, like light focused by surface waves.
@@ -326,7 +351,8 @@ function makeSeabedMaterial(uniforms) {
         float cFine = caustic( cB, 1.1 );
         float cLight = cNet * cNet * 0.8 + cNet * cFine * 0.6;
         float cBand = 0.35 + 0.9 * dNoise( vec3( vSeaWorld.xz * 0.18 + uTime * 0.08, uTime * 0.15 ) );
-        totalEmissiveRadiance += vec3( 0.5, 0.9, 0.95 ) * cLight * 0.6 * fadeC * cBand;`);
+        totalEmissiveRadiance += vec3( 0.5, 0.9, 0.95 ) * cLight * 0.6 * fadeC * cBand * ( 1.0 + vReef * 1.3 );
+        totalEmissiveRadiance += vec3( 0.02, 0.12, 0.15 ) * vReef * fadeC;`);
   };
   return mat;
 }
