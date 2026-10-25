@@ -551,8 +551,9 @@ function updateAngler(a, dt, t, cx, sub, world) {
 // 24 fps: floating and preening, then a takeoff, then steady flapping.
 const GULL_COUNT = 6;
 const GULL_SCALE = 1.3;
-const GULL_SCARE = 7;
-const GULL_WARY = 16;
+const GULL_SCARE = 12;
+const GULL_WARY = 26;
+const GULL_CLEARANCE = 0.9;
 const GULL_FPS = 24;
 let gullClips = null;
 
@@ -596,6 +597,24 @@ function makeGull() {
     vel: new THREE.Vector2(), dir: 1,
   };
   return holder;
+}
+
+// Pushes a gull out of an ellipse around the hull so it never passes through the sub. Floating gulls only slide
+// along the surface.
+function keepClear(gull, sub, extents, floating) {
+  const rx = extents.hx + GULL_CLEARANCE;
+  const ry = extents.hy + GULL_CLEARANCE;
+  if (floating && Math.abs(gull.position.y - sub.y) > ry) return;
+  const dx = (gull.position.x - sub.x) / rx;
+  const dy = floating ? 0 : (gull.position.y - sub.y) / ry;
+  const d = Math.hypot(dx, dy);
+  if (d >= 1) return;
+  if (d < 1e-4) {
+    gull.position.x = sub.x + rx * (gull.userData.dir || 1);
+    return;
+  }
+  gull.position.x = sub.x + (dx / d) * rx;
+  if (!floating) gull.position.y = Math.max(SURFACE_Y - 0.02, sub.y + (dy / d) * ry);
 }
 
 // Alternating strokes on top of the clip, so a floating gull's feet keep paddling under the surface.
@@ -879,8 +898,9 @@ export class World {
   }
 
   // Returns how many gulls just took off, so the game can play one cry for the flock.
-  updateGulls(dt, cx, cy, sub) {
+  updateGulls(dt, cx, cy, hull) {
     let scared = 0;
+    const sub = hull?.center;
     const visible = Math.abs(cy - SURFACE_Y) < 30;
     for (const gull of this.gulls) {
       const u = gull.userData;
@@ -890,7 +910,7 @@ export class World {
       if (u.state === 'float') {
         if (visible) treadWater(u, this.time);
         gull.position.y = SURFACE_Y - 0.02 + Math.sin(this.time * 1.4 + gull.position.x * 0.5) * 0.09;
-        const gap = sub && sub.y > SURFACE_Y - 3.5 ? Math.abs(sub.x - gull.position.x) : Infinity;
+        const gap = sub && sub.y > SURFACE_Y - 7 ? Math.abs(sub.x - gull.position.x) : Infinity;
         // A gull grows uneasy as the sub nears and paddles away faster; the closer the sub gets before it bolts,
         // the more frantic the escape.
         const alarm = 1 - THREE.MathUtils.smoothstep(gap, GULL_SCARE * u.nerve, GULL_WARY);
@@ -929,6 +949,7 @@ export class World {
           this.landGull(gull, cx + (Math.random() < 0.5 ? -1 : 1) * rand(32, 44));
         }
       }
+      if (sub) keepClear(gull, sub, hull.extents, u.state === 'float');
     }
     return scared;
   }
@@ -1111,11 +1132,11 @@ export class World {
     }
   }
 
-  update(dt, camera, sub = null) {
+  update(dt, camera, sub = null, hull = null) {
     this.time += dt;
     const cx = camera.position.x;
     const cy = camera.position.y;
-    if (this.updateGulls(dt, cx, cy, sub) > 0) sfx.gull();
+    if (this.updateGulls(dt, cx, cy, hull) > 0) sfx.gull();
     const t = this.time;
     this.uniforms.uTime.value = t;
     const shift = depthShift(cy);
