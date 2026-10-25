@@ -599,7 +599,6 @@ export class Game {
         vx: fwd.x * 26 + side.x * spread + pl.vel.x * 0.5, vy: fwd.y * 26 + side.y * spread + pl.vel.y * 0.5,
       });
       this.effects.muzzle(this.tmp, fwd);
-      sfx.shoot();
     }
     for (const part of pl.partsOf('torpedo')) {
       part.timer -= dt;

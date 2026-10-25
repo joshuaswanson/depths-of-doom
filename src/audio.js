@@ -59,15 +59,7 @@ function noise({ dur = 0.3, vol = 0.4, freq = 800, to = 200, q = 1, delay = 0 })
   src.stop(t + dur + 0.02);
 }
 
-let lastShot = 0;
-
 export const sfx = {
-  shoot() {
-    if (!ctx) return;
-    if (ctx.currentTime - lastShot < 0.05) return;
-    lastShot = ctx.currentTime;
-    tone({ type: 'square', freq: 900, to: 300, dur: 0.06, vol: 0.05 });
-  },
   torpedo() {
     noise({ dur: 0.5, vol: 0.25, freq: 1500, to: 300 });
     tone({ type: 'sine', freq: 200, to: 90, dur: 0.3, vol: 0.2 });

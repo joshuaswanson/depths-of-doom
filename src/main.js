@@ -26,7 +26,7 @@ installWaterFog();
 
 const canvas = document.getElementById('game');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
 renderer.toneMapping = THREE.NeutralToneMapping;
 renderer.toneMappingExposure = 1.0;
 
@@ -116,7 +116,6 @@ function resize() {
   const h = window.innerHeight;
   renderer.setSize(w, h, false);
   composer.setSize(w, h);
-  bloom.resolution.set(w, h);
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
   effects?.setViewport(h * renderer.getPixelRatio(), CAMERA_FOV);
