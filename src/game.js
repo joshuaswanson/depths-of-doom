@@ -897,6 +897,13 @@ export class Game {
     sfx.enemyShot();
   }
 
+  // Splash and bubbles whenever a projectile crosses the waterline in either direction.
+  crossSurface(wasAbove, p, scale = 0.45) {
+    if (wasAbove === p.y > SURFACE_Y) return;
+    this.effects.splash({ x: p.x, y: SURFACE_Y, z: p.z }, scale);
+    sfx.splash();
+  }
+
   updateProjectiles(dt) {
     const pl = this.player;
 
@@ -967,10 +974,7 @@ export class Game {
       }
       p.x += t.vel.x * dt;
       p.y += t.vel.y * dt;
-      if (airborne !== p.y > SURFACE_Y) {
-        this.effects.splash({ x: p.x, y: SURFACE_Y, z: p.z }, 0.5);
-        sfx.splash();
-      }
+      this.crossSurface(airborne, p, 0.5);
       t.obj.rotation.z = Math.atan2(t.vel.y, t.vel.x);
       const hitE = this.enemies.find((e) => !e.dead && this.enemyHit(e, p.x, p.y, 0.2));
       const floor = seabedAt(p.x);
@@ -993,7 +997,10 @@ export class Game {
       mi.life -= dt;
       mi.age += dt;
       const p = mi.obj.position;
-      if (mi.age > 0.3) {
+      const above = p.y > SURFACE_Y;
+      if (above) {
+        mi.vy -= GRAVITY * dt;
+      } else if (mi.age > 0.3) {
         const target = this.nearestEnemy(p.x, p.y);
         const speed = Math.min(15, Math.hypot(mi.vx, mi.vy) + dt * 16);
         let a = Math.atan2(mi.vy, mi.vx);
@@ -1006,6 +1013,7 @@ export class Game {
       }
       p.x += mi.vx * dt;
       p.y += mi.vy * dt;
+      this.crossSurface(above, p);
       mi.obj.rotation.z = Math.atan2(mi.vy, mi.vx);
       mi.trail -= dt;
       if (mi.trail <= 0) {
@@ -1015,7 +1023,12 @@ export class Game {
         this.effects.flame(back, 0.8);
       }
       const hitE = this.enemies.find((e) => !e.dead && this.enemyHit(e, p.x, p.y, 0.15));
-      if (hitE || mi.life <= 0) {
+      const grounded = p.y < seabedAt(p.x);
+      if (hitE || mi.life <= 0 || grounded) {
+        if (grounded && !hitE) {
+          this.effects.explosion(p, 0.45);
+          sfx.boom();
+        }
         if (hitE) {
           this.damageEnemy(hitE, 4);
           this.effects.explosion(p, 0.6);
@@ -1034,8 +1047,12 @@ export class Game {
       }
       em.life -= dt;
       const p = em.obj.position;
+      const above = p.y > SURFACE_Y;
+      if (above) em.vy -= GRAVITY * dt;
       p.x += em.vx * dt;
       p.y += em.vy * dt;
+      this.crossSurface(above, p);
+      em.obj.rotation.z = Math.atan2(em.vy, em.vx);
       em.trail -= dt;
       if (em.trail <= 0) {
         em.trail = 0.025;
@@ -1051,7 +1068,7 @@ export class Game {
         this.hurtPlayer(DAMAGE.missile, p);
       }
       const floor = seabedAt(p.x);
-      if (em.life <= 0 || p.y > SURFACE_Y + 0.5 || p.y < floor) {
+      if (em.life <= 0 || p.y < floor) {
         if (!em.dead && p.y < floor) this.effects.explosion(p, 0.45);
         em.dead = true;
       }
