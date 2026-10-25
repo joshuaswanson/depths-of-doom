@@ -27,7 +27,7 @@ def red_light(part, P, matrix, radius=0.07):
                 rings=8)
 
 
-def enemy_sub(P, name="enemy_sub", length=3.4, radius=0.85, tower=True, skull_mark=False,
+def enemy_sub(P, name="enemy_sub", length=3.4, radius=0.85, tower=True, skull_mark=False, scope=1.0,
               spikes=0, turret=False):
     root = empty(name)
     b = Body(length=length, radius=radius, p_front=2.2, p_back=2.7)
@@ -66,12 +66,15 @@ def enemy_sub(P, name="enemy_sub", length=3.4, radius=0.85, tower=True, skull_ma
             for dx in (-0.22, 0.05, 0.32):
                 red_light(part, P, frame(Vector((tx + dx * radius, 0.33 * radius * side, tz + t_h * 0.45)),
                                          Vector((0, side, 0))), radius=0.065 * radius)
-        scope = [(tx + 0.15, 0, tz + t_h * 0.8), (tx + 0.15, 0, tz + t_h * 1.35), (tx + 0.05, 0, tz + t_h * 1.45),
-                 (tx - 0.15, 0, tz + t_h * 1.45)]
-        part.tube(P["gunmetal"], scope, radius=0.06 * radius, segs=12)
-        part.cylinder(P["gunmetal"], loc=(tx - 0.2, 0, tz + t_h * 1.45), radius=0.09 * radius, depth=0.15,
+        def grow(dx, dz):
+            """Periscope point, scaled up from where the periscope leaves the tower."""
+            return (tx + 0.15 + (dx - 0.15) * scope, 0, tz + t_h * (0.8 + (dz - 0.8) * scope))
+
+        pipe = [grow(0.15, 0.8), grow(0.15, 1.35), grow(0.05, 1.45), grow(-0.15, 1.45)]
+        part.tube(P["gunmetal"], pipe, radius=0.06 * radius * scope, segs=12)
+        part.cylinder(P["gunmetal"], loc=grow(-0.2, 1.45), radius=0.09 * radius * scope, depth=0.15 * scope,
                       rot=(0, math.pi / 2, 0), bevel=0.02)
-        part.cylinder(P["enemy_light"], loc=(tx - 0.28, 0, tz + t_h * 1.45), radius=0.06 * radius, depth=0.02,
+        part.cylinder(P["enemy_light"], loc=grow(-0.28, 1.45), radius=0.06 * radius * scope, depth=0.02,
                       rot=(0, math.pi / 2, 0))
 
 
@@ -99,7 +102,7 @@ def enemy_sub(P, name="enemy_sub", length=3.4, radius=0.85, tower=True, skull_ma
 
 
 def enemy_scout(P):
-    return enemy_sub(P, "enemy_scout", length=2.3, radius=0.66)
+    return enemy_sub(P, "enemy_scout", length=2.3, radius=0.66, scope=1.8)
 
 
 def enemy_gunner(P):
