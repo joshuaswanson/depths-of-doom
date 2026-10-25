@@ -176,6 +176,11 @@ const ENEMY_TYPES = {
   mine: { model: 'mine', hp: 3, scale: 1.05, rx: 0.62, ry: 0.62, coins: 1, boom: 1.0, speed: 1.0 },
 };
 
+// The angle equal to `target` (mod 2π) that is closest to `from`, so settling never spins the long way round.
+function nearestAngle(from, target) {
+  return target + Math.round((from - target) / (Math.PI * 2)) * Math.PI * 2;
+}
+
 function angleLerp(a, b, maxStep) {
   let d = b - a;
   while (d > Math.PI) d -= Math.PI * 2;
@@ -620,9 +625,8 @@ export class Game {
       if (o.name.startsWith('muzzle')) o.visible = false;
     });
     this.wrecks.push({
-      e, t: 0, vy: 1.5, vx: e.vel.x * 0.3, settled: false,
-      roll: (Math.random() < 0.5 ? -1 : 1) * (0.25 + Math.random() * 0.35), pitch: (Math.random() - 0.5) * 0.6,
-      leak: 0,
+      e, t: 0, vy: 1.5, vx: e.vel.x * 0.3, settled: false, bounced: false, leak: 0,
+      spinZ: (Math.random() - 0.5) * 1.2, spinX: (Math.random() - 0.5) * 1.6, rv: 0, lv: 0,
     });
   }
 
@@ -641,7 +645,24 @@ export class Game {
         p.z += (WRECK_Z - p.z) * (1 - Math.exp(-dt * 0.8));
         if (p.y <= rest) {
           p.y = rest;
+          if (!w.bounced && w.vy < -1.5) {
+            w.bounced = true;
+            w.vy = -w.vy * 0.25;
+            w.spinZ *= 0.4;
+            w.spinX *= 0.4;
+            this.effects.sandPoof({ x: p.x, y: seabedAt(p.x, p.z) + 0.5, z: p.z + 1 }, 0.6, p.y < -30, e.def.rx);
+            continue;
+          }
           w.settled = true;
+          // Lie with the seabed's slope, rolled onto one side, a little sunk into the sand.
+          const reach = e.def.rx * e.def.scale;
+          const slope = Math.atan2(seabedAt(p.x + reach, p.z) - seabedAt(p.x - reach, p.z), reach * 2);
+          w.restZ = nearestAngle(e.obj.rotation.z, slope);
+          const side = Math.sign(Math.sin(e.tilt.rotation.x)) || (Math.random() < 0.5 ? -1 : 1);
+          w.restX = nearestAngle(e.tilt.rotation.x, side * (0.45 + Math.random() * 0.35));
+          w.restY = rest - e.def.ry * e.def.scale * 0.2;
+          w.rv = w.spinZ * 0.5;
+          w.lv = w.spinX * 0.5;
           this.effects.sandPoof({ x: p.x, y: seabedAt(p.x) + 0.5, z: 1.2 }, 0.9, p.y < -30, e.def.rx);
           sfx.thud(0.8);
         }
@@ -652,9 +673,17 @@ export class Game {
           if (w.t < 2.5) this.effects.damageSmoke({ x: p.x, y: p.y + 0.2, z: p.z + 0.5 }, 0.9);
         }
       }
-      const k = 1 - Math.exp(-dt * (w.settled ? 3 : 1.2));
-      e.obj.rotation.z += (w.roll - e.obj.rotation.z) * k;
-      e.tilt.rotation.x += (w.pitch - e.tilt.rotation.x) * k;
+      if (!w.settled) {
+        e.obj.rotation.z += w.spinZ * dt;
+        e.tilt.rotation.x += w.spinX * dt;
+      } else {
+        // Rock towards the resting pose with a damped spring, so the hull rolls and settles after it lands.
+        w.rv += ((w.restZ - e.obj.rotation.z) * 14 - w.rv * 3.2) * dt;
+        w.lv += ((w.restX - e.tilt.rotation.x) * 10 - w.lv * 2.6) * dt;
+        e.obj.rotation.z += w.rv * dt;
+        e.tilt.rotation.x += w.lv * dt;
+        p.y += (w.restY - p.y) * (1 - Math.exp(-dt * 1.5));
+      }
       if (e.propeller) e.propeller.rotation.x += dt * Math.max(0, 6 - w.t * 3);
       const fade = Math.min(1, w.t / 3);
       for (const { m, c } of e.mats) {
