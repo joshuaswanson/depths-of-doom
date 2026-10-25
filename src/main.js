@@ -12,6 +12,7 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 
 import { loadModels, warmUp } from './assets.js';
+import { SHADER_TIME } from './surface.js';
 import { toggleMute, unlockAudio } from './audio.js';
 import { Effects } from './effects.js';
 import { Game } from './game.js';
@@ -165,6 +166,7 @@ let titleT = 0;
 function frame() {
   timer.update();
   const dt = Math.min(timer.getDelta(), 1 / 20);
+  SHADER_TIME.value += dt;
   if (state === 'playing') {
     game.update(dt, readInput());
     if (game.over && game.overTimer <= 0) {

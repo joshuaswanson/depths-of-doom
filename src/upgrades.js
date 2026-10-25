@@ -26,19 +26,20 @@ export function upgradeCost(def, level) {
 // Mount points on the hull as [x along the hull, angle around it in degrees]. 0 faces the camera when the sub
 // heads right, 90 is the top, 180 is the other flank, 270 is the bottom. Lists alternate flanks at different
 // spots, so the sub looks crammed from both sides without being a mirror image. Parts are handed out in order.
+// The top of the hull from x -0.5 to 0.9 stays clear for the conning tower and periscope.
 export const SOCKETS = {
   cannon: [[0.95, -38], [0.7, 205], [0.3, 40], [0.45, 150], [-0.35, -20], [0.1, 235]],
   torpedo: [[-0.1, -8], [-0.6, 175], [0.15, -48], [-0.9, 215], [-0.2, 135]],
-  missile: [[-0.45, 82], [0.85, 100], [-1.2, 70], [0.25, 112], [-0.7, 125]],
-  shield: [[-1.0, 50], [1.2, 140], [-1.5, 200], [0.6, -85], [-0.3, 120]],
+  missile: [[-1.0, 82], [1.25, 72], [-1.5, 62], [1.35, 108], [-1.0, 128]],
+  shield: [[-1.3, 40], [1.2, 140], [-1.5, 200], [0.6, -85], [-0.6, 160]],
   grapple: [[0.45, -90]],
-  sonar: [[-0.95, 100]],
+  sonar: [[-1.6, 100]],
   propulsion: [[-0.65, -72], [0.7, 250], [-1.25, -40], [0.1, 230]],
-  spotlight: [[0.75, 70], [1.2, 135], [0.2, 24], [1.35, -55]],
+  spotlight: [[1.2, 52], [1.2, 135], [0.2, 24], [1.35, -55]],
   junk: [
-    ['junk_crate', -0.35, 58], ['junk_ammo', 0.95, 130], ['junk_canister', -1.15, 8], ['junk_toolbox', 1.3, 195],
-    ['junk_barrel', -1.45, 115], ['junk_crate', 0.55, -30], ['junk_ammo', -0.5, 220], ['junk_canister', 0.1, 70],
-    ['junk_crate', -1.6, 160], ['junk_toolbox', 0.0, 118],
+    ['junk_crate', -0.55, 45], ['junk_ammo', 0.95, 130], ['junk_canister', -1.15, 8], ['junk_toolbox', 1.3, 195],
+    ['junk_barrel', -1.45, 115], ['junk_crate', 0.55, -30], ['junk_ammo', -0.5, 220], ['junk_canister', -0.2, 22],
+    ['junk_crate', -1.6, 160], ['junk_toolbox', -0.3, 150],
   ],
 };
 

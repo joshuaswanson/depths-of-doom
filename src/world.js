@@ -316,8 +316,11 @@ function makeFishGeometry() {
   return new THREE.ShapeGeometry(shape);
 }
 
-// Jellies only drift in the dark lower reaches of the trenches.
-const JELLY_CEILING = 90;
+// Jellies gather in one glowing layer in the dark trenches, with a few stragglers drifting deeper.
+const JELLY_CEILING = 96;
+const JELLY_LAYER = [-122, -100];
+const JELLY_DEEP = [-200, -128];
+const JELLY_STRAGGLERS = 3;
 const JELLY_COLORS = ['#ff5fd2', '#5fe8ff', '#b47bff', '#7dffb4', '#ffb35f'];
 
 // Jelly flesh: see-through in the middle, glowing at the silhouette, with tentacles rippling down their length.
@@ -432,9 +435,10 @@ export class World {
     for (let x = -70; x < 70; x += rand(10, 22)) this.spawnChain(x);
     this.makeFish();
 
-    this.jellies = Array.from({ length: 16 }, () => {
+    this.jellies = Array.from({ length: 18 }, (_, i) => {
       const j = makeJelly(this.uniforms);
-      j.position.set(rand(-40, 40), rand(-200, -JELLY_CEILING), rand(-25, -2));
+      j.userData.band = i < JELLY_STRAGGLERS ? JELLY_DEEP : JELLY_LAYER;
+      j.position.set(rand(-40, 40), rand(...j.userData.band), rand(-25, -2));
       scene.add(j);
       return j;
     });
@@ -653,8 +657,8 @@ export class World {
       u.bell.scale.set(1 + pulse * 0.1, 1 - pulse * 0.12, 1 + pulse * 0.1);
       j.position.y += (u.drift + Math.max(0, pulse) * 0.6) * dt;
       const floor = floorY(j.position.x) + 3;
-      if (j.position.y > -JELLY_CEILING || j.position.y < floor) {
-        j.position.y = Math.max(floor + 2, Math.min(-JELLY_CEILING - 4, cy - rand(4, 14)));
+      if (j.position.y > u.band[1] + 2 || j.position.y < Math.max(floor, u.band[0] - 2)) {
+        j.position.y = Math.max(floor + 2, rand(u.band[0], u.band[1] - 4));
       }
       j.position.x = wrap(j.position.x, cx, 40);
       j.visible = floorY(j.position.x) < -JELLY_CEILING - 10 && this.dark > 0.45;

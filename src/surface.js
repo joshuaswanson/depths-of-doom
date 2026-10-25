@@ -15,7 +15,7 @@ const PROFILE_BY_MATERIAL = {
   enemy_old: ['wreck_hull', 'wreck_red'],
   coral: ['coral_pink', 'coral_purple', 'coral_orange'],
   weed: ['seaweed', 'seaweed_dark'],
-  angler: ['angler_skin', 'angler_belly', 'angler_fin'],
+  angler: ['angler_belly', 'angler_fin'],
 };
 
 const PROFILES = {
@@ -149,7 +149,60 @@ function glass(color, opacity) {
   return m;
 }
 
+// Shared clock for animated surface effects; main bumps it every frame.
+export const SHADER_TIME = { value: 0 };
+
+// Anglerfish skin: wet and warty, mottled indigo fading to a pale belly, with photophores pulsing along the flanks.
+function anglerSkin() {
+  const m = new THREE.MeshPhysicalMaterial({
+    color: '#ffffff', roughness: 0.42, clearcoat: 0.7, clearcoatRoughness: 0.3, vertexColors: true,
+    sheen: 0.5, sheenColor: new THREE.Color('#6a5cff'), sheenRoughness: 0.5,
+  });
+  m.onBeforeCompile = (shader) => {
+    shader.uniforms.uTime = SHADER_TIME;
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vDetailPos;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvDetailPos = transformed;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', `#include <common>\nvarying vec3 vDetailPos;\nuniform float uTime;\n${NOISE_GLSL}`)
+      .replace('#include <color_fragment>', /* glsl */ `#include <color_fragment>
+        vec3 ap = vDetailPos * 3.2;
+        float aMottle = dFbm( ap );
+        float aSpots = smoothstep( 0.6, 0.7, dNoise( ap * 2.3 + 4.0 ) );
+        float aWart = pow( dNoise( ap * 5.0 ), 4.0 );
+        float aBelly = smoothstep( 0.05, -0.42, vDetailPos.y );
+        vec3 aCol = mix( vec3( 0.07, 0.055, 0.17 ), vec3( 0.2, 0.15, 0.36 ), aMottle * 0.9 );
+        aCol = mix( aCol, vec3( 0.36, 0.3, 0.5 ), aBelly * 0.75 );
+        aCol *= 1.0 - aSpots * 0.55;
+        aCol += vec3( 0.12, 0.1, 0.2 ) * aWart;
+        diffuseColor.rgb *= aCol;`)
+      .replace('#include <normal_fragment_maps>', /* glsl */ `#include <normal_fragment_maps>
+        float aHeight = aWart * 1.2 + aMottle * 0.4 - aSpots * 0.2 + dNoise( ap * 11.0 ) * 0.15;
+        normal = dPerturb( - vViewPosition, normal, vec2( dFdx( aHeight ), dFdy( aHeight ) ) * 0.16, faceDirection );`)
+      .replace('#include <emissivemap_fragment>', /* glsl */ `#include <emissivemap_fragment>
+        vec3 cellP = vDetailPos * vec3( 6.0, 9.0, 9.0 );
+        vec3 cell = floor( cellP );
+        vec3 centre = cell + 0.5 + ( vec3( dHash( cell ), dHash( cell + 7.1 ), dHash( cell + 3.3 ) ) - 0.5 ) * 0.6;
+        float dot2 = smoothstep( 0.2, 0.05, length( cellP - centre ) );
+        float flank = smoothstep( 0.35, 0.55, abs( vDetailPos.z ) ) * smoothstep( 0.35, -0.1, vDetailPos.y )
+          * step( 0.55, dHash( cell + 11.0 ) );
+        float pulse = 0.55 + 0.45 * sin( uTime * 2.2 + dHash( cell ) * 6.28 );
+        totalEmissiveRadiance += vec3( 0.35, 1.0, 1.0 ) * dot2 * flank * pulse * 2.2;
+        totalEmissiveRadiance += vec3( 0.2, 0.15, 0.6 ) * pow( 1.0 - saturate( dot( normal, normalize( vViewPosition ) ) ), 3.0 ) * 0.35;`);
+  };
+  m.customProgramCacheKey = () => 'angler-skin';
+  return m;
+}
+
+function toothMaterial() {
+  return new THREE.MeshPhysicalMaterial({
+    color: '#f3ead2', roughness: 0.2, clearcoat: 1, vertexColors: true, emissive: '#2a3036', emissiveIntensity: 1,
+  });
+}
+
 const REPLACEMENTS = {
+  angler_skin: anglerSkin,
+  tooth: toothMaterial,
   viewport_glass: () => glass('#bff3ff', 0.18),
   enemy_glass: () => glass('#7a2a2a', 0.35),
 };
@@ -167,8 +220,9 @@ export function applySurfaceDetail(root) {
     const make = REPLACEMENTS[o.material.name];
     if (make) {
       if (!replaced.has(o.material.name)) replaced.set(o.material.name, make());
+      const transparent = replaced.get(o.material.name).transparent;
       o.material = replaced.get(o.material.name);
-      o.renderOrder = 2;
+      if (transparent) o.renderOrder = 2;
       return;
     }
     if (patched.has(o.material)) return;
