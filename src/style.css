@@ -209,8 +209,8 @@ html, body {
 
 .slot {
   position: relative;
-  width: 8.2vw;
-  min-width: 78px;
+  width: 7.4vw;
+  min-width: 70px;
   aspect-ratio: 1 / 0.92;
   padding: 0.4vw 0.4vw 0.5vw;
   display: flex;

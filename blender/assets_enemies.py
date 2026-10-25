@@ -3,44 +3,9 @@ import math
 
 from mathutils import Vector
 
-from assets_player import band, propeller, rivet_ring
-from body import Body, face_dir
+from assets_player import band, nose_viewport, propeller, rivet_ring
+from body import Body
 from kit import Part, empty, frame, trs
-
-EYE = [(-0.16, 0.03), (0.15, 0.12), (0.12, -0.07), (-0.08, -0.09)]
-BROW = [(-0.2, 0.08), (0.2, 0.22), (0.2, 0.3), (-0.2, 0.15)]
-
-
-def mouth_outline(width=0.62, height=0.24, teeth=4):
-    top = []
-    for i in range(teeth * 2 + 1):
-        x = -width / 2 + width * i / (teeth * 2)
-        y = 0.06 * (x / (width / 2)) ** 2 + (0.0 if i % 2 == 0 else -0.08)
-        top.append((x, y))
-    bottom = []
-    for i in range(1, 12):
-        t = i / 12
-        x = width / 2 - width * t
-        y = -height * math.sin(math.pi * t) + 0.06 * (x / (width / 2)) ** 2
-        if i in (4, 8):
-            bottom.append((x, y + 0.08))
-        bottom.append((x, y))
-    return top + bottom
-
-
-def angry_face(part, P, body, center, yaw, pitch, scale=1.0, depth=0.16):
-    for side in (-1, 1):
-        p, n = body.ray(center, face_dir(yaw + side * 13 * scale, pitch + 9 * scale))
-        m = frame(p, n) @ trs(scale=(scale, scale, 1))
-        pts = [(x * side, y) for x, y in EYE]
-        part.extrude(P["enemy_glow"], pts if side > 0 else list(reversed(pts)), depth=depth, matrix=m, bevel=0.015)
-        brow = [(x * side, y) for x, y in BROW]
-        part.extrude(P["enemy_hull"], brow if side > 0 else list(reversed(brow)), depth=depth * 1.4, matrix=m,
-                     bevel=0.02)
-    p, n = body.ray(center, face_dir(yaw, pitch - 10 * scale))
-    part.extrude(P["enemy_glow"], mouth_outline(), depth=depth * 1.3, matrix=frame(p, n) @ trs(scale=(scale, scale, 1)),
-                 bevel=0.012)
-
 
 def skull(part, P, matrix, size=1.0):
     def m(loc=(0, 0, 0), rot=(0, 0, 0), scale=(1, 1, 1)):
@@ -85,7 +50,7 @@ def red_light(part, P, matrix, radius=0.07):
                 rings=8)
 
 
-def enemy_sub(P, name="enemy_sub", length=3.4, radius=0.85, face_scale=1.0, tower=True, skull_mark=False,
+def enemy_sub(P, name="enemy_sub", length=3.4, radius=0.85, tower=True, skull_mark=False,
               spikes=0, turret=False):
     root = empty(name)
     b = Body(length=length, radius=radius, p_front=2.2, p_back=2.7)
@@ -98,7 +63,8 @@ def enemy_sub(P, name="enemy_sub", length=3.4, radius=0.85, face_scale=1.0, towe
     rivet_ring(part, P["enemy_plate"], b, -h * 0.3, count=20, size=0.03)
     rivet_ring(part, P["enemy_plate"], b, h * 0.2, count=20, size=0.03)
     enemy_tail(part, P, b, h * 0.75, h * 1.38, b.r(h * 0.75))
-    angry_face(part, P, b, (-h * 0.45, 0, 0), yaw=-90, pitch=2, scale=face_scale * radius / 0.85)
+    nose_viewport(part, (P["enemy_plate"], P["enemy_red"], P["steel"], P["enemy_glass"], P["eye_shine"]), b,
+                  sign=-1, glow=P["enemy_light"])
 
     for mirror in (False, True):
         side = (lambda a: math.pi - a) if mirror else (lambda a: a)
@@ -157,7 +123,7 @@ def enemy_sub(P, name="enemy_sub", length=3.4, radius=0.85, face_scale=1.0, towe
 
 
 def enemy_scout(P):
-    return enemy_sub(P, "enemy_scout", length=2.3, radius=0.66, face_scale=1.1)
+    return enemy_sub(P, "enemy_scout", length=2.3, radius=0.66)
 
 
 def enemy_gunner(P):
@@ -165,7 +131,7 @@ def enemy_gunner(P):
 
 
 def enemy_boss(P):
-    return enemy_sub(P, "enemy_boss", length=5.8, radius=1.45, face_scale=1.05, skull_mark=True, spikes=5, turret=True)
+    return enemy_sub(P, "enemy_boss", length=5.8, radius=1.45, skull_mark=True, spikes=5, turret=True)
 
 
 def mine(P):

@@ -94,7 +94,7 @@ export class Hud {
       <div class="controls">
         <div><kbd>WASD</kbd> / <kbd>Arrows</kbd> swim</div>
         <div>Guns fire on their own</div>
-        <div><kbd>1</kbd>-<kbd>8</kbd> or click to bolt on upgrades</div>
+        <div><kbd>1</kbd>-<kbd>9</kbd> or click to bolt on upgrades</div>
         <div><kbd>P</kbd> pause &nbsp; <kbd>M</kbd> mute</div>
       </div></div>`;
     this.overlay.querySelector('.big-btn').addEventListener('click', () => this.onStart());

@@ -15,6 +15,8 @@ export const UPGRADES = [
     blurb: 'Radar range and +15% damage' },
   { id: 'propulsion', name: 'Propulsion', icon: 'propulsion', start: 1, max: 5, base: 40, growth: 1.7,
     blurb: 'Extra thrusters for speed' },
+  { id: 'spotlight', name: 'Spotlight', icon: 'spotlight', start: 0, max: 4, base: 45, growth: 1.7,
+    blurb: 'Searchlights for the depths. Dazzled foes slow down and fire less' },
 ];
 
 export function upgradeCost(def, level) {
@@ -32,6 +34,7 @@ export const SOCKETS = {
   grapple: [[0.45, -90]],
   sonar: [[-0.95, 100]],
   propulsion: [[-0.65, -72], [0.7, 250], [-1.25, -40], [0.1, 230]],
+  spotlight: [[0.75, 70], [1.2, 135], [0.2, 24], [1.35, -55]],
   junk: [
     ['junk_crate', -0.35, 58], ['junk_ammo', 0.95, 130], ['junk_canister', -1.15, 8], ['junk_toolbox', 1.3, 195],
     ['junk_barrel', -1.45, 115], ['junk_crate', 0.55, -30], ['junk_ammo', -0.5, 220], ['junk_canister', 0.1, 70],
@@ -49,6 +52,7 @@ export const PART_MODEL = {
   grapple: 'part_grapple',
   sonar: 'part_sonar',
   propulsion: 'part_thruster',
+  spotlight: 'part_spotlight',
 };
 
 export function partCount(cat, level) {

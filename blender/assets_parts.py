@@ -173,6 +173,33 @@ def part_sonar(P):
     return root
 
 
+def part_spotlight(P):
+    root = empty("part_spotlight")
+    base = Part()
+    mount_plate(base, P, size=(0.34, 0.3, 0.08))
+    base.cylinder(P["gunmetal"], loc=(0, 0, 0.12), radius=0.1, depth=0.1, segs=16, bevel=0.02)
+    for y in (-0.2, 0.2):
+        base.box(P["red"], loc=(0, y, 0.3), size=(0.12, 0.05, 0.4), bevel=0.02)
+        base.cylinder(P["steel"], loc=(0, y * 1.12, 0.42), radius=0.045, depth=0.05, rot=(math.pi / 2, 0, 0), segs=12)
+    base.box(P["red"], loc=(0, 0, 0.13), size=(0.12, 0.45, 0.06), bevel=0.02)
+    base.build("spotlight_yoke", root)
+
+    head = empty("spotlight_head", root, (0, 0, 0.42))
+    h = Part()
+    body = [(-0.32, 0.0), (-0.32, 0.12), (-0.28, 0.16), (0.05, 0.17), (0.22, 0.2), (0.3, 0.21), (0.3, 0.0)]
+    h.lathe(P["yellow"], body, segs=32, sharp=(1, 5))
+    for x in (-0.24, -0.18, -0.12):
+        h.lathe(P["steel_dark"], [(x - 0.018, 0.15), (x - 0.018, 0.19), (x + 0.018, 0.19), (x + 0.018, 0.15)],
+                segs=28, loop=True)
+    h.torus(P["steel"], loc=(0.3, 0, 0), major=0.2, minor=0.035, rot=ALONG_X, segs=32, tube_segs=10)
+    h.cylinder(P["spot_lens"], loc=(0.3, 0, 0), radius=0.185, depth=0.03, rot=ALONG_X, segs=28)
+    h.sphere(P["eye_shine"], loc=(0.32, -0.06, 0.08), scale=(0.01, 0.04, 0.025), segs=8, rings=6)
+    h.tube(P["gunmetal"], [(-0.12, 0, 0.16), (-0.1, 0, 0.27), (0.1, 0, 0.27), (0.12, 0, 0.18)], radius=0.022, segs=8)
+    h.build("spotlight_head_mesh", head)
+    empty("lens", head, (0.33, 0, 0))
+    return root
+
+
 def part_thruster(P):
     root = empty("part_thruster")
     part = Part()

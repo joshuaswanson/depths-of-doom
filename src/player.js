@@ -10,7 +10,8 @@ const YAW = {
   right: { swim: 0, idle: -0.75 },
   left: { swim: -Math.PI, idle: -(Math.PI - 0.75) },
 };
-const DRAG = 1.5;
+const DRAG = 1.9;
+const MAX_SPOTLIGHTS = 4;
 const GRAVITY = 18;
 const AIR_DRAG = 0.15;
 const TURN_RATE = 2.4;
@@ -135,6 +136,19 @@ export class Player {
     this.beam = makeBeam();
     this.beam.rotation.z = -0.12;
     this.lamp.add(this.beam);
+    // A fixed pool of searchlights keeps the scene's light count constant, so buying one never recompiles shaders.
+    this.spots = Array.from({ length: MAX_SPOTLIGHTS }, () => {
+      const light = new THREE.SpotLight('#fff1c9', 0, 50, 0.3, 0.5, 1.0);
+      light.target.position.set(10, 0, 0);
+      const beam = makeBeam();
+      beam.scale.set(1.6, 0.75, 0.75);
+      beam.userData.light = true;
+      const holder = new THREE.Group();
+      holder.add(light, light.target, beam);
+      holder.visible = false;
+      this.rig.add(holder);
+      return { holder, light, beam };
+    });
     this.glow = new THREE.PointLight('#9fdfff', 0, 12, 1.4);
     this.glow.position.set(0, 1.5, 3);
     this.rig.add(this.glow);
@@ -153,6 +167,7 @@ export class Player {
   reset() {
     this.levels = Object.fromEntries(UPGRADES.map((u) => [u.id, u.start]));
     for (const part of this.parts) part.pivot.removeFromParent();
+    for (const spot of this.spots ?? []) spot.holder.visible = false;
     this.parts = [];
     this.group.position.set(0, 0, 0);
     this.vel.set(0, 0);
@@ -180,7 +195,7 @@ export class Player {
 
   get speed() {
     const weight = this.parts.length * 0.11 + (this.levels.hull - 1) * 0.35;
-    return Math.max(4.5, 8 + (this.levels.propulsion - 1) * 1.6 - weight);
+    return Math.max(5, 9 + (this.levels.propulsion - 1) * 1.6 - weight);
   }
 
   get damageMult() {
@@ -226,6 +241,13 @@ export class Player {
       props: findNodes(obj, 'thruster_prop'), dish: findNode(obj, 'sonar_dish'),
       arm: findNode(obj, 'grapple_arm'), claw: findNode(obj, 'grapple_claw'), timer: Math.random(),
     };
+    if (cat === 'spotlight') {
+      const lens = findNode(obj, 'lens');
+      part.spot = this.spots[this.parts.filter((q) => q.cat === 'spotlight').length];
+      part.spot.holder.visible = true;
+      lens.add(part.spot.holder);
+      part.lens = lens;
+    }
     this.parts.push(part);
     return part;
   }
@@ -273,7 +295,7 @@ export class Player {
     const parts = [this.hullPivot, ...this.parts.map((p) => p.pivot)];
     for (const root of parts) {
       root.traverse((o) => {
-        if (!o.isMesh) return;
+        if (!o.isMesh || o.userData.light) return;
         o.geometry.computeBoundingBox();
         box.union(o.geometry.boundingBox.clone().applyMatrix4(toLocal.clone().multiply(o.matrixWorld)));
       });
@@ -358,6 +380,16 @@ export class Player {
     this.beam.material.uniforms.uStrength.value = 0.22 * dark;
     this.beam.visible = dark > 0.02;
     this.glow.intensity = 14 * dark;
+    const power = 1 + 0.3 * this.levels.spotlight;
+    for (const spot of this.spots) {
+      spot.light.intensity = spot.holder.visible ? (6 + 90 * dark) * power : 0;
+      spot.light.distance = 40 + 8 * this.levels.spotlight;
+      spot.beam.material.uniforms.uStrength.value = 0.02 + 0.12 * dark;
+    }
+  }
+
+  get spotRange() {
+    return 22 + 5 * this.levels.spotlight;
   }
 
   update(dt, input, bounds) {

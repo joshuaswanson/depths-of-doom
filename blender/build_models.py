@@ -26,6 +26,7 @@ ASSETS = {
     "player_hull": assets_player.player_hull,
     **{name: getattr(assets_parts, name) for name in (
         "part_cannon", "part_torpedo", "part_missile", "part_shield", "part_grapple", "part_sonar", "part_thruster",
+        "part_spotlight",
         "junk_crate", "junk_ammo", "junk_toolbox", "junk_canister", "junk_barrel", "junk_duck",
         "proj_torpedo", "proj_missile", "proj_player_missile", "pickup_coin",
     )},
@@ -45,6 +46,7 @@ def parse_args():
     ap.add_argument("--no-export", action="store_true")
     ap.add_argument("--blend", default="")
     ap.add_argument("--no-bake", action="store_true")
+    ap.add_argument("--yaw", type=float, default=35)
     return ap.parse_args(argv)
 
 
@@ -124,7 +126,7 @@ def main():
         if not args.no_export:
             export_glb(root, os.path.join(MODEL_DIR, f"{name}.glb"))
         if cam:
-            render_preview(root, cam, os.path.join(args.preview, f"{name}.png"), yaw=-35 if name.startswith("enemy") else 35)
+            render_preview(root, cam, os.path.join(args.preview, f"{name}.png"), yaw=-args.yaw if name.startswith("enemy") else args.yaw)
         lo, hi = world_bounds(root)
         root.location.x = offset - lo.x
         offset += (hi.x - lo.x) + 1.0

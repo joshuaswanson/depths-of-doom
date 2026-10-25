@@ -2,7 +2,7 @@ import math
 
 from mathutils import Vector
 
-from body import Body, face_dir
+from body import Body
 from kit import Part, empty, frame, trs
 
 BODY = Body(length=4.0, radius=1.0, p_front=2.6, p_back=2.3)
@@ -40,20 +40,32 @@ def porthole(part, P, body, x, theta, radius=0.17):
                 segs=8, rings=6)
 
 
-def cartoon_face(part, P, body, center, yaw, pitch, scale=1.0, eye_gap=11, mouth=True):
-    for side in (-1, 1):
-        p, n = body.ray(center, face_dir(yaw + side * eye_gap * scale, pitch + 8))
-        m = frame(p, n)
-        part.sphere(P["black"], matrix=m @ trs(scale=(0.1 * scale, 0.15 * scale, 0.05)), segs=20, rings=12)
-        part.sphere(P["eye_shine"], matrix=m @ trs((-0.03 * scale, 0.06 * scale, 0.04),
-                                                     scale=(0.032 * scale, 0.04 * scale, 0.02)), segs=10, rings=8)
-    if mouth:
-        pts = []
-        for i in range(13):
-            t = -1 + 2 * i / 12
-            p, n = body.ray(center, face_dir(yaw + t * 12 * scale, pitch - 9 * scale + 5 * scale * t * t))
-            pts.append(p + n * 0.012)
-        part.tube(P["black"], pts, radius=lambda t: 0.018 + 0.016 * math.sin(math.pi * t), segs=10)
+def nose_viewport(part, mats, body, sign=1, fraction=0.66, glow=None):
+    """A big bolted glass viewport capping the nose. `sign` picks the nose end: +1 for +X, -1 for -X."""
+    target = body.radius * fraction
+    x = body.x0
+    while body.r(x + sign * 0.01) > target:
+        x += sign * 0.01
+    r0 = body.r(x)
+    rim, ring, bolt, glass, shine = mats
+
+    def at(dx):
+        return (x + sign * dx, 0, 0)
+
+    along = (0, math.pi / 2, 0)
+    part.cylinder(rim, loc=at(-0.04), radius=r0 * 1.02, depth=0.16, rot=along, segs=40)
+    part.torus(rim, loc=at(0.04), major=r0 * 0.9, minor=r0 * 0.16, rot=along, segs=40, tube_segs=12)
+    part.torus(ring, loc=at(0.1), major=r0 * 0.72, minor=r0 * 0.06, rot=along, segs=40, tube_segs=10)
+    for i in range(12):
+        a = 2 * math.pi * (i + 0.5) / 12
+        part.sphere(bolt, loc=(x + sign * (0.04 + r0 * 0.14), r0 * 0.9 * math.cos(a), r0 * 0.9 * math.sin(a)),
+                    scale=r0 * 0.065, segs=10, rings=8)
+    if glow is not None:
+        part.sphere(glow, loc=at(-0.02), scale=(r0 * 0.12, r0 * 0.3, r0 * 0.3), segs=16, rings=10)
+    part.sphere(glass, loc=at(0.06), scale=(r0 * 0.28, r0 * 0.74, r0 * 0.74), segs=32, rings=16)
+    part.sphere(shine, loc=(x + sign * (0.06 + r0 * 0.2), -r0 * 0.3, r0 * 0.32),
+                scale=(0.012, r0 * 0.16, r0 * 0.07), rot=(0.7, 0, 0), segs=10, rings=6)
+    return x
 
 
 def player_hull(P):
@@ -76,12 +88,14 @@ def player_hull(P):
         part.extrude(P["orange"], [(x, z * sz) for x, z in fin], depth=0.12, rot=(math.pi / 2, 0, 0), bevel=0.04)
         part.extrude(P["orange"], [(x, y * sz) for x, y in fin], depth=0.12, bevel=0.04)
 
-    cartoon_face(part, P, b, (1.0, 0, 0.05), yaw=90, pitch=2, scale=1.25)
+    nose_x = nose_viewport(part, (P["gunmetal"], P["brass"], P["brass"], P["viewport_glass"], P["eye_shine"]), b)
+    band(part, P["white"], b, nose_x - 0.38, nose_x - 0.16, lift=0.02)
+    rivet_ring(part, P["brass"], b, nose_x - 0.27, count=20, size=0.03)
     for theta in (math.radians(4), math.radians(176)):
         porthole(part, P, b, 0.35, theta)
         porthole(part, P, b, -0.3, theta, radius=0.14)
 
-    lamp = frame(b.ray((1.0, 0, -0.3), (1, 0, -0.55))[0], Vector((1, 0, -0.45)))
+    lamp = frame(b.ray((1.0, 0, -0.3), (0.8, 0, -1.0))[0], Vector((0.8, 0, -0.7)))
     part.cylinder(P["steel_dark"], matrix=lamp @ trs((0, 0, 0.02)), radius=0.17, depth=0.14, bevel=0.03)
     part.cylinder(P["lamp"], matrix=lamp @ trs((0, 0, 0.09)), radius=0.13, depth=0.03, segs=20)
 

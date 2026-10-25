@@ -424,20 +424,40 @@ export class Game {
     e.vel.lerp(desired, 1 - Math.exp(-dt * turn));
   }
 
+  // Enemies caught in a searchlight beam are dazzled for a moment.
+  dazzleEnemies(dt) {
+    const cones = this.player.partsOf('spotlight').map((part) => {
+      const origin = part.lens.getWorldPosition(new THREE.Vector3());
+      const dir = new THREE.Vector3(1, 0, 0).transformDirection(part.lens.matrixWorld);
+      return { origin, dir: new THREE.Vector2(dir.x, dir.y).normalize() };
+    });
+    const range = this.player.spotRange;
+    for (const e of this.enemies) {
+      e.dazzled = Math.max(0, (e.dazzled ?? 0) - dt);
+      for (const c of cones) {
+        const to = new THREE.Vector2(e.obj.position.x - c.origin.x, e.obj.position.y - c.origin.y);
+        const d = to.length();
+        if (d < range && to.dot(c.dir) > d * Math.cos(0.32)) e.dazzled = 0.3;
+      }
+    }
+  }
+
   updateEnemies(dt) {
     const pl = this.player;
     const pc = pl.center;
-    const fireMult = 1 + this.wave * 0.05;
     const desired = new THREE.Vector2();
+    this.dazzleEnemies(dt);
     for (const e of this.enemies) {
       if (e.dead) continue;
       e.t += dt;
+      const dazzle = e.dazzled > 0 ? 0.5 : 1;
+      const fireMult = (1 + this.wave * 0.05) * dazzle;
       const p = e.obj.position;
       const toP = new THREE.Vector2(pc.x - p.x, pc.y - p.y);
       const dist = toP.length();
       const dir = toP.clone().divideScalar(dist || 1);
       const tangent = new THREE.Vector2(-dir.y, dir.x).multiplyScalar(e.orbit);
-      const speed = e.def.speed + this.wave * 0.06;
+      const speed = (e.def.speed + this.wave * 0.06) * (e.dazzled > 0 ? 0.6 : 1);
       const visible = this.onScreen(p.x, p.y, -0.5);
 
       if (e.type === 'scout') {
@@ -472,7 +492,7 @@ export class Game {
         const range = dist - 11;
         desired.copy(dir).multiplyScalar(THREE.MathUtils.clamp(range, -1, 1) * speed).add(tangent.clone().multiplyScalar(speed * 0.35));
         this.steerEnemy(e, desired, dt, 0.8);
-        e.fire -= dt * (1 + this.wave * 0.02);
+        e.fire -= dt * (1 + this.wave * 0.02) * dazzle;
         if (e.fire <= 0 && visible) {
           e.attack = (e.attack + 1) % 3;
           const base = Math.atan2(dir.y, dir.x);

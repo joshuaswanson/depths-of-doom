@@ -29,6 +29,7 @@ ICONS = {
     "sonar": (assets_parts.icon_sonar, (0, 0, 0), 5),
     "propulsion": (assets_parts.icon_propeller, (0, 0, math.pi / 2), 0),
     "coin": (assets_parts.pickup_coin, (0, 0, 0), 0),
+    "spotlight": (assets_parts.part_spotlight, (0, 0, 0), 30),
 }
 
 

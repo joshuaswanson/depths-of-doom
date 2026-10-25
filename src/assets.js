@@ -4,7 +4,7 @@ import { applySurfaceDetail } from './surface.js';
 
 const MODEL_NAMES = [
   'player_hull', 'part_cannon', 'part_torpedo', 'part_missile', 'part_shield', 'part_grapple', 'part_sonar',
-  'part_thruster', 'junk_crate', 'junk_ammo', 'junk_toolbox', 'junk_canister', 'junk_barrel', 'junk_duck',
+  'part_thruster', 'part_spotlight', 'junk_crate', 'junk_ammo', 'junk_toolbox', 'junk_canister', 'junk_barrel', 'junk_duck',
   'proj_torpedo', 'proj_missile', 'proj_player_missile', 'pickup_coin', 'enemy_scout', 'enemy_gunner', 'enemy_boss',
   'mine', 'ruin_pillar_a', 'ruin_pillar_b', 'ruin_arch', 'ruin_wall', 'ruin_pier', 'ruin_tower', 'anchor', 'chain',
   'seaweed_a', 'seaweed_b', 'coral_pink', 'coral_orange', 'coral_brain', 'rock_a', 'rock_b',
