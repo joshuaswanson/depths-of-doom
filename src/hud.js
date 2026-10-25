@@ -58,10 +58,11 @@ export class Hud {
     this.bar = el('div', 'upgrade-bar');
     this.slots = UPGRADES.map((def) => {
       const slot = el('button', 'slot', `
-        <img src="${ICON(def.icon)}" alt="">
+        <span class="bolt tl"></span><span class="bolt tr"></span><span class="bolt bl"></span><span class="bolt br"></span>
+        <span class="port"><img src="${ICON(def.icon)}" alt=""></span>
         <span class="name">${def.name}</span>
         <span class="level"></span>
-        <span class="progress"><span class="fill"></span></span>
+        <span class="price"><img src="${ICON('coin')}" alt=""><span class="amount"></span></span>
         <span class="tip"><b>${def.name}</b><span class="blurb">${def.blurb}</span><span class="cost"></span></span>`);
       slot.addEventListener('pointerdown', (e) => {
         e.preventDefault();
@@ -69,7 +70,7 @@ export class Hud {
       });
       this.bar.append(slot);
       return {
-        def, slot, level: slot.querySelector('.level'), fill: slot.querySelector('.fill'),
+        def, slot, level: slot.querySelector('.level'), amount: slot.querySelector('.amount'),
         cost: slot.querySelector('.cost'),
       };
     });
@@ -184,10 +185,12 @@ export class Hud {
       const room = player.hasRoomFor(s.def.id);
       const slots = s.def.id === 'hull' ? ` · ${player.mountsUsed}/${player.mountCapacity}` : '';
       s.level.textContent = maxed ? `MAX${slots}` : `Lv. ${lvl}${slots}`;
+      const affordable = !maxed && room && coins >= cost;
+      s.amount.textContent = maxed ? 'MAX' : !room ? 'NO ROOM' : cost;
+      s.cost.textContent = maxed ? 'Fully bolted' : !room ? 'No room. Upgrade the Hull first.' : `Cost: ${cost} coins`;
       s.slot.classList.toggle('noroom', !maxed && !room);
-      s.fill.style.width = `${maxed ? 100 : Math.min(100, (coins / cost) * 100)}%`;
-      s.cost.textContent = maxed ? 'Fully bolted' : !room ? 'No room — upgrade the Hull' : `Cost: ${cost} coins`;
-      s.slot.classList.toggle('affordable', !maxed && room && coins >= cost);
+      s.slot.classList.toggle('affordable', affordable);
+      s.slot.classList.toggle('locked', !affordable && !maxed);
       s.slot.classList.toggle('maxed', maxed);
     }
 
