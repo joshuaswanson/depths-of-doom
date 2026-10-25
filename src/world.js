@@ -595,6 +595,8 @@ const GULL_SCALE = 1.3;
 const GULL_SCARE = 12;
 const GULL_WARY = 26;
 const GULL_CLEARANCE = 0.9;
+// How long a gull needs from the first flap to being clear of the water.
+const GULL_TAKEOFF_TIME = 1.6;
 const GULL_FPS = 24;
 let gullClips = null;
 
@@ -638,6 +640,16 @@ function makeGull() {
     vel: new THREE.Vector2(), dir: 1,
   };
   return holder;
+}
+
+// Seconds until the sub reaches a floating gull at its current velocity, along the surface or rising up from below.
+function arrivalTime(gull, sub, vel) {
+  const dx = gull.position.x - sub.x;
+  let eta = Infinity;
+  const closing = Math.sign(dx) * vel.x;
+  if (closing > 0.5 && sub.y > SURFACE_Y - 7) eta = Math.max(0, Math.abs(dx) - 2) / closing;
+  if (vel.y > 0.5 && Math.abs(dx) < GULL_SCARE && sub.y < SURFACE_Y) eta = Math.min(eta, (SURFACE_Y - sub.y) / vel.y);
+  return eta;
 }
 
 // Pushes a gull out of an ellipse around the hull so it never passes through the sub. Floating gulls only slide
@@ -955,19 +967,22 @@ export class World {
         if (visible) treadWater(u, this.time);
         gull.position.y = SURFACE_Y - 0.02 + Math.sin(this.time * 1.4 + gull.position.x * 0.5) * 0.09;
         const gap = sub && sub.y > SURFACE_Y - 7 ? Math.abs(sub.x - gull.position.x) : Infinity;
+        const eta = sub ? arrivalTime(gull, sub, hull.vel) : Infinity;
         // A gull grows uneasy as the sub nears and paddles away faster; the closer the sub gets before it bolts,
-        // the more frantic the escape.
-        const alarm = 1 - THREE.MathUtils.smoothstep(gap, GULL_SCARE * u.nerve, GULL_WARY);
+        // the more frantic the escape. A sub racing in sets it off early enough to be airborne before it arrives.
+        const alarm = Math.max(1 - THREE.MathUtils.smoothstep(gap, GULL_SCARE * u.nerve, GULL_WARY),
+          1 - THREE.MathUtils.smoothstep(eta, GULL_TAKEOFF_TIME, GULL_TAKEOFF_TIME * 2.5));
         if (alarm > 0) {
           u.dir = Math.sign(gull.position.x - sub.x) || 1;
           gull.rotation.y = u.dir > 0 ? 0 : Math.PI;
         }
         gull.rotation.z = Math.sin(this.time * (1.1 + 9 * alarm) + u.phase) * (0.06 + 0.1 * alarm);
         gull.position.x += u.dir * (0.08 + 1.6 * alarm) * dt;
-        if (gap < GULL_SCARE * u.nerve) {
+        if (gap < GULL_SCARE * u.nerve || eta < GULL_TAKEOFF_TIME) {
           u.state = 'takeoff';
           u.t = 0;
-          u.panic = 1.5 + 1.3 * (1 - gap / GULL_SCARE);
+          const urgency = Math.max(1 - gap / GULL_SCARE, 1 - eta / GULL_TAKEOFF_TIME);
+          u.panic = 1.5 + 1.3 * THREE.MathUtils.clamp(urgency, 0, 1);
           u.actions.takeoff.timeScale = u.panic;
           u.actions.fly.timeScale = 1 + 0.45 * u.panic;
           playGull(gull, 'takeoff', 0.1);
