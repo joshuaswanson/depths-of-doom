@@ -153,8 +153,9 @@ def gull_ring(x):
     return best[1], best[2], best[3]
 
 
-def grid_patch(part, P, rows, cols, point, color):
-    """Build a smooth quad patch from point(u, v) -> (Vector, material key) over a rows x cols grid."""
+def grid_patch(part, P, rows, cols, point, color, facing):
+    """Build a smooth quad patch from point(u, v) -> (Vector, material key) over a rows x cols grid. The patch is open,
+    so its faces are turned to point along `facing` (a fixed Vector) instead of trusting automatic normals."""
     bm = part.bm
     verts = [[None] * cols for _ in range(rows)]
     mats = [[None] * cols for _ in range(rows)]
@@ -170,6 +171,10 @@ def grid_patch(part, P, rows, cols, point, color):
             groups.setdefault(color(mats, i, j), []).append(f)
     faces = [f for g in groups.values() for f in g]
     bmesh.ops.recalc_face_normals(bm, faces=faces)
+    for f in faces:
+        f.normal_update()
+    if sum(f.normal.dot(facing) for f in faces) < 0:
+        bmesh.ops.reverse_faces(bm, faces=faces)
     for key, group in groups.items():
         part._paint(group, P[key], True)
 
@@ -180,19 +185,19 @@ def gull_folded_wing(part, P, side):
         x = 0.13 - u * 0.62
         zc, ry, rz = gull_ring(max(x, -0.37))
         tail = max(0.0, -0.3 - x) / 0.19
-        a = math.radians(105 - v * (80 - 50 * tail))
+        a = math.radians(108 - v * (98 - 60 * tail))
         thick = 0.022 * (1 - 0.6 * u)
         r_out = 1.0 + thick * 6
         ry2 = max(ry, 0.06 + 0.02 * (1 - tail)) * r_out
         rz2 = max(rz, 0.05) * r_out
         y = side * (ry2 * math.cos(a) * (1 - 0.55 * tail) + 0.005)
         z = zc + rz2 * math.sin(a) + 0.03 * tail
-        key = "black" if u > 0.74 else ("gull_white" if v > 0.82 else "gull_gray")
+        key = "black" if u > 0.66 else ("gull_white" if v > 0.86 else "gull_gray")
         if u > 0.8 and 0.3 < v < 0.5 and (abs(u - 0.86) < 0.025 or abs(u - 0.94) < 0.02):
             key = "gull_white"
         return Vector((x, y, z)), key
 
-    grid_patch(part, P, 30, 10, point, lambda mats, i, j: mats[i][j])
+    grid_patch(part, P, 30, 10, point, lambda mats, i, j: mats[i][j], Vector((0, side, 0.7)))
 
 
 def gull_flying_wing(part, P, side):
@@ -206,7 +211,7 @@ def gull_flying_wing(part, P, side):
         key = "gull_white" if v > 0.82 else "gull_gray"
         return Vector((x, side * span, z)), key
 
-    grid_patch(part, P, 16, 8, point, lambda mats, i, j: mats[i][j])
+    grid_patch(part, P, 16, 8, point, lambda mats, i, j: mats[i][j], Vector((0, 0, 1)))
     for k in range(5):
         a = -0.15 - k * 0.2
         base = Vector((0.02 - k * 0.032, side * (0.44 + k * 0.006), 0.04))
@@ -223,7 +228,7 @@ def gull_flying_wing(part, P, side):
                 key = "gull_white"
             return co, key
 
-        grid_patch(part, P, 10, 4, feather_point, lambda mats, i, j: mats[i][j])
+        grid_patch(part, P, 10, 4, feather_point, lambda mats, i, j: mats[i][j], Vector((0, 0, 1)))
 
 
 def seagull(P):

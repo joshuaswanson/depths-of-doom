@@ -477,7 +477,7 @@ export class World {
     const u = gull.userData;
     u.state = 'float';
     u.dir = Math.random() < 0.5 ? -1 : 1;
-    gull.position.set(x, SURFACE_Y - 0.05, rand(-6, 2));
+    gull.position.set(x, SURFACE_Y - 0.05, rand(0.7, 1.2));
     gull.rotation.set(0, u.dir > 0 ? 0 : Math.PI, 0);
   }
 
@@ -513,10 +513,10 @@ export class World {
         const climbing = u.vel.y > 2.5;
         const cycle = this.time * (climbing ? 15 : 10) + u.phase;
         const gliding = !climbing && Math.sin(this.time * 0.9 + u.phase) > 0.35;
-        const flap = gliding ? 0.15 + Math.sin(cycle * 0.3) * 0.05 : Math.sin(cycle) * 1.05 + 0.25;
+        const flap = gliding ? 0.35 + Math.sin(cycle * 0.3) * 0.05 : 0.6 + Math.sin(cycle) * 0.7;
         wl.rotation.set(flap, 0, 0);
         wr.rotation.set(-flap, 0, 0);
-        gull.rotation.x = 0.55;
+        gull.rotation.x = 0.32;
         gull.rotation.z = 0.15 + Math.max(0, u.vel.y) * 0.03;
         if (gull.position.y > SURFACE_Y + 22) this.landGull(gull, cx + (Math.random() < 0.5 ? -1 : 1) * rand(30, 44));
       }

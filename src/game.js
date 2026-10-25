@@ -174,6 +174,7 @@ export class Game {
     this.makeBulletMesh();
     this.status = playerStatus(this.scene);
     this.makeMineChains();
+    this.brokenChains = [];
     this.tmp = new THREE.Vector3();
     this.radarSweep = 0;
     this.reset();
@@ -226,6 +227,20 @@ export class Game {
         this.chainMesh.setMatrixAt(n++, m);
       }
     }
+    // Chains of exploded mines stay anchored; the torn end drops to the seabed and lies there a while.
+    for (const c of this.brokenChains) {
+      dir.set(c.end.x - c.anchor.x, c.end.y - c.anchor.y, 0);
+      const len = dir.length();
+      if (len < 0.2) continue;
+      dir.normalize();
+      q.setFromUnitVectors(up, dir);
+      for (let i = 0, links = Math.floor(len / 0.36); i < links && n < 6000; i++) {
+        twist.setFromAxisAngle(dir, (i % 2) * Math.PI / 2);
+        pos.set(c.anchor.x, c.anchor.y, c.end.z).addScaledVector(dir, 0.18 + i * 0.36);
+        m.compose(pos, twist.clone().multiply(q), one);
+        this.chainMesh.setMatrixAt(n++, m);
+      }
+    }
     this.chainMesh.count = n;
     this.chainMesh.instanceMatrix.needsUpdate = true;
   }
@@ -236,6 +251,7 @@ export class Game {
       list.length = 0;
     }
     this.bullets.length = 0;
+    this.brokenChains = [];
     this.player.reset();
     this.player.group.position.set(0, 2, 0);
     this.cam.set(0, 2);
@@ -456,6 +472,13 @@ export class Game {
         }, i * 160);
       }
       this.hud.showBanner('Boss sunk!', 'Grab the loot!');
+    }
+    if (e.type === 'mine' && e.anchor) {
+      const side = Math.sign(p.x - e.anchor.x) || (Math.random() < 0.5 ? -1 : 1);
+      this.brokenChains.push({
+        anchor: { ...e.anchor }, end: new THREE.Vector3(p.x, p.y - 0.4, p.z), vel: new THREE.Vector2(rand(-1, 1), 0),
+        rest: e.anchor.x + side * Math.min(4, (p.y - e.anchor.y) * 0.4), t: 0,
+      });
     }
     if (e.type === 'mine') {
       for (const other of this.enemies) {
@@ -836,6 +859,20 @@ export class Game {
       }
     }
     this.enemies = this.enemies.filter((e) => !e.dead);
+    for (const c of this.brokenChains) {
+      c.t += dt;
+      const floor = seabedAt(c.end.x) + 0.15;
+      if (c.end.y > floor) {
+        c.vel.y -= 9 * dt;
+        c.vel.x += (c.rest - c.end.x) * dt * 0.8;
+        c.end.x += c.vel.x * dt;
+        c.end.y = Math.max(floor, c.end.y + c.vel.y * dt);
+      } else {
+        c.end.x += (c.rest - c.end.x) * (1 - Math.exp(-dt * 2));
+        c.end.y = seabedAt(c.end.x) + 0.15;
+      }
+    }
+    this.brokenChains = this.brokenChains.filter((c) => c.t < 30 && Math.abs(c.anchor.x - this.cam.x) < 80);
     this.updateMineChains();
   }
 
