@@ -123,6 +123,41 @@ const GRAVITY = 20;
 const LOOSE_COIN_MAX = 10;
 const ENEMY_MASS = { scout: 0.9, gunner: 1.6, boss: 6 };
 const BUMP_BOUNCE = 0.6;
+const STUN_TIME = [1.2, 3.0];
+
+const starTexture = (() => {
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 64;
+  const g = canvas.getContext('2d');
+  g.translate(32, 32);
+  g.beginPath();
+  for (let i = 0; i < 10; i++) {
+    const r = i % 2 ? 11 : 27;
+    const a = -Math.PI / 2 + (i * Math.PI) / 5;
+    g.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+  }
+  g.closePath();
+  g.fillStyle = '#ffe14a';
+  g.strokeStyle = '#7a4a00';
+  g.lineWidth = 4;
+  g.fill();
+  g.stroke();
+  return new THREE.CanvasTexture(canvas);
+})();
+
+// A ring of cartoon stars circling over a dazed sub.
+function dizzyStars() {
+  const group = new THREE.Group();
+  for (let i = 0; i < 3; i++) {
+    const star = new THREE.Sprite(new THREE.SpriteMaterial({ map: starTexture, depthTest: false, transparent: true,
+      fog: false }));
+    star.scale.setScalar(0.45);
+    star.renderOrder = 21;
+    group.add(star);
+  }
+  group.visible = false;
+  return group;
+}
 const MINE_LANE = 2.6;
 const LOOSE_COIN_RANGE = 70;
 
@@ -442,6 +477,11 @@ export class Game {
       model.add(launcher);
       e.muzzle = findNode(launcher, 'muzzle');
     }
+    if (spec.type !== 'mine') {
+      e.stars = dizzyStars();
+      e.stars.position.y = type.ry * type.scale * 1.6 + 0.35;
+      obj.add(e.stars);
+    }
     if (BAR_WIDTH[spec.type]) {
       e.bar = healthBar(spec.type);
       e.bar.group.position.y = type.ry * type.scale * 1.6 + 0.9;
@@ -760,8 +800,12 @@ export class Game {
       const tangent = new THREE.Vector2(-dir.y, dir.x).multiplyScalar(e.orbit);
       const speed = (e.def.speed + this.wave * 0.06) * (e.dazzled > 0 ? 0.6 : 1);
       const visible = this.onScreen(p.x, p.y, -0.5);
+      e.stunned = Math.max(0, (e.stunned ?? 0) - dt);
+      const dazed = e.stunned > 0;
 
-      if (e.type === 'scout') {
+      if (dazed) {
+        e.vel.multiplyScalar(Math.exp(-dt * 1.5));
+      } else if (e.type === 'scout') {
         e.steer -= dt;
         if (e.steer <= 0) {
           e.steer = rand(2.2, 3.5);
@@ -854,7 +898,20 @@ export class Game {
         e.tilt.rotation.z = -e.pitch;
         e.tilt.rotation.x = Math.sin(e.t * 1.6) * 0.04;
       }
-      if (e.propeller) e.propeller.rotation.x += dt * 14;
+      if (e.propeller) e.propeller.rotation.x += dt * (dazed ? 3 : 14);
+      e.spinVel = (e.spinVel ?? 0) * Math.exp(-dt * 2.2);
+      e.daze = (e.daze ?? 0) + e.spinVel * dt;
+      e.daze *= Math.exp(-dt * (dazed ? 0.6 : 3));
+      e.flip.rotation.x = e.daze + (dazed ? Math.sin(e.t * 9) * 0.12 : 0);
+      if (e.stars) {
+        e.stars.visible = dazed;
+        if (dazed) {
+          e.stars.children.forEach((s, i) => {
+            const a = e.t * 5 + (i * Math.PI * 2) / 3;
+            s.position.set(Math.cos(a) * 0.55, Math.sin(a * 2) * 0.06, Math.sin(a) * 0.55);
+          });
+        }
+      }
       if (e.bar) {
         const frac = Math.max(0, e.hp / e.maxHp);
         e.bar.group.visible = frac < 0.999;
@@ -914,15 +971,19 @@ export class Game {
   hullPoints(e) {
     const p = e.obj.position;
     const a = e.pitch * e.facing;
-    const reach = e.def.rx * 0.7;
+    const reach = e.def.rx * 0.75;
     const dx = Math.cos(a) * e.facing * reach;
     const dy = Math.sin(a) * reach;
-    return [{ x: p.x, y: p.y }, { x: p.x + dx, y: p.y + dy }, { x: p.x - dx, y: p.y - dy }];
+    const up = e.def.ry * 1.05;
+    const ux = -Math.sin(a) * up;
+    const uy = Math.cos(a) * up;
+    return [{ x: p.x, y: p.y }, { x: p.x + dx, y: p.y + dy }, { x: p.x - dx, y: p.y - dy },
+      { x: p.x + dx * 0.5, y: p.y + dy * 0.5 }, { x: p.x - dx * 0.5, y: p.y - dy * 0.5 }, { x: p.x + ux, y: p.y + uy }];
   }
 
   hullContact(e) {
-    const r = e.def.ry * 0.95;
-    return this.hullPoints(e).find((q) => this.player.hitTest(q.x, q.y, r)) ?? null;
+    const r = e.def.ry;
+    return this.hullPoints(e).find((q) => this.player.bodyTest(q.x, q.y, r)) ?? null;
   }
 
   // Subs that collide bounce apart with no damage: a momentum exchange along the line between them, plus a clank.
@@ -948,6 +1009,9 @@ export class Game {
       p.x -= n.x * 0.05 * (1 - share);
       p.y -= n.y * 0.05 * (1 - share);
     }
+    const hard = Math.min(1, Math.abs(approach) / 8);
+    e.stunned = Math.max(e.stunned ?? 0, STUN_TIME[0] + (STUN_TIME[1] - STUN_TIME[0]) * hard);
+    e.spinVel = (e.spinVel ?? 0) + (Math.random() < 0.5 ? -1 : 1) * (3 + 6 * hard);
     if (e.bumpCooldown > 0) return;
     e.bumpCooldown = 0.25;
     const hit = { x: (pc.x + p.x) / 2, y: (pc.y + p.y) / 2, z: 0.8 };

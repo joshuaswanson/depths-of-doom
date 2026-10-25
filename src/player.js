@@ -461,6 +461,15 @@ export class Player {
     return { x: lx, y: ly };
   }
 
+  // A fuller silhouette than hitTest, used for hull-to-hull contact so subs touch before they visibly overlap.
+  bodyTest(x, y, r = 0) {
+    const e = this.extents;
+    const p = this.toLocal(x, y);
+    const dx = (p.x - e.cx) / (e.hx * 0.97 + r);
+    const dy = (p.y - e.cy) / (e.hy * 0.92 + r);
+    return dx * dx + dy * dy < 1;
+  }
+
   hitTest(x, y, r = 0) {
     const e = this.extents;
     const p = this.toLocal(x, y);
