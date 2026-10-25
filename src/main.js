@@ -120,6 +120,7 @@ function resize() {
   const w = window.innerWidth;
   const h = window.innerHeight;
   renderer.setSize(w, h, false);
+  composer.setPixelRatio(renderer.getPixelRatio());
   composer.setSize(w, h);
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
@@ -180,7 +181,12 @@ async function boot() {
   game = new Game({ scene, camera, world, effects, player, hud });
   game.unlimited = import.meta.env.DEV;
   resize();
-  await warmUp(renderer, scene, camera);
+  const cleanup = game.prewarm();
+  const hidden = world.jellies.filter((j) => !j.visible);
+  for (const j of hidden) j.visible = true;
+  await warmUp(renderer, scene, camera, composer.readBuffer);
+  for (const j of hidden) j.visible = false;
+  cleanup();
   state = 'title';
   hud.showTitle();
   if (new URLSearchParams(location.search).has('autostart')) startGame();

@@ -904,6 +904,28 @@ export class Game {
     sfx.bump(strength);
   }
 
+  // Spawn one of everything that brings its own shader (enemies, bars, glows, projectiles) so it all compiles
+  // during loading; returns a cleanup that removes them again.
+  prewarm() {
+    const before = this.enemies.length;
+    for (const type of ['scout', 'gunner', 'boss', 'mine']) {
+      const e = this.spawnEnemy({ type, pos: { x: 0, y: 0 } });
+      if (e.bar) e.bar.group.visible = true;
+      e.model.traverse((o) => {
+        if (o.name.startsWith('skull_mark')) o.visible = true;
+      });
+    }
+    this.spawnEnemyMissile({ x: 0, y: 0 }, 1, 0);
+    const temp = this.enemies.slice(before);
+    return () => {
+      for (const e of temp) this.scene.remove(e.obj);
+      this.enemies.splice(before);
+      for (const m of this.enemyMissiles) this.scene.remove(m.obj);
+      this.enemyMissiles.length = 0;
+      this.boss = null;
+    };
+  }
+
   muzzleOf(e) {
     return e.muzzle ? e.muzzle.getWorldPosition(new THREE.Vector3()) : e.obj.position.clone();
   }

@@ -76,12 +76,16 @@ function mergeStatic(root) {
 }
 
 // Compile every model's shaders up front so the first enemy or upgrade of each kind doesn't stall a frame.
-export async function warmUp(renderer, scene, camera) {
+// Shader variants depend on the render target, so compile against the post-processing buffer the game draws into.
+export async function warmUp(renderer, scene, camera, target) {
   const holder = new THREE.Group();
   for (const name of MODEL_NAMES) holder.add(spawn(name));
   holder.position.set(0, 0, -5);
   scene.add(holder);
+  const previous = renderer.getRenderTarget();
+  renderer.setRenderTarget(target);
   await renderer.compileAsync(scene, camera);
+  renderer.setRenderTarget(previous);
   scene.remove(holder);
 }
 
