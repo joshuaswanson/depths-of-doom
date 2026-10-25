@@ -1,5 +1,5 @@
 {
-  "duration": 107.77,
+  "duration": 106.47,
   "music": [
     {
       "file": "sunlight_on_the_reef.m4a",
@@ -36,7 +36,7 @@
     {
       "file": "shadows_in_the_trench.m4a",
       "at": 67.57,
-      "from": 30.42,
+      "from": 31.72,
       "to": 70.6,
       "fadeIn": 0.2,
       "fadeOut": 3.0
@@ -80,12 +80,12 @@
       "text": "you will find out what really lives in the deep."
     },
     {
-      "at": 80.47,
+      "at": 79.17,
       "text": "Something is watching.",
       "gain": 0.8
     },
     {
-      "at": 101.87,
+      "at": 100.57,
       "text": "Depths of Doom. Dive in, if you dare."
     }
   ],
@@ -179,55 +179,55 @@
       "sound": "sonar"
     },
     {
-      "at": 76.02,
+      "at": 74.72,
       "sound": "stinger"
     },
     {
-      "at": 84.91,
+      "at": 83.61,
       "sound": "boomBig"
     },
     {
-      "at": 86.67,
+      "at": 85.37,
       "sound": "boom"
     },
     {
-      "at": 87.56,
+      "at": 86.26,
       "sound": "boom"
     },
     {
-      "at": 90.2,
+      "at": 88.9,
       "sound": "boom"
     },
     {
-      "at": 92.85,
+      "at": 91.55,
       "sound": "boom"
     },
     {
-      "at": 93.73,
+      "at": 92.43,
       "sound": "boom"
     },
     {
-      "at": 94.62,
+      "at": 93.32,
       "sound": "boom"
     },
     {
-      "at": 97.26,
+      "at": 95.96,
       "sound": "boom"
     },
     {
-      "at": 99.91,
+      "at": 98.61,
       "sound": "boomBig"
     },
     {
-      "at": 100.13,
+      "at": 98.83,
       "sound": "boom"
     },
     {
-      "at": 100.35,
+      "at": 99.05,
       "sound": "boomBig"
     },
     {
-      "at": 100.91,
+      "at": 99.61,
       "sound": "boomBig"
     }
   ]

@@ -12,7 +12,7 @@
   const CUT = {
     reef: 5.27, reefClose: 10.45, ruins: 15.44, notAlone: 20.0, kick: 24.36, fight2: 28.63, montage: 32.9,
     breach: 37.17, finale: 41.44, aftermath: 46.19, descent: 52.46, jellies: 60.17, black: 67.57, drift: 68.91,
-    angler: 76.02, eyes: 79.27, drop: 84.91, boss: 88.44, chaos: 91.97, finish: 95.5, logo: 100.91, end: 107.77,
+    angler: 74.72, eyes: 77.97, drop: 83.61, boss: 87.14, chaos: 90.67, finish: 94.2, logo: 99.61, end: 106.47,
   };
 
   const overlay = document.createElement('div');
@@ -85,6 +85,10 @@
   const FULL_KIT = ['hull', 'hull', 'hull', 'cannon', 'cannon', 'cannon', 'torpedo', 'torpedo', 'missile', 'missile',
     'propulsion', 'propulsion', 'spotlight', 'spotlight', 'sonar', 'grapple'];
 
+  // The sub stays simple through the trailer; only the upgrade montage and the final chaos show the full arsenal.
+  const KIT_SIMPLE = ['hull', 'cannon', 'cannon', 'torpedo', 'propulsion'];
+  const KIT_DEEP = [...KIT_SIMPLE, 'spotlight', 'spotlight'];
+
   function freshSub(kit) {
     P.reset();
     G.coins = 1e6;
@@ -131,6 +135,29 @@
       G.enemyAimed(e, P.center, rand(-spread, spread));
     }
   }
+  // Combat flying: the sub darts up or down on every other beat, surging forward, and weaves between, so missiles
+  // aimed at it streak past. It stays within `range` of the height it started the shot at.
+  function evade(t, { beat, fwd = 0.6, kick = 4.5, surge = 3, range = 2.5 }) {
+    state.baseY ??= P.center.y;
+    const k = Math.floor(t / beat);
+    if (k !== state.dodgeBeat) {
+      state.dodgeBeat = k;
+      if (k % 2 === 0) {
+        let dir = -(state.dodgeDir || 1);
+        const off = P.center.y - state.baseY;
+        if (off > range) dir = -1;
+        if (off < -range) dir = 1;
+        state.dodgeDir = dir;
+        P.vel.y += dir * kick;
+        P.vel.x += surge * P.facingSign;
+      }
+    }
+    // A banking dart, never a loop: the nose tips at most about 30 degrees.
+    P.pitch = Math.max(-0.55, Math.min(0.55, P.pitch));
+    P.pitchVel *= 0.8;
+    return { x: fwd + 0.25 * Math.sin(t * 2.7), y: (state.dodgeDir || 1) * 0.45 };
+  }
+
   function onBeats(t, beat, from, fn) {
     if (t < from) return;
     const k = Math.floor((t - from) / beat);
@@ -213,7 +240,7 @@
   }
   const THREE_V2 = P.vel.constructor;
   // Behind the sub and off to its tail, out of reach of its forward spotlight until the lure flares.
-  const ANGLER_SPOT = [204, -186.4, -7];
+  const ANGLER_SPOT = [204, -187.8, -7];
   // The sub glides in from the left and eases to a stop just right of centre.
   const DRIFT = [195, 211, 6];
   function driftTo(t) {
@@ -289,7 +316,7 @@
     {
       // Red viewports glide out of the blue ahead: not alone.
       start: CUT.notAlone, setup() {
-        freshSub(FULL_KIT);
+        freshSub(KIT_SIMPLE);
         place(10, 4, 1);
         snapCamera(14, 4.4);
         clearBattle();
@@ -299,7 +326,7 @@
         state.beatIndex = -1;
       },
       frame(t) {
-        D.input = { x: t < 1.2 ? 0.4 : 0.12, y: 0 };
+        D.input = t < 1.6 ? { x: t < 1.2 ? 0.4 : 0.12, y: 0 } : evade(t - 1.6, { beat: 0.534, fwd: 0.25, kick: 5 });
         for (const e of state.pack) if (e) e.vel.x = Math.min(e.vel.x, -1.6);
         // They shoot first: missile volleys on the beat before the sub returns fire on the drop.
         onBeats(t, 0.534, 1.6, (k) => volley(k % 2 ? 1 : 2));
@@ -315,7 +342,7 @@
         state.spawned = false;
       },
       frame(t) {
-        D.input = { x: 0.5 + Math.sin(t * 1.5) * 0.1, y: Math.sin(t * 2) * 0.14 };
+        D.input = evade(t, { beat: 0.534 });
         fireOnBeats(t);
         onBeats(t, 0.534, 0, (k) => volley(k % 2 ? 1 : 2));
         if (!state.spawned && t > 2.4) {
@@ -332,7 +359,7 @@
         state.beatIndex = -1;
       },
       frame(t) {
-        D.input = { x: t < 2 ? 0.5 : -0.4, y: Math.sin(t * 1.7) * 0.22 };
+        D.input = evade(t, { beat: 0.534, fwd: 0.7 });
         fireOnBeats(t);
         onBeats(t, 0.534, 0, () => volley(1));
       },
@@ -361,7 +388,7 @@
       // Bursting out of the surface in a spray of water as the gulls scatter.
       start: CUT.breach, setup() {
         setHud(false);
-        freshSub(FULL_KIT);
+        freshSub(KIT_SIMPLE);
         place(70, 19, 1);
         P.vel.set(6, 14);
         snapCamera(74, 22);
@@ -391,7 +418,7 @@
         state.beatIndex = -1;
       },
       frame(t) {
-        D.input = { x: 0.5 + Math.sin(t) * 0.1, y: Math.sin(t * 2.2) * 0.14 };
+        D.input = evade(t, { beat: 0.534, fwd: 0.55 });
         fireOnBeats(t);
         onBeats(t, 0.534, 0, () => volley(2));
       },
@@ -401,6 +428,7 @@
       start: CUT.aftermath, setup() {
         clearBattle();
         for (const w of G.wrecks) w.gone = true;
+        freshSub(KIT_DEEP);
         place(84, -1.5, 1);
       },
       frame() {
@@ -515,7 +543,7 @@
         state.more = [enemy('scout', c.x + 17, c.y + 6), enemy('gunner', c.x - 18, c.y + 5), enemy('scout', c.x + 20, c.y - 6)];
       },
       frame(t) {
-        D.input = { x: 0.16, y: Math.sin(t * 1.9) * 0.05 };
+        D.input = evade(t, { beat: 0.441, fwd: 0.45 });
         keepAway(6);
         fireOnBeats(t);
         onBeats(t, 0.441, 0, (k) => volley(k % 2 ? 2 : 3));
@@ -531,7 +559,7 @@
         state.beatIndex = -1;
       },
       frame(t) {
-        D.input = { x: 0.16, y: Math.sin(t * 1.4) * 0.05 };
+        D.input = evade(t, { beat: 0.441, fwd: 0.45 });
         keepAway(6);
         fireOnBeats(t);
         onBeats(t, 0.441, 0, (k) => volley(k % 2 ? 3 : 4, 0.3));
@@ -541,6 +569,12 @@
       // Chaos: torpedoes, shields flaring, wrecks spinning down.
       start: CUT.chaos, setup() {
         const c = P.center;
+        // Hard cut into the finale: the full arsenal at last.
+        const at = P.group.position.clone();
+        const vel = P.vel.clone();
+        freshSub(FULL_KIT);
+        place(at.x, at.y, 1);
+        P.vel.copy(vel);
         state.extra = [];
         const ring = [[-14, 3], [16, -3], [-15, -2], [18, 7], [-19, 8], [13, -8], [-11, -8], [22, 2], [-24, 1], [9, 10]];
         ring.forEach(([dx, dy], i) => state.extra.push(enemy(i % 3 === 2 ? 'gunner' : 'scout', c.x + dx, c.y + dy)));
@@ -550,7 +584,7 @@
         state.beatIndex = -1;
       },
       frame(t) {
-        D.input = { x: 0.16, y: Math.sin(t * 2.1) * 0.05 };
+        D.input = evade(t, { beat: 0.441, fwd: 0.5, kick: 5.5 });
         keepAway(6);
         fireOnBeats(t);
         onBeats(t, 0.441, 0, () => volley(6, 0.45));
@@ -569,14 +603,15 @@
         for (const [dx, dy] of [[-17, 6], [19, -5], [-20, -6], [24, 5]]) enemy('scout', c.x + dx, c.y + dy);
       },
       frame(t) {
-        D.input = { x: 0.16, y: Math.sin(t * 1.5) * 0.05 };
+        D.input = evade(t, { beat: 0.441, fwd: 0.45 });
         keepAway(6);
         onBeats(t, 0.441, 0, (k) => k < 10 && volley(7, 0.5));
         const c = P.center;
         const bp = state.boss.obj.position;
         if (!state.boss.dead) {
-          bp.x += (c.x + 8.5 - bp.x) * 0.06;
-          bp.y += (c.y + 1.8 - bp.y) * 0.06;
+          bp.x += (c.x + 8 * P.facingSign - bp.x) * 0.06;
+          bp.y += (c.y + 3 - bp.y) * 0.06;
+          bp.z += (-5 - bp.z) * 0.06;
         }
         fireOnBeats(t);
         while (state.blasts.length && t >= state.blasts[0]) {
@@ -749,12 +784,12 @@
     { cuts: [[0, () => ({ target: sub(), dist: 12, fov: 40 })]] },
     // In the dark: the sub drifts in from the left with the black empty water behind it.
     { cuts: [
-      [0, (t) => ({ target: [DRIFT[1] - 3.2, -189.2, -2.5], yaw: lerp(0.46, 0.36, ease(t, 0, 7)), pitch: 0.05,
-        dist: lerp(19, 16, ease(t, 0, 7)), fov: 40, rate: 2, absolute: true })],
+      [0, (t) => ({ target: [DRIFT[1] - 3.2, -189, -2.5], yaw: lerp(0.46, 0.36, ease(t, 0, 5.8)), pitch: 0.04,
+        dist: lerp(20.5, 17.5, ease(t, 0, 5.8)), fov: 40, rate: 2, absolute: true })],
     ] },
     // The lure flares behind it: a jolt and a snap zoom, then darkness again.
     { cuts: [
-      [0, (t) => ({ target: [DRIFT[1] - 3.2, -189.2, -2.5], yaw: 0.36, pitch: 0.05, dist: 16,
+      [0, (t) => ({ target: [DRIFT[1] - 3.2, -189, -2.5], yaw: 0.36, pitch: 0.04, dist: 17.5,
         fov: lerp(40, 33, ease(t, 0, 0.35)), hand: t < 0.5 ? 4 : 0.4, rate: 2, absolute: true })],
     ] },
     // Red viewports wake up around it: close on the nose, then over its shoulder toward them.
@@ -786,17 +821,13 @@
       [0, () => ({ target: sub(4, 0.3), yaw: -1.0, pitch: 0.08, dist: 12, fov: 46, hand: 1.4 })],
       [0.88, () => ({ target: sub(0, 0.3), yaw: 1.25, pitch: 0.02, dist: 10, fov: 44, hand: 1.4 })],
       [1.76, () => ({ target: sub(2, 0), yaw: 0.25, pitch: 1.05, dist: 24, fov: 46, roll: 0.12 })],
-      [2.65, () => ({ target: sub(2, 0.5), yaw: 0.45, pitch: 0.04, dist: 20, fov: 46, roll: -0.08, hand: 1.6 })],
+      [2.65, () => ({ target: sub(2, 0.5), yaw: -0.45, pitch: 0.04, dist: 20, fov: 46, roll: -0.08, hand: 1.6 })],
     ] },
     // The boss blows apart in slow motion; the camera pushes in on the sub in the glow.
     {
       cuts: [
-        [0, (t) => {
-          const b = state.boss.obj.position;
-          const c = P.center;
-          return { target: [(b.x + c.x) / 2, (b.y + c.y) / 2 + 0.4, 0], yaw: lerp(-0.25, 0.25, ease(t, 0, 4.3)), pitch: 0.06,
-            dist: lerp(20, 14, ease(t, 0, 4.3)), fov: 42, hand: 1.2, absolute: true };
-        }],
+        [0, (t) => ({ target: sub(4, 0.8), yaw: lerp(-0.2, 0.35, ease(t, 0, 4.3)), pitch: 0.06,
+          dist: lerp(21, 15, ease(t, 0, 4.3)), fov: 42, hand: 1.2 })],
         [4.3, (t) => ({ target: sub(0.5, 0.3), yaw: 1.2, pitch: 0.02, dist: lerp(9, 7, ease(t, 0, 1.1)), fov: 40 })],
       ],
       timeScale: (t) => (t > 4.3 && t < 5.3 ? 0.35 : 1),
@@ -840,6 +871,8 @@
       if (i !== current) {
         current = i;
         rig.cut = -1;
+        state.baseY = undefined;
+        state.dodgeBeat = undefined;
         shots[i].setup();
       }
       const local = t - shots[i].start;
