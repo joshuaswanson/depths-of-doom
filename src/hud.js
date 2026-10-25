@@ -49,9 +49,8 @@ export class Hud {
     this.bossFill = this.bossBar.querySelector('.boss-fill');
 
     this.bar = el('div', 'upgrade-bar');
-    this.slots = UPGRADES.map((def, i) => {
+    this.slots = UPGRADES.map((def) => {
       const slot = el('button', 'slot', `
-        <span class="key">${i + 1}</span>
         <img src="${ICON(def.icon)}" alt="">
         <span class="name">${def.name}</span>
         <span class="level"></span>
@@ -95,7 +94,7 @@ export class Hud {
       <div class="controls">
         <div><kbd>WASD</kbd> / <kbd>Arrows</kbd> swim</div>
         <div>Guns fire on their own</div>
-        <div><kbd>1</kbd>-<kbd>9</kbd> or click to bolt on upgrades</div>
+        <div>Click the upgrades below to bolt them on</div>
         <div><kbd>P</kbd> pause &nbsp; <kbd>M</kbd> mute</div>
       </div></div>`;
     this.overlay.querySelector('.big-btn').addEventListener('click', () => this.onStart());

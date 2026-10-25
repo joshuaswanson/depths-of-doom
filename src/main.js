@@ -18,7 +18,6 @@ import { Effects } from './effects.js';
 import { Game } from './game.js';
 import { Hud } from './hud.js';
 import { Player } from './player.js';
-import { UPGRADES } from './upgrades.js';
 import { CAMERA_FOV, CAMERA_Z, installWaterFog } from './water.js';
 import { World } from './world.js';
 
@@ -87,8 +86,6 @@ window.addEventListener('keydown', (e) => {
   keys.add(e.code);
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
   if (e.repeat) return;
-  const digit = /^Digit([1-9])$/.exec(e.code);
-  if (digit && state === 'playing') game.buy(UPGRADES[Number(digit[1]) - 1].id);
   if (e.code === 'KeyP' || e.code === 'Escape') {
     if (state === 'playing') pause();
     else if (state === 'paused') resume();
