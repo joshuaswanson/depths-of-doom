@@ -503,3 +503,15 @@ kbd {
   100% { opacity: 0; transform: translateY(-2vh); }
 }
 @keyframes bob { 50% { transform: translateY(-1vh) rotate(-1deg); } }
+
+.blocked { background: radial-gradient(ellipse at center, #0b3a5c, #04121f); }
+.blocked .logo-img { width: min(86vw, 560px); }
+.blocked-note {
+  margin: 4vh auto 0;
+  max-width: 80vw;
+  font-size: clamp(18px, 5vw, 28px);
+  font-weight: 600;
+  line-height: 1.35;
+  color: #cdeeff;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.4);
+}
