@@ -534,6 +534,7 @@ function updateAngler(a, dt, t, cx, sub, world) {
 const GULL_COUNT = 6;
 const GULL_SCALE = 1.3;
 const GULL_SCARE = 7;
+const GULL_WARY = 16;
 const GULL_FPS = 24;
 let gullClips = null;
 
@@ -572,7 +573,10 @@ function makeGull() {
     fly: mixer.clipAction(clipsFor.fly).setLoop(THREE.LoopRepeat),
   };
   actions.takeoff.clampWhenFinished = true;
-  holder.userData = { mixer, actions, legs, state: 'float', t: 0, phase: rand(0, 6), vel: new THREE.Vector2(), dir: 1 };
+  holder.userData = {
+    mixer, actions, legs, state: 'float', t: 0, phase: rand(0, 6), nerve: rand(0.7, 1.15), panic: 1,
+    vel: new THREE.Vector2(), dir: 1,
+  };
   return holder;
 }
 
@@ -837,28 +841,38 @@ export class World {
       if (u.state === 'float') {
         if (visible) treadWater(u, this.time);
         gull.position.y = SURFACE_Y - 0.02 + Math.sin(this.time * 1.4 + gull.position.x * 0.5) * 0.09;
-        gull.rotation.z = Math.sin(this.time * 1.1 + u.phase) * 0.06;
-        gull.position.x += u.dir * 0.08 * dt;
-        const near = sub && Math.abs(sub.x - gull.position.x) < GULL_SCARE && sub.y > SURFACE_Y - 3.5;
-        if (near) {
-          u.state = 'takeoff';
-          u.t = 0;
+        const gap = sub && sub.y > SURFACE_Y - 3.5 ? Math.abs(sub.x - gull.position.x) : Infinity;
+        // A gull grows uneasy as the sub nears and paddles away faster; the closer the sub gets before it bolts,
+        // the more frantic the escape.
+        const alarm = 1 - THREE.MathUtils.smoothstep(gap, GULL_SCARE * u.nerve, GULL_WARY);
+        if (alarm > 0) {
           u.dir = Math.sign(gull.position.x - sub.x) || 1;
           gull.rotation.y = u.dir > 0 ? 0 : Math.PI;
-          playGull(gull, 'takeoff', 0.15);
+        }
+        gull.rotation.z = Math.sin(this.time * (1.1 + 9 * alarm) + u.phase) * (0.06 + 0.1 * alarm);
+        gull.position.x += u.dir * (0.08 + 1.6 * alarm) * dt;
+        if (gap < GULL_SCARE * u.nerve) {
+          u.state = 'takeoff';
+          u.t = 0;
+          u.panic = 1.5 + 1.3 * (1 - gap / GULL_SCARE);
+          u.actions.takeoff.timeScale = u.panic;
+          u.actions.fly.timeScale = 1 + 0.45 * u.panic;
+          playGull(gull, 'takeoff', 0.1);
           scared++;
         }
         const wrapped = wrap(gull.position.x, cx, 45);
         if (Math.abs(wrapped - gull.position.x) > 1) this.landGull(gull, wrapped);
       } else {
         // Matches the takeoff in the animation: a short run along the water, then a climb into steady flight.
-        const run = THREE.MathUtils.smoothstep(u.t, 0.9, 2.2);
-        const climb = THREE.MathUtils.smoothstep(u.t, 1.3, 2.4);
-        u.vel.set(u.dir * (0.6 + 4.6 * run), 3.4 * climb);
+        const tt = u.t * u.panic;
+        const run = THREE.MathUtils.smoothstep(tt, 0.9, 2.2);
+        const climb = THREE.MathUtils.smoothstep(tt, 1.3, 2.4);
+        const flutter = Math.sin(u.t * 11 + u.phase);
+        u.vel.set(u.dir * (0.6 + 4.6 * run) * u.panic, (3.4 * climb + 1.4 * flutter * climb) * u.panic);
         gull.position.x += u.vel.x * dt;
         gull.position.y = Math.max(SURFACE_Y - 0.02, gull.position.y + u.vel.y * dt);
-        gull.rotation.z = u.dir * THREE.MathUtils.lerp(0, 0.18, climb);
-        if (u.state === 'takeoff' && u.t > 3.6) {
+        gull.rotation.z = u.dir * THREE.MathUtils.lerp(0, 0.3, climb) + 0.16 * flutter * (1 - 0.5 * climb);
+        if (u.state === 'takeoff' && tt > 3.6) {
           u.state = 'fly';
           playGull(gull, 'fly', 0.4);
         }
