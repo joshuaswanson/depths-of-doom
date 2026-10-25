@@ -24,6 +24,7 @@ const CHAIN_DRIFT = 6;
 const MAX_BROKEN_CHAINS = 12;
 const MAX_WRECKS = 14;
 const MAX_COINS = 400;
+const FIRST_WAVE_DELAY = 22;
 // Where each enemy hull carries its missile drum, in model space (the nose points to -X).
 const POD_MOUNT = { scout: { x: -0.45, y: 0.55, scale: 0.8 }, gunner: { x: -0.6, y: 0.74, scale: 0.95 },
   boss: { x: -1.1, y: 1.3, scale: 1.4 } };
@@ -503,7 +504,8 @@ export class Game {
     this.wave = 0;
     this.queue = [];
     this.spawnTimer = 0;
-    this.waveBreak = 2.0;
+    // A calm stretch before the first wave, so the dive opens with the sunlit music and time to look around.
+    this.waveBreak = FIRST_WAVE_DELAY;
     this.looseCoinTimer = 1;
     this.boss = null;
     this.over = false;
