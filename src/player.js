@@ -538,7 +538,7 @@ export class Player {
     const lamps = this.levels.spotlight;
     const power = 1 + 0.35 * lamps;
     const light = this.headlight;
-    light.intensity = lamps ? (10 + 190 * dark) * power * (0.7 + 0.3 * lamps) : 9 * dark;
+    light.intensity = lamps ? (6 + 40 * dark) * power * (0.7 + 0.3 * lamps) : 9 * dark;
     light.distance = lamps ? 50 + 10 * lamps : 34;
     light.angle = lamps ? 0.42 + 0.06 * lamps : 0.42;
     this.beam.material.uniforms.uStrength.value = 0.035 * dark;

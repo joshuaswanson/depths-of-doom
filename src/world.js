@@ -368,6 +368,23 @@ function makeFishGeometry() {
   return new THREE.ShapeGeometry(shape);
 }
 
+// Anglerfish prowl just above the floor of the deepest trenches.
+const ANGLER_FLOOR = -170;
+const ANGLER_BAND = [4, 16];
+
+function makeAngler() {
+  const fish = spawn('anglerfish');
+  fish.scale.setScalar(rand(1.0, 1.6));
+  const halo = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: softDot(), color: new THREE.Color(0.9, 2.4, 2.2), blending: THREE.AdditiveBlending, depthWrite: false,
+    transparent: true, fog: false, opacity: 0.8,
+  }));
+  halo.scale.setScalar(1.1);
+  findNode(fish, 'Esca').add(halo);
+  fish.userData = { halo, phase: rand(0, 6), dir: Math.random() < 0.5 ? -1 : 1, speed: rand(0.5, 0.9), yaw: 0 };
+  return fish;
+}
+
 // Jellies gather in one glowing layer in the dark trenches, with a few stragglers drifting deeper.
 const JELLY_CEILING = 96;
 const JELLY_LAYER = [-122, -100];
@@ -551,6 +568,12 @@ export class World {
     for (let x = -70; x < 70; x += rand(10, 22)) this.spawnChain(x);
     this.makeFish();
 
+    this.anglers = Array.from({ length: 3 }, () => {
+      const a = makeAngler();
+      a.position.set(rand(-45, 45), -200, rand(-20, -4));
+      scene.add(a);
+      return a;
+    });
     this.jellies = Array.from({ length: 18 }, (_, i) => {
       const j = makeJelly(this.uniforms);
       j.userData.band = i < JELLY_STRAGGLERS ? JELLY_DEEP : JELLY_LAYER;
@@ -790,6 +813,24 @@ export class World {
       j.position.x = wrapped;
       j.visible = floorY(j.position.x) < -JELLY_CEILING - 10 && this.dark > 0.45;
       if (j.visible) updateJellyGlow(j, dt, sub);
+    }
+    for (const a of this.anglers) {
+      const u = a.userData;
+      if (floorY(a.position.x + u.dir * 6) > ANGLER_FLOOR) u.dir *= -1;
+      a.position.x += u.dir * u.speed * dt;
+      const floor = floorY(a.position.x);
+      const cruise = floor + (ANGLER_BAND[0] + ANGLER_BAND[1]) / 2 + Math.sin(t * 0.25 + u.phase) * 3;
+      a.position.y += (cruise - a.position.y) * (1 - Math.exp(-dt * 0.4));
+      u.yaw += ((u.dir > 0 ? 0 : -Math.PI) - u.yaw) * (1 - Math.exp(-dt * 0.7));
+      a.rotation.y = u.yaw;
+      a.rotation.z = Math.sin(t * 0.5 + u.phase) * 0.05;
+      u.halo.material.opacity = 0.6 + Math.sin(t * 2.4 + u.phase) * 0.2;
+      const wrapped = wrap(a.position.x, cx, 50);
+      if (Math.abs(wrapped - a.position.x) > 1) {
+        a.position.x = wrapped;
+        a.position.y = floorY(wrapped) + ANGLER_BAND[1] - 2;
+      }
+      a.visible = floor < ANGLER_FLOOR && this.dark > 0.5;
     }
     const m = new THREE.Matrix4();
     const q = new THREE.Quaternion();

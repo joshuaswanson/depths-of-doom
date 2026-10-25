@@ -166,6 +166,28 @@ for (const [profile, names] of Object.entries(PROFILE_BY_MATERIAL)) for (const n
 
 const patched = new WeakSet();
 
+// The anglerfish swims by bending the rear of its body in a travelling wave, fading out toward the head so the
+// jaws, eyes, and lure stay steady.
+const SWAY_GLSL = /* glsl */ `
+  float swayRear = smoothstep( 0.3, -1.7, transformed.x );
+  float swaySeed = modelMatrix[ 3 ].x * 0.37 + modelMatrix[ 3 ].y * 0.21;
+  transformed.z += sin( uTime * 3.0 - transformed.x * 2.2 + swaySeed ) * 0.22 * swayRear * swayRear;
+`;
+
+function addSway(material) {
+  const previous = material.onBeforeCompile;
+  const key = material.customProgramCacheKey?.() ?? material.name;
+  material.onBeforeCompile = (shader, renderer) => {
+    previous?.call(material, shader, renderer);
+    shader.uniforms.uTime = SHADER_TIME;
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nuniform float uTime;')
+      .replace('#include <begin_vertex>', `#include <begin_vertex>\n${SWAY_GLSL}`);
+  };
+  material.customProgramCacheKey = () => `${key}-sway`;
+  material.needsUpdate = true;
+}
+
 // Kelp and anemone tentacles bend in the current: still at the root, swaying more with height.
 export const CURRENT_MATERIALS = new Set(['kelp_stipe', 'kelp_blade', 'kelp_bladder', 'anemone_tentacle', 'anemone_tip']);
 const CURRENT_GLSL = /* glsl */ `
@@ -209,6 +231,10 @@ export function applySurfaceDetail(root) {
     } else if (!patched.has(o.material) && lookup.has(name)) {
       patch(o.material, lookup.get(name));
       patched.add(o.material);
+    }
+    if (name.startsWith('angler_') && !swaying.has(o.material)) {
+      addSway(o.material);
+      swaying.add(o.material);
     }
     if (CURRENT_MATERIALS.has(name) && !swaying.has(o.material)) {
       addCurrent(o.material);
