@@ -17,6 +17,7 @@ const PITCH_ACCEL = 9;
 const MAX_PITCH = 1.52;
 const CRUISE_BUILD = 0.32;
 const CRUISE_BOOST = 0.9;
+const MAX_CLIMB = 0.9;
 const RIG_SCALE = 0.82;
 const REGEN_DELAY = 5;
 // From this hull level the sub gets the long "car" hull with a flat front deck and a deck-mounted gun.
@@ -584,8 +585,13 @@ export class Player {
     this.vel.multiplyScalar(Math.exp(-drag * dt));
     const p = this.group.position;
     const e = this.extents;
-    const nx = p.x + this.vel.x * dt;
-    if (bounds.bottom(nx) + e.hy > p.y + 0.4) {
+    const dx = this.vel.x * dt;
+    const nx = p.x + dx;
+    // Gentle slopes lift the sub as it slides along them; anything steeper is a wall, and so is rock reaching the
+    // nose.
+    const lift = bounds.bottom(nx) + e.hy - p.y;
+    const noseRock = bounds.bottom(nx + Math.sign(dx) * e.hx * 0.8) - p.y;
+    if ((lift > 0 && lift > Math.abs(dx) * MAX_CLIMB) || noseRock > 0) {
       this.vel.x *= -0.25;
     } else {
       p.x = nx;
