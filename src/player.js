@@ -4,9 +4,7 @@ import { addWaterline } from './surface.js';
 import { HULL_CAPACITY, JUNK_PER_HULL, PART_MODEL, SOCKETS, UPGRADES, needsMount, partCount, partModel } from './upgrades.js';
 import { SURFACE_Y } from './water.js';
 
-// The sub shows its full profile facing left or right. Yaw stays within [-PI, 0], so every turn swings the nose past
-// the camera instead of showing the stern.
-const YAW = { right: 0, left: -Math.PI };
+// The sub rests in full profile, facing left or right: yaw at an even or odd multiple of PI.
 const DRAG = 1.9;
 const MAX_SPOTLIGHTS = 4;
 const GRAVITY = 18;
@@ -241,8 +239,10 @@ export class Player {
     this.cruise = 0;
     this.heading = new THREE.Vector2(1, 0);
     this.facing = 1;
-    this.yaw = YAW.right;
+    this.yaw = 0;
     this.yawVel = 0;
+    this.restYaw = 0;
+    this.prevRestYaw = 0;
     this.pitchVel = 0;
     this.pitch = 0;
     this.airborne = false;
@@ -600,18 +600,40 @@ export class Player {
     this.airborne = p.y > SURFACE_Y + 0.3;
 
     // Holding left or right spins the turn up; letting go lets it coast to a stop wherever it ends up.
+    // Each turnaround picks at random whether the nose swings past the camera or away from it. Reversing mid-turn
+    // heads back the way it came.
     if (Math.abs(input.x) > 0.1) {
-      this.facing = Math.sign(input.x);
-      const target = this.facing > 0 ? YAW.right : YAW.left;
-      const want = THREE.MathUtils.clamp((target - this.yaw) * 6, -TURN_SPEED, TURN_SPEED);
+      const dir = Math.sign(input.x);
+      if (dir !== this.facing) {
+        this.facing = dir;
+        if (Math.abs(this.yaw - this.restYaw) < 0.25) {
+          this.prevRestYaw = this.restYaw;
+          this.restYaw += (Math.random() < 0.5 ? -1 : 1) * Math.PI;
+        } else {
+          [this.restYaw, this.prevRestYaw] = [this.prevRestYaw, this.restYaw];
+        }
+      }
+      const want = THREE.MathUtils.clamp((this.restYaw - this.yaw) * 6, -TURN_SPEED, TURN_SPEED);
       this.yawVel += THREE.MathUtils.clamp(want - this.yawVel, -dt * TURN_ACCEL, dt * TURN_ACCEL);
     } else {
       this.yawVel *= Math.exp(-dt * TURN_DRAG);
     }
+    const before = this.yaw - this.restYaw;
     this.yaw += this.yawVel * dt;
-    if (this.yaw > YAW.right || this.yaw < YAW.left) {
-      this.yaw = THREE.MathUtils.clamp(this.yaw, YAW.left, YAW.right);
+    const lo = Math.min(this.restYaw, this.prevRestYaw);
+    const hi = Math.max(this.restYaw, this.prevRestYaw);
+    if (Math.sign(this.yaw - this.restYaw) !== Math.sign(before) && before !== 0) {
+      this.yaw = this.restYaw;
       this.yawVel = 0;
+    } else if (this.yaw < lo || this.yaw > hi) {
+      this.yaw = THREE.MathUtils.clamp(this.yaw, lo, hi);
+      this.yawVel = 0;
+    }
+    if (this.yaw === this.restYaw && Math.abs(this.restYaw) > Math.PI * 3) {
+      const wrapBy = Math.round(this.restYaw / (Math.PI * 2)) * Math.PI * 2;
+      this.yaw -= wrapBy;
+      this.restYaw -= wrapBy;
+      this.prevRestYaw -= wrapBy;
     }
     this.yawPivot.rotation.y = this.yaw;
     this.updateExtents();
