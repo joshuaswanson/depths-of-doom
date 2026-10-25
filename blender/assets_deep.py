@@ -6,7 +6,9 @@ import bmesh
 from mathutils import Vector, noise
 
 from assets_env import blob
-from kit import Part, empty, frame, trs
+from mathutils import Matrix
+
+from kit import Part, descendants, empty, frame, trs
 
 UP = trs(rot=(0, -math.pi / 2, 0))
 
@@ -173,74 +175,185 @@ def fang(part, material, base, direction, length, curl, rng):
     part.tube(material, pts, radius=lambda t: 0.028 * (1 - t) + 0.002, segs=8)
 
 
+def loft(part, xs, ring, materials, segs=40):
+    """Skin a closed body along X. ring(x, a) gives the (y, z) of the surface at angle a around the axis; the first
+    and last stations close to poles. materials(center, normal) picks each face's material."""
+    bm = part.bm
+    rings = []
+    for k, x in enumerate(xs):
+        if k == 0 or k == len(xs) - 1:
+            ys, zs = zip(*(ring(x, 2 * math.pi * j / segs) for j in range(segs)))
+            rings.append([bm.verts.new((x, sum(ys) / segs, sum(zs) / segs))])
+            continue
+        rings.append([bm.verts.new((x, *ring(x, 2 * math.pi * j / segs))) for j in range(segs)])
+    faces = []
+    for a, b in zip(rings, rings[1:]):
+        for j in range(segs):
+            k = (j + 1) % segs
+            if len(a) == 1:
+                faces.append(bm.faces.new((a[0], b[k], b[j])))
+            elif len(b) == 1:
+                faces.append(bm.faces.new((a[j], a[k], b[0])))
+            else:
+                faces.append(bm.faces.new((a[j], a[k], b[k], b[j])))
+    bmesh.ops.recalc_face_normals(bm, faces=faces)
+    groups = {}
+    for f in faces:
+        f.normal_update()
+        groups.setdefault(materials(f.calc_center_median(), f.normal), []).append(f)
+    for material, group in groups.items():
+        part._paint(group, material, True)
+
+
+def stations(x0, x1, count, bunch_front=True):
+    out = []
+    for i in range(count + 1):
+        t = i / count
+        if bunch_front:
+            t = 1 - (1 - t) ** 1.6
+        out.append(x0 + (x1 - x0) * t)
+    return out
+
+
+# Anglerfish proportions, facing +X: a huge round head, a short thick tail stalk.
+HEAD_X, NOSE_X, TAIL_X = 0.1, 0.82, -1.38
+MOUTH_X = 0.12
+
+
+def head_width(x):
+    if x >= HEAD_X:
+        return 0.74 * math.sqrt(max(0.0, 1 - ((x - HEAD_X) / (NOSE_X - HEAD_X)) ** 2.2))
+    t = max(0.0, min(1.0, (x - TAIL_X) / (HEAD_X - TAIL_X)))
+    return 0.74 * (0.2 + 0.8 * (1 - (1 - t) ** 2.4))
+
+
+def head_height(x):
+    return head_width(x) * 1.08
+
+
+def mouth_roof(x):
+    """Underside of the upper jaw: the head's lower front is carved away into the gape."""
+    return -head_height(x) - 0.05 + (head_height(x) * 0.92) * smooth(x, MOUTH_X, MOUTH_X + 0.32)
+
+
+def angler_ring(x, a):
+    y = head_width(x) * math.cos(a)
+    z = 0.06 + head_height(x) * math.sin(a)
+    if x > MOUTH_X:
+        z = max(z, mouth_roof(x))
+    return y, z
+
+
+def jaw_shape(x):
+    """Lower jaw cross-section at x: half-width, centre height, half-height, and the height of the mouth floor."""
+    f = math.sqrt(max(0.0, 1 - ((x - 0.38) / 0.72) ** 2))
+    width = 0.68 * f
+    zc = -0.6 + 0.4 * smooth(x, 0.25, 1.1)
+    rz = 0.2 * f ** 0.5 + 0.015
+    return width, zc, rz, zc + rz * 0.35
+
+
+def jaw_ring(x, a):
+    width, zc, rz, floor = jaw_shape(x)
+    return width * math.cos(a), min(zc + rz * math.sin(a), floor)
+
+
+def roof_edge(x):
+    """Half-width of the upper jaw's lip line at x, where the head's surface meets the carved roof."""
+    s = max(-1.0, min(1.0, (mouth_roof(x) - 0.06) / max(head_height(x), 1e-4)))
+    return head_width(x) * math.sqrt(1 - s * s)
+
+
+def fin_lobe(part, P, outline, matrix, rays=True):
+    """A soft, rounded fin: a thick bevelled membrane with raised spines fanning from its root."""
+    part.extrude(P["angler_fin"], outline, depth=0.035, matrix=matrix, bevel=0.016, bevel_segs=3)
+    if not rays:
+        return
+    root = outline[0]
+    for tip in outline[2:-1]:
+        part.tube(P["angler_spine"], [(root[0], root[1], 0.02), (tip[0] * 0.95 + root[0] * 0.05,
+                                                                  tip[1] * 0.95 + root[1] * 0.05, 0.02)],
+                  radius=lambda t: 0.013 * (1 - t) + 0.004, segs=6, matrix=matrix)
+
+
 def anglerfish(P):
     rng = random.Random(21)
     root = empty("anglerfish")
-    body = Part()
     skin, mouth = P["angler_skin"], P["angler_mouth"]
-    sculpt(body, angler_body_shape, lambda c, n: mouth if mouth_weight(c.x + 0.44, c.y, c.z + 0.05) > 0.45 and
-           c.x > 0.2 else skin)
-    body.sphere(P["angler_throat"], loc=(0.36, 0, -0.16), scale=(0.06, 0.18, 0.1), segs=14, rings=8)
-    for i in range(15):
-        t = -1 + 2 * i / 14
-        a = t * 1.15
-        base = (0.62 + 0.24 * math.cos(a), 0.5 * math.sin(a), 0.04)
-        length = rng.uniform(0.18, 0.3) if i % 2 == 0 else rng.uniform(0.09, 0.15)
-        fang(body, P["tooth"], base, (0.25, -0.15 * t, -1.0), length, 0.25, rng)
+    body = Part()
+    loft(body, stations(TAIL_X, NOSE_X, 70), angler_ring,
+         lambda c, n: mouth if c.x > MOUTH_X + 0.05 and c.z < mouth_roof(c.x) + 0.02 and n.z < -0.3 else skin)
+    body.sphere(mouth, loc=(0.28, 0, -0.28), scale=(0.16, 0.34, 0.22), segs=20, rings=12)
+
     for side in (-1, 1):
-        eye, normal = on_surface(angler_body_shape, (0.62, side * 0.66, 0.36), inset=0.035)
-        m = frame(eye, normal)
-        body.sphere(P["angler_eye"], matrix=m @ trs(scale=0.1), segs=20, rings=14)
-        body.sphere(P["black"], matrix=m @ trs((0, 0, 0.07), scale=(0.022, 0.06, 0.04)), segs=12, rings=8)
-        body.sphere(P["eye_shine"], matrix=m @ trs((-0.03, 0.04, 0.09), scale=0.018), segs=8, rings=6)
-        lid = [(0.11 * math.cos(a), 0.11 * math.sin(a), 0.03) for a in [math.pi * k / 10 for k in range(11)]]
-        body.tube(skin, lid, radius=0.035, segs=8, matrix=m @ trs(rot=(0, 0, -0.35 * side)))
-        for g in range(3):
-            gill = [(0.12 - g * 0.07, side * (0.6 - g * 0.02), 0.15 - k * 0.12) for k in range(4)]
-            body.tube(P["angler_mouth"], gill, radius=0.016, segs=6)
-        fin_fan(body, P, (0.0, 0.0), (2.0, 3.7), 0.6, 7, trs((-0.08, side * 0.6, -0.12), (side * 1.25, 0, 0.15)))
-        fin_fan(body, P, (0.0, 0.0), (3.4, 4.4), 0.3, 4, trs((0.05, side * 0.32, -0.48), (side * 1.4, 0, 0)))
-    fin_fan(body, P, (0.0, 0.0), (math.pi - 1.0, math.pi + 1.0), 0.7, 11, trs((-1.5, 0, 0.0), (math.pi / 2, 0, 0)))
-    fin_fan(body, P, (0.0, 0.0), (1.4, 2.4), 0.45, 7, trs((-0.55, 0, 0.52), (math.pi / 2, 0, -0.2)))
-    body.sphere(skin, loc=(0.42, 0, 0.68), scale=(0.1, 0.08, 0.07), segs=12, rings=8)
+        for i in range(8):
+            x = 0.36 + 0.06 * i
+            y = side * roof_edge(x) * 0.9
+            length = rng.uniform(0.17, 0.26) if i % 2 == 0 else rng.uniform(0.08, 0.13)
+            fang(body, P["tooth"], (x, y, mouth_roof(x)), (0.2, -side * 0.25, -1.0), length, 0.35, rng)
+    for y in (-0.1, 0.1):
+        fang(body, P["tooth"], (0.8, y, mouth_roof(0.8)), (0.3, 0.0, -1.0), rng.uniform(0.2, 0.28), 0.35, rng)
+
+    for side in (-1, 1):
+        a = math.radians(32)
+        ex = 0.46
+        ey = head_width(ex) * math.cos(a) * side
+        ez = 0.06 + head_height(ex) * math.sin(a)
+        normal = Vector((0.45, side * math.cos(a), math.sin(a))).normalized()
+        m = frame(Vector((ex, ey, ez)) - normal * 0.03, normal)
+        body.sphere(P["angler_eye"], matrix=m @ trs(scale=0.085), segs=20, rings=14)
+        body.sphere(P["black"], matrix=m @ trs((0, 0, 0.065), scale=(0.02, 0.05, 0.03)), segs=12, rings=8)
+        body.sphere(P["eye_shine"], matrix=m @ trs((-0.025, 0.03, 0.075), scale=0.014), segs=8, rings=6)
+        lid = [(0.1 * math.cos(q), 0.1 * math.sin(q), 0.02) for q in [math.pi * k / 10 for k in range(11)]]
+        body.tube(skin, lid, radius=0.032, segs=8, matrix=m @ trs(rot=(0, 0, -0.5 * side)))
+        pect = [(0.0, 0.0), (-0.05, 0.12), (-0.2, 0.26), (-0.38, 0.27), (-0.47, 0.16), (-0.44, 0.02), (-0.3, -0.06)]
+        fin_lobe(body, P, pect, trs((-0.05, side * head_width(-0.05) * 0.96, -0.2), (side * 1.25, 0.15, -0.25)))
+
+    tail = [(0.0, 0.0), (-0.12, 0.16), (-0.34, 0.42), (-0.52, 0.36), (-0.6, 0.0), (-0.52, -0.36), (-0.34, -0.42),
+            (-0.12, -0.16)]
+    fin_lobe(body, P, tail, trs((TAIL_X + 0.14, 0, 0.06), (math.pi / 2, 0, 0)))
+    dorsal = [(0.0, 0.0), (0.06, 0.16), (-0.08, 0.3), (-0.26, 0.26), (-0.36, 0.08), (-0.3, -0.02)]
+    fin_lobe(body, P, dorsal, trs((-0.55, 0, 0.06 + head_height(-0.55) * 0.92), (math.pi / 2, 0, 0)))
+    anal = [(0.0, 0.0), (-0.06, -0.14), (-0.22, -0.22), (-0.34, -0.12), (-0.3, 0.0)]
+    fin_lobe(body, P, anal, trs((-0.6, 0, 0.06 - head_height(-0.6) * 0.92), (math.pi / 2, 0, 0)))
+
+    for k in range(6):
+        x = 0.0 - k * 0.17
+        top = 0.06 + head_height(x)
+        body.cylinder(skin, matrix=trs((x, 0, top - 0.01)), loc=(0, 0, 0.04), radius=0.028 - k * 0.003, radius2=0.0,
+                      depth=0.09 - k * 0.008, segs=8)
     for k in range(9):
-        x = 0.2 - k * 0.16
-        top, n = on_surface(angler_body_shape, (x, 0.0, 1.0))
-        body.cylinder(skin, matrix=frame(top, n) @ trs((0, 0, 0.03)), radius=0.03 - k * 0.002, radius2=0.0,
-                      depth=0.09 - k * 0.006, segs=8)
+        x = 0.42 - k * 0.15
+        for side in (-1, 1):
+            a = math.radians(-18)
+            body.sphere(P["angler_spot"], loc=(x, side * head_width(x) * math.cos(a) * 1.005,
+                                               0.06 + head_height(x) * math.sin(a)), scale=0.026, segs=8, rings=6)
     body.build("angler_body", root)
 
-    jaw = empty("jaw", root, (0.2, 0, -0.24))
+    hinge = Vector((-0.1, 0.0, -0.42))
+    jaw = empty("jaw", root, tuple(hinge))
     j = Part()
-    sculpt(j, angler_jaw_shape, lambda c, n: mouth if n.z > 0.55 and c.x < 0.98 else skin, subdiv=4)
+    loft(j, stations(-0.32, 1.09, 48), jaw_ring,
+         lambda c, n: mouth if n.z > 0.9 and abs(c.y) < jaw_shape(c.x)[0] * 0.8 else skin)
     for i in range(17):
         t = -1 + 2 * i / 16
-        a = t * 1.1
-        base = (0.42 + 0.5 * math.cos(a), 0.42 * math.sin(a), 0.06 + 0.1 * smooth(math.cos(a), 0.6, 1.0))
-        length = rng.uniform(0.22, 0.42) if i % 2 == 0 else rng.uniform(0.12, 0.2)
-        fang(j, P["tooth"], base, (0.35 * math.cos(a), 0.3 * math.sin(a), 1.0), length, -0.3, rng)
-    for k in range(7):
-        a = -0.9 + k * 0.3
-        root_pt = Vector((0.5 + 0.38 * math.cos(a), 0.36 * math.sin(a), -0.2))
-        length = rng.uniform(0.25, 0.5)
-        pts = [root_pt + Vector((0.03 * math.sin(t * 6 + k), 0.02 * math.cos(t * 5 + k), -t * length)) for t in
-               (0, 0.33, 0.66, 1.0)]
-        j.tube(P["angler_fin"], pts, radius=lambda t: 0.012 * (1 - 0.7 * t), segs=5)
-        j.sphere(P["angler_spot"], loc=pts[-1], scale=0.022, segs=8, rings=6)
+        x = 0.4 + 0.66 * (1 - t * t) ** 0.5
+        width, zc, rz, floor = jaw_shape(x)
+        y = width * 0.85 * t
+        length = rng.uniform(0.26, 0.42) if i % 2 == 0 else rng.uniform(0.12, 0.2)
+        fang(j, P["tooth"], (x, y, floor), (0.3, -0.25 * t, 1.0), length, -0.35, rng)
     j.build("jaw_mesh", jaw)
+    for o in descendants(jaw):
+        if o.type == "MESH":
+            o.data.transform(Matrix.Translation(-hinge))
 
-    lure = empty("lure", root, (0.42, 0, 0.72))
+    lure_base = (0.32, 0.0, 0.06 + head_height(0.32) - 0.02)
+    lure = empty("lure", root, lure_base)
     rod = Part()
-    pts = [(0, 0, 0), (0.06, 0, 0.26), (0.24, 0, 0.5), (0.52, 0, 0.62), (0.82, 0, 0.56), (1.0, 0, 0.36)]
-    rod.tube(P["angler_fin"], pts, radius=lambda t: 0.038 * (1 - 0.7 * t), segs=10)
-    for p in pts[1:-1]:
-        rod.sphere(P["angler_fin"], loc=p, scale=0.032, segs=10, rings=6)
-    rod.sphere(P["angler_lure"], loc=(1.02, 0, 0.21), scale=0.075, segs=16, rings=10)
-    rod.sphere(P["angler_bulb"], loc=(1.02, 0, 0.22), scale=(0.14, 0.14, 0.16), segs=24, rings=14)
-    for k in range(5):
-        a = -1.0 + k * 0.5
-        rod.tube(P["angler_lure"], [(1.02, 0, 0.08), (1.02 + 0.06 * math.sin(a), 0.05 * a, -0.04),
-                                    (1.02 + 0.1 * math.sin(a), 0.08 * a, -0.16)], radius=0.007, segs=4)
+    pts = [(0, 0, 0), (0.08, 0, 0.26), (0.3, 0, 0.48), (0.6, 0, 0.56), (0.86, 0, 0.46), (1.0, 0, 0.28)]
+    rod.tube(P["angler_fin"], pts, radius=lambda t: 0.034 * (1 - 0.7 * t), segs=10)
+    rod.sphere(P["angler_lure"], loc=(1.02, 0, 0.14), scale=0.07, segs=16, rings=10)
+    rod.sphere(P["angler_bulb"], loc=(1.02, 0, 0.15), scale=(0.13, 0.13, 0.15), segs=24, rings=14)
     rod.build("lure_mesh", lure)
-    empty("lure_tip", lure, (1.02, 0, 0.22))
+    empty("lure_tip", lure, (1.02, 0, 0.15))
     return root

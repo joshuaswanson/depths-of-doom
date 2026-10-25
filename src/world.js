@@ -685,7 +685,7 @@ export class World {
       u.yaw += ((u.dir > 0 ? 0 : -Math.PI) - u.yaw) * (1 - Math.exp(-dt * 0.7));
       a.rotation.y = u.yaw + Math.sin(t * 3.4 + u.phase) * 0.03;
       a.rotation.z = Math.sin(t * 0.5 + u.phase) * 0.05;
-      u.jaw.rotation.z = -Math.max(0, Math.sin(t * 0.6 + u.phase)) * 0.28;
+      u.jaw.rotation.z = -(0.1 + Math.max(0, Math.sin(t * 0.6 + u.phase)) * 0.22);
       u.lure.rotation.z = Math.sin(t * 1.3 + u.phase) * 0.08;
       u.halo.material.opacity = 0.6 + Math.sin(t * 2.4 + u.phase) * 0.2;
       const wrapped = wrap(a.position.x, cx, 50);

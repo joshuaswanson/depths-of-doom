@@ -15,7 +15,7 @@ const PROFILE_BY_MATERIAL = {
   enemy_old: ['wreck_hull', 'wreck_red'],
   coral: ['coral_pink', 'coral_purple', 'coral_orange'],
   weed: ['seaweed', 'seaweed_dark'],
-  angler: ['angler_belly', 'angler_fin'],
+  angler: ['angler_belly', 'angler_fin', 'angler_spine'],
 };
 
 const PROFILES = {
@@ -155,7 +155,7 @@ export const SHADER_TIME = { value: 0 };
 // Anglerfish skin: wet and warty, mottled indigo fading to a pale belly, with photophores pulsing along the flanks.
 function anglerSkin() {
   const m = new THREE.MeshPhysicalMaterial({
-    color: '#ffffff', roughness: 0.38, clearcoat: 0.55, clearcoatRoughness: 0.22, vertexColors: true,
+    color: '#ffffff', roughness: 0.5, clearcoat: 0.25, clearcoatRoughness: 0.35, vertexColors: true,
     sheen: 0.12, sheenColor: new THREE.Color('#4a3fb0'), sheenRoughness: 0.6,
   });
   m.onBeforeCompile = (shader) => {
@@ -195,9 +195,7 @@ function anglerSkin() {
 }
 
 function toothMaterial() {
-  return new THREE.MeshPhysicalMaterial({
-    color: '#f3ead2', roughness: 0.2, clearcoat: 1, vertexColors: true, emissive: '#2a3036', emissiveIntensity: 1,
-  });
+  return new THREE.MeshStandardMaterial({ color: '#e9dfc4', roughness: 0.55, vertexColors: true });
 }
 
 const REPLACEMENTS = {
@@ -214,7 +212,7 @@ const patched = new WeakSet();
 
 // Anglerfish parts that swish with the tail: the rear of the body bends in a travelling wave, fading out toward
 // the head so the jaw, eyes, and lure stay steady.
-const SWAY_MATERIALS = new Set(['angler_skin', 'angler_fin', 'angler_membrane', 'angler_speck', 'angler_spot']);
+const SWAY_MATERIALS = new Set(['angler_skin', 'angler_fin', 'angler_spine', 'angler_speck', 'angler_spot']);
 const SWAY_GLSL = /* glsl */ `
   float swayRear = smoothstep( 0.2, -1.6, transformed.x );
   float swaySeed = modelMatrix[ 3 ].x * 0.37 + modelMatrix[ 3 ].y * 0.21;

@@ -498,7 +498,7 @@ export class Player {
     for (const spot of this.spots) {
       spot.light.intensity = spot.holder.visible ? (10 + 190 * dark) * power : 0;
       spot.light.distance = 50 + 10 * lamps;
-      spot.beam.material.uniforms.uStrength.value = 0.015 + 0.06 * dark;
+      spot.beam.material.uniforms.uStrength.value = 0.01 + 0.032 * dark;
     }
   }
 

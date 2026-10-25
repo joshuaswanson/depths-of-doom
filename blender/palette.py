@@ -80,6 +80,7 @@ def palette():
         "tooth": mat("tooth", "#EFE6CF", rough=0.3),
         "angler_eye": mat("angler_eye", "#E4FF6A", rough=0.15, emit=1.1, emit_color="#C8FF3A"),
         "angler_fin": mat("angler_fin", "#3A3170", rough=0.45),
+        "angler_spine": mat("angler_spine", "#251E48", rough=0.5),
         "angler_membrane": mat("angler_membrane", "#5C52A8", rough=0.3, emit=0.3, alpha=0.5),
         "angler_speck": mat("angler_speck", "#8A7FC0", rough=0.5),
         "angler_throat": mat("angler_throat", "#FF4A6A", rough=0.3, emit=2.0),
