@@ -954,11 +954,9 @@ export class Game {
         t.vel.y -= GRAVITY * dt;
         if (Math.random() < 0.5) this.effects.smokeTrail(p, 0.5);
       } else {
-        const speed = Math.min(15, t.vel.length() + dt * 14);
-        let angle = Math.atan2(t.vel.y, t.vel.x);
-        const target = this.nearestEnemy(p.x, p.y);
-        if (target) angle = angleLerp(angle, Math.atan2(target.obj.position.y - p.y, target.obj.position.x - p.x), dt * 1.6);
-        t.vel.set(Math.cos(angle) * speed, Math.sin(angle) * speed);
+        // Torpedoes run dead straight along their launch line, picking up speed; they hit hard but can miss.
+        const speed = Math.min(18, t.vel.length() + dt * 16);
+        t.vel.setLength(speed);
         t.trail -= dt;
         if (t.trail <= 0) {
           t.trail = 0.025;
@@ -978,8 +976,8 @@ export class Game {
       const floor = seabedAt(p.x);
       if (hitE || t.life <= 0 || p.y < floor) {
         if (hitE) {
-          this.damageEnemy(hitE, 5);
-          for (const e of this.enemies) if (e !== hitE && !e.dead && e.obj.position.distanceTo(p) < 2) this.damageEnemy(e, 2);
+          this.damageEnemy(hitE, 7);
+          for (const e of this.enemies) if (e !== hitE && !e.dead && e.obj.position.distanceTo(p) < 2.4) this.damageEnemy(e, 3);
         }
         if (hitE || p.y < floor) {
           this.effects.explosion(p, 0.7);
