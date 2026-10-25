@@ -87,19 +87,19 @@ def part_cannon(P):
     for i in range(6):
         a = 2 * math.pi * i / 6
         y, z = 0.2 * math.cos(a), 0.2 * math.sin(a)
-        barrels.cylinder(P["steel"], loc=(0.56, y, z), radius=0.085, depth=0.52, rot=ALONG_X, segs=16)
-        barrels.cylinder(P["steel"], loc=(0.86, y, z), radius=0.085, radius2=0.13, depth=0.11, rot=ALONG_X, segs=16)
-        barrels.cylinder(P["black"], loc=(0.916, y, z), radius=0.085, depth=0.01, rot=ALONG_X, segs=14)
-    barrels.cylinder(P["steel_dark"], loc=(0.54, 0, 0), radius=0.1, depth=0.58, rot=ALONG_X, segs=14)
-    barrels.cylinder(P["red"], loc=(0.88, 0, 0), radius=0.07, depth=0.09, rot=ALONG_X, segs=14)
-    for x, color in ((0.42, "steel_dark"), (0.72, "yellow")):
+        barrels.cylinder(P["steel"], loc=(0.65, y, z), radius=0.085, depth=0.7, rot=ALONG_X, segs=16)
+        barrels.cylinder(P["steel"], loc=(1.05, y, z), radius=0.085, radius2=0.13, depth=0.11, rot=ALONG_X, segs=16)
+        barrels.cylinder(P["black"], loc=(1.106, y, z), radius=0.085, depth=0.01, rot=ALONG_X, segs=14)
+    barrels.cylinder(P["steel_dark"], loc=(0.63, 0, 0), radius=0.1, depth=0.76, rot=ALONG_X, segs=14)
+    barrels.cylinder(P["red"], loc=(1.07, 0, 0), radius=0.07, depth=0.09, rot=ALONG_X, segs=14)
+    for x, color in ((0.42, "steel_dark"), (0.84, "yellow")):
         barrels.torus(P[color], loc=(x, 0, 0), major=0.3, minor=0.05, rot=ALONG_X, segs=32)
     for i in range(3):
         a = 2 * math.pi * i / 3
-        barrels.box(P["yellow"], loc=(0.72, 0.34 * math.cos(a), 0.34 * math.sin(a)), size=(0.09, 0.09, 0.09),
+        barrels.box(P["yellow"], loc=(0.84, 0.34 * math.cos(a), 0.34 * math.sin(a)), size=(0.09, 0.09, 0.09),
                     bevel=0.02)
     barrels.build("cannon_barrels", root, location=(0, 0, axis))
-    empty("muzzle", root, (0.95, 0, axis))
+    empty("muzzle", root, (1.14, 0, axis))
     return root
 
 
