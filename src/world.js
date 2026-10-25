@@ -30,6 +30,16 @@ export function floorY(x) {
   return SHELF_Y + (ABYSS_Y - SHELF_Y) * stepped + ledges;
 }
 
+// 0 in the open middle of a shelf, rising to 1 near a cliff edge and over the deep floor beyond it.
+export function murkAt(x) {
+  let murk = 0;
+  for (let o = -72; o <= 72; o += 6) {
+    const drop = SHELF_Y - floorY(x + o);
+    murk = Math.max(murk, THREE.MathUtils.smoothstep(drop, 1.5, 8) * (1 - Math.abs(o) / 80));
+  }
+  return murk;
+}
+
 // Reef mounds: one per stretch of shelf, placed and sized by a hash of the stretch so they never move.
 const MOUND_CELL = 24;
 const MOUND_Z = -10;
@@ -52,12 +62,13 @@ export function moundOf(cell) {
 }
 
 function makeMound(cell) {
+  const x = cell * MOUND_CELL + MOUND_CELL * (0.2 + 0.6 * hash(cell, 1));
   return {
     cell,
-    x: cell * MOUND_CELL + MOUND_CELL * (0.2 + 0.6 * hash(cell, 1)),
+    x,
     height: 3.0 + 3.5 * hash(cell, 2),
     width: 4.5 + 3.5 * hash(cell, 3),
-    reef: hash(cell, 4) < 0.72,
+    reef: hash(cell, 4) < 0.85 * (1 - THREE.MathUtils.smoothstep(murkAt(x), 0.1, 0.3)),
   };
 }
 
@@ -116,12 +127,12 @@ const LAYERS = [
   {
     z: [-48, -22], gap: [6, 12], scale: [1.1, 1.7],
     props: ['ruin_pier', 'ruin_arch', 'ruin_pillar_a', 'ruin_pillar_b', 'ruin_wall', 'anchor', 'rock_a', 'ruin_tower'],
-    deep: ['rock_a', 'rock_b', 'ruin_pillar_b', 'anchor', 'ruin_wall'],
+    deep: ['rock_a', 'rock_b', 'ruin_pillar_b', 'ruin_wall'],
   },
   {
     z: [-16, -2], gap: [7, 14], scale: [0.85, 1.35],
     props: ['ruin_pillar_b', 'rock_b', 'anchor', 'rock_a', 'ruin_wall'],
-    deep: ['rock_a', 'rock_b', 'anchor', 'rock_b', 'ruin_pillar_b'],
+    deep: ['rock_a', 'rock_b', 'rock_b', 'ruin_pillar_b'],
   },
   {
     z: [9, 13], gap: [5, 10], scale: [1.0, 1.5], tint: ['#0b2a3f', 0.6],
@@ -261,6 +272,8 @@ function makeWaterline() {
 
 const SHALLOW_COLORS = ['#1d5a55', '#2c7a60', '#4a9068', '#17474a'].map((c) => new THREE.Color(c));
 const RUBBLE = new THREE.Color('#5d8a95');
+const SHELF_TEAL = new THREE.Color('#2a8f98');
+const MURK = new THREE.Color('#353f2c');
 const REEF_SAND = new THREE.Color('#2fa9d6');
 const REEF_LAGOON = new THREE.Color('#86e6f2');
 const DEEP_COLORS = ['#1a2430', '#252f3d', '#2d3644', '#151b26'].map((c) => new THREE.Color(c));
@@ -295,8 +308,11 @@ function shapeTile(tile, target, budget = Infinity) {
   const glowAttr = geo.attributes.aReef.array;
   const end = Math.min(pos.count, job.next + budget);
   const x0 = job.x0;
+  const murkOf = new Map();
   for (let i = job.next; i < end; i++) {
     const x = geo.userData.baseX[i] + x0;
+    if (!murkOf.has(x)) murkOf.set(x, murkAt(x));
+    const murk = murkOf.get(x);
     const z = pos.getZ(i);
     const floor = floorY(x);
     const shelf = 1 - THREE.MathUtils.smoothstep(SHELF_Y - floor, 2, 10);
@@ -308,6 +324,8 @@ function shapeTile(tile, target, budget = Infinity) {
     c.copy(SHALLOW_COLORS[0]).lerp(SHALLOW_COLORS[1], n).lerp(SHALLOW_COLORS[2], m * 0.35 * n);
     c.lerp(SHALLOW_COLORS[3], Math.max(0, Math.sin(x * 0.31 - z * 0.5)) * 0.4);
     d.copy(DEEP_COLORS[0]).lerp(DEEP_COLORS[1], n).lerp(DEEP_COLORS[2], m * 0.4);
+    c.lerp(SHELF_TEAL, (1 - murk) * 0.4);
+    c.lerp(MURK, murk * 0.6);
     c.lerp(d, THREE.MathUtils.smoothstep(-y, 18, 45));
     const glow = shelf > 0 ? reefGlow(x, z) * shelf : 0;
     const ripple = 0.5 + 0.5 * Math.sin(x * 0.9 + z * 0.4) * Math.sin(x * 0.37 - z * 1.1);
@@ -596,6 +614,37 @@ function playGull(gull, name, fade = 0.25) {
   next.reset().play();
   if (current && current !== next) current.crossFadeTo(next, fade, false);
   gull.userData.current = next;
+}
+
+// Anchors and kelp crowd the murky sand toward the cliffs; the clear middle of a shelf keeps its corals and ruins.
+function chooseProp(layer, mood, murk) {
+  if (mood === 'deep') return pick(layer.deep);
+  const others = layer.props.filter((n) => n !== 'anchor');
+  if (mood === 'murk') {
+    if (layer.props.includes('anchor') && Math.random() < 0.55 * murk) return 'anchor';
+    if (layer.props.includes('kelp_short')) return Math.random() < 0.75 ? 'kelp_short' : pick(layer.deep);
+  }
+  return pick(others);
+}
+
+// Sunken anchors lie where they fell: leaning with the crown dug in, toppled onto their back, or half buried.
+function settleAnchor(obj) {
+  const size = obj.scale.x;
+  obj.rotation.order = 'YXZ';
+  obj.rotation.y = rand(-Math.PI, Math.PI);
+  const pose = Math.random();
+  if (pose < 0.4) {
+    obj.rotation.z = (Math.random() < 0.5 ? -1 : 1) * rand(0.3, 0.75);
+    obj.position.y -= 0.35 * size;
+  } else if (pose < 0.75) {
+    obj.rotation.x = (Math.random() < 0.5 ? -1 : 1) * rand(1.2, 1.4);
+    obj.rotation.z = rand(-0.3, 0.3);
+    obj.position.y += 0.05 * size;
+  } else {
+    obj.rotation.z = rand(-0.25, 0.25);
+    obj.rotation.x = rand(-0.3, 0.3);
+    obj.position.y -= rand(0.9, 1.4) * size;
+  }
 }
 
 // Jellies gather in one glowing layer in the dark trenches, with a few stragglers drifting deeper.
@@ -887,10 +936,11 @@ export class World {
   placeProp(prop, x) {
     const { layer } = prop;
     const deep = floorY(x) < SHELF_Y - 14;
-    const want = deep ? 'deep' : 'shallow';
+    const murk = deep ? 0 : murkAt(x);
+    const want = deep ? 'deep' : murk > 0.35 ? 'murk' : 'clear';
     if (prop.kind !== want) {
       if (prop.obj) this.scene.remove(prop.obj);
-      const name = pick(deep ? layer.deep : layer.props);
+      const name = chooseProp(layer, want, murk);
       prop.obj = spawn(name);
       prop.obj.userData.model = name;
       if (layer.plain) plainMaterials(prop.obj);
@@ -908,7 +958,8 @@ export class World {
       for (const dz of [-half, 0, half]) ground = Math.min(ground, seabedAt(x + (i * half) / 2, z + dz));
     }
     prop.obj.position.set(x, ground - 0.25, z);
-    prop.obj.rotation.y = rand(-0.5, 0.5);
+    prop.obj.rotation.set(0, rand(-0.5, 0.5), 0);
+    if (prop.obj.userData.model === 'anchor') settleAnchor(prop.obj);
   }
 
   populate(layer) {
@@ -1005,9 +1056,12 @@ export class World {
           0.8 + r() * 0.4);
       }
     } else {
-      const stalks = 5 + Math.floor(r() * 4);
+      // Kelp beds grow thicker and spread wider out in the murk.
+      const murk = murkAt(m.x);
+      const stalks = 5 + Math.floor(r() * 4 + murk * 10);
       for (let i = 0; i < stalks; i++) {
-        place(r() < 0.65 ? 'kelp_tall' : 'kelp_short', m.x + (r() - 0.5) * 7, MOUND_Z + (r() - 0.5) * 8, 0.8 + r() * 0.5);
+        place(r() < 0.65 ? 'kelp_tall' : 'kelp_short', m.x + (r() - 0.5) * (7 + murk * 10),
+          MOUND_Z + (r() - 0.5) * (8 + murk * 6), 0.8 + r() * 0.5);
       }
       place(r() < 0.5 ? 'rock_a' : 'rock_b', m.x + (r() - 0.5) * 6, MOUND_Z, 0.7 + r() * 0.5);
     }
