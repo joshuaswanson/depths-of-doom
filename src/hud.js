@@ -32,7 +32,7 @@ export class Hud {
     this.lagFrac = 1;
     this.coinBox = el('div', 'coins', `<img src="${ICON('coin')}" alt=""><span>0</span>`);
     this.coinText = this.coinBox.querySelector('span');
-    topLeft.append(this.health, this.shieldPips, this.coinBox);
+    topLeft.append(this.coinBox);
 
     this.waveTag = el('div', 'wave-tag');
     topLeft.append(this.waveTag);

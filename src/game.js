@@ -16,7 +16,7 @@ const ENEMY_YAW = {
 };
 const SKULL_CHANCE = 1 / 3;
 const HALO_SIZE = { scout: 1.3, gunner: 1.6, boss: 2.6 };
-const BAR_WIDTH = { scout: 1.4, gunner: 1.9, boss: 3.4 };
+const BAR_WIDTH = { scout: 1.4, gunner: 1.9, boss: 3.4, player: 2.6 };
 const BAR_HEIGHT = 0.26;
 const BAR_LOW = new THREE.Color('#ff3b30');
 const BAR_MID = new THREE.Color('#ffc93a');
@@ -119,6 +119,47 @@ function angleLerp(a, b, maxStep) {
   return a + THREE.MathUtils.clamp(d, -maxStep, maxStep);
 }
 
+function setBar(bar, frac, dt) {
+  bar.lag = Math.max(frac, bar.lag - dt * 0.6);
+  const u = bar.mat.uniforms;
+  u.uFrac.value = frac;
+  u.uLag.value = bar.lag;
+  if (frac > 0.5) u.uColor.value.copy(BAR_MID).lerp(BAR_HIGH, (frac - 0.5) * 2);
+  else u.uColor.value.copy(BAR_LOW).lerp(BAR_MID, frac * 2);
+}
+
+const pipTexture = (() => {
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 64;
+  const g = canvas.getContext('2d');
+  const grad = g.createRadialGradient(24, 22, 2, 32, 32, 30);
+  grad.addColorStop(0, '#f2fdff');
+  grad.addColorStop(0.45, '#5fd2ff');
+  grad.addColorStop(0.9, '#1c7fc4');
+  grad.addColorStop(1, 'rgba(28,127,196,0)');
+  g.fillStyle = grad;
+  g.beginPath();
+  g.arc(32, 32, 30, 0, Math.PI * 2);
+  g.fill();
+  return new THREE.CanvasTexture(canvas);
+})();
+
+// The player's health bar rides above the sub, with a bubble pip for each shield charge above it.
+function playerStatus(scene) {
+  const bar = healthBar('player');
+  bar.group.visible = true;
+  const pips = Array.from({ length: 5 }, () => {
+    const pip = new THREE.Sprite(new THREE.SpriteMaterial({ map: pipTexture, depthTest: false, transparent: true, fog: false }));
+    pip.scale.setScalar(0.32);
+    pip.renderOrder = 21;
+    return pip;
+  });
+  const group = new THREE.Group();
+  group.add(bar.group, ...pips);
+  scene.add(group);
+  return { group, bar, pips };
+}
+
 export class Game {
   constructor({ scene, camera, world, effects, player, hud }) {
     Object.assign(this, { scene, camera, world, effects, player, hud });
@@ -131,6 +172,7 @@ export class Game {
     this.aspect = 1.5;
     this.cam = new THREE.Vector2(0, 0);
     this.makeBulletMesh();
+    this.status = playerStatus(this.scene);
     this.makeMineChains();
     this.tmp = new THREE.Vector3();
     this.radarSweep = 0;
@@ -746,13 +788,8 @@ export class Game {
       if (e.propeller) e.propeller.rotation.x += dt * 14;
       if (e.bar) {
         const frac = Math.max(0, e.hp / e.maxHp);
-        e.bar.lag = Math.max(frac, e.bar.lag - dt * 0.6);
         e.bar.group.visible = frac < 0.999;
-        const u = e.bar.mat.uniforms;
-        u.uFrac.value = frac;
-        u.uLag.value = e.bar.lag;
-        if (frac > 0.5) u.uColor.value.copy(BAR_MID).lerp(BAR_HIGH, (frac - 0.5) * 2);
-        else u.uColor.value.copy(BAR_LOW).lerp(BAR_MID, frac * 2);
+        setBar(e.bar, frac, dt);
       }
       if (e.glow) {
         const dark = this.world.dark;
@@ -1091,9 +1128,25 @@ export class Game {
     }
 
     this.emitDamageSmoke();
+    this.updateStatus(dt);
     this.kickUpSand(dt);
     this.radarSweep = (this.radarSweep + dt * 2.2) % (Math.PI * 2);
     if (this.over) this.overTimer -= dt;
+  }
+
+  updateStatus(dt) {
+    const pl = this.player;
+    const { group, bar, pips } = this.status;
+    group.visible = pl.alive;
+    const ext = pl.extents;
+    group.position.set(pl.group.position.x, pl.group.position.y + ext.cy + ext.hy + 0.75, 1.5);
+    setBar(bar, Math.max(0, pl.hp / pl.maxHp), dt);
+    const max = pl.shieldMax;
+    pips.forEach((pip, i) => {
+      pip.visible = i < max;
+      pip.position.set((i - (max - 1) / 2) * 0.38, 0.36, 0);
+      pip.material.opacity = i < pl.shieldCharges ? 1 : 0.25;
+    });
   }
 
   // Slamming into the seabed throws up a cloud of sand; skimming along it trails dust.
