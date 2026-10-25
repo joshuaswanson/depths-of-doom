@@ -106,6 +106,32 @@ function coinInstances() {
   return parts;
 }
 
+// Closest points between two segments, each given as { ax, ay, bx, by }.
+function closestOnSegments(s1, s2) {
+  const d1x = s1.bx - s1.ax;
+  const d1y = s1.by - s1.ay;
+  const d2x = s2.bx - s2.ax;
+  const d2y = s2.by - s2.ay;
+  const rx = s1.ax - s2.ax;
+  const ry = s1.ay - s2.ay;
+  const a = d1x * d1x + d1y * d1y;
+  const e = d2x * d2x + d2y * d2y;
+  const f = d2x * rx + d2y * ry;
+  const c = d1x * rx + d1y * ry;
+  const b = d1x * d2x + d1y * d2y;
+  const denom = a * e - b * b;
+  let s = denom > 1e-8 ? THREE.MathUtils.clamp((b * f - c * e) / denom, 0, 1) : 0;
+  let t = (b * s + f) / e;
+  if (t < 0) {
+    t = 0;
+    s = THREE.MathUtils.clamp(-c / a, 0, 1);
+  } else if (t > 1) {
+    t = 1;
+    s = THREE.MathUtils.clamp((b - c) / a, 0, 1);
+  }
+  return [{ x: s1.ax + d1x * s, y: s1.ay + d1y * s }, { x: s2.ax + d2x * t, y: s2.ay + d2y * t }];
+}
+
 function onShelf(x) {
   return floorY(x) > SHELF_Y - 3;
 }
@@ -1269,9 +1295,70 @@ export class Game {
       }
     }
     this.enemies = this.enemies.filter((e) => !e.dead);
+    this.separateEnemies(dt);
     for (const c of this.brokenChains) sinkChain(c, dt);
     this.brokenChains = this.brokenChains.filter((c) => Math.abs(c.nodes[0].x - this.cam.x) < 80);
     this.updateMineChains();
+  }
+
+  // The hull as a capsule: a segment along its length, tilted with its pitch, and a radius wide enough to take in
+  // the tower.
+  hullCapsule(e) {
+    const p = e.obj.position;
+    const a = e.pitch * e.facing;
+    const reach = e.def.rx * 0.75;
+    const dx = Math.cos(a) * e.facing * reach;
+    const dy = Math.sin(a) * reach;
+    return { ax: p.x - dx, ay: p.y - dy, bx: p.x + dx, by: p.y + dy, r: e.def.ry * 1.05 };
+  }
+
+  // Enemy subs steer clear of each other when close and are pushed apart if their hulls still overlap.
+  separateEnemies(dt) {
+    const subs = this.enemies.filter((e) => e.type !== 'mine' && !e.dead);
+    for (let i = 0; i < subs.length; i++) {
+      for (let j = i + 1; j < subs.length; j++) {
+        const a = subs[i];
+        const b = subs[j];
+        const pa = a.obj.position;
+        const pb = b.obj.position;
+        const near = a.def.rx + b.def.rx + 1.5;
+        if (Math.abs(pa.x - pb.x) > near || Math.abs(pa.y - pb.y) > near) continue;
+        const ca = this.hullCapsule(a);
+        const cb = this.hullCapsule(b);
+        const [qa, qb] = closestOnSegments(ca, cb);
+        let nx = qb.x - qa.x;
+        let ny = qb.y - qa.y;
+        const d = Math.hypot(nx, ny) || 1e-4;
+        nx /= d;
+        ny /= d;
+        const touch = ca.r + cb.r;
+        const ma = ENEMY_MASS[a.type];
+        const mb = ENEMY_MASS[b.type];
+        const wa = mb / (ma + mb);
+        const wb = ma / (ma + mb);
+        if (d < touch + 1.2) {
+          const push = (1 - (d - touch) / 1.2) * 6 * dt;
+          a.vel.x -= nx * push * wa;
+          a.vel.y -= ny * push * wa;
+          b.vel.x += nx * push * wb;
+          b.vel.y += ny * push * wb;
+        }
+        if (d >= touch) continue;
+        const overlap = touch - d;
+        pa.x -= nx * overlap * wa;
+        pa.y -= ny * overlap * wa;
+        pb.x += nx * overlap * wb;
+        pb.y += ny * overlap * wb;
+        const closing = (b.vel.x - a.vel.x) * nx + (b.vel.y - a.vel.y) * ny;
+        if (closing < 0) {
+          const j = -1.2 * closing;
+          a.vel.x -= nx * j * wa;
+          a.vel.y -= ny * j * wa;
+          b.vel.x += nx * j * wb;
+          b.vel.y += ny * j * wb;
+        }
+      }
+    }
   }
 
   // Points along an enemy hull's length, so its whole body counts in collisions, not just its middle.
