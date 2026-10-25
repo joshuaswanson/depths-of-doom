@@ -19,9 +19,13 @@ function halfWidthAt(z, aspect) {
 // Seabed depth along the world: sunlit ruin shelves broken up by trenches that fall into the abyss.
 export function floorY(x) {
   const n = 0.5 + 0.5 * (0.6 * Math.sin(x * 0.011 - 1.2) + 0.4 * Math.sin(x * 0.027 + 2.0));
-  const deepness = THREE.MathUtils.smoothstep(n, 0.38, 0.66);
+  const deepness = THREE.MathUtils.smoothstep(n, 0.36, 0.68);
+  // Step the descent into three cliff-and-ledge tiers.
+  const tiers = 3;
+  const k = Math.min(Math.floor(deepness * tiers), tiers - 1);
+  const stepped = (k + THREE.MathUtils.smoothstep(deepness * tiers - k, 0.3, 0.7)) / tiers;
   const ledges = Math.sin(x * 0.09) * 1.5 * deepness * (1 - deepness) * 4;
-  return SHELF_Y + (ABYSS_Y - SHELF_Y) * deepness + ledges;
+  return SHELF_Y + (ABYSS_Y - SHELF_Y) * stepped + ledges;
 }
 
 function detailHeight(x, z) {
@@ -394,13 +398,13 @@ export class World {
 
     this.jellies = Array.from({ length: 16 }, () => {
       const j = makeJelly();
-      j.position.set(rand(-40, 40), rand(-80, -30), rand(-25, -2));
+      j.position.set(rand(-40, 40), rand(-200, -30), rand(-25, -2));
       scene.add(j);
       return j;
     });
     this.eyes = Array.from({ length: 10 }, () => {
       const e = makeEyes();
-      e.position.set(rand(-60, 60), rand(-90, -35), rand(-70, -35));
+      e.position.set(rand(-60, 60), rand(-200, -35), rand(-70, -35));
       scene.add(e);
       return e;
     });
@@ -497,7 +501,7 @@ export class World {
     bu.uLine.value = 0.5 + 0.5 * (SURFACE_Y - cy) / (CAMERA_Z * TAN_HALF_FOV);
     this.scene.fog.color.setRGB(shift, this.dark, 0);
     this.scene.fog.near = THREE.MathUtils.lerp(20, 6, this.dark);
-    this.scene.fog.far = THREE.MathUtils.lerp(125, 55, this.dark);
+    this.scene.fog.far = THREE.MathUtils.lerp(125, 45, this.dark);
     this.surface.material.uniforms.uTime.value = t;
     this.surface.position.x = cx;
     this.waterline.material.uniforms.uTime.value = t;
@@ -560,6 +564,7 @@ export class World {
       if (u.blink < 0) u.blink = rand(2, 7);
       e.position.x = wrap(e.position.x, cx, 60);
       e.position.y += Math.sin(t * 0.3 + u.phase) * dt * 0.3;
+      if (Math.abs(e.position.y - cy) > 35) e.position.y = Math.min(-35, cy + rand(-25, 15));
       e.visible = this.dark > 0.25 && floorY(e.position.x) < e.position.y - 4;
     }
 

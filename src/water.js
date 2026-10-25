@@ -5,7 +5,7 @@ export const CAMERA_Z = 20;
 export const TAN_HALF_FOV = Math.tan(THREE.MathUtils.degToRad(CAMERA_FOV / 2));
 export const SURFACE_Y = 26;
 export const SHELF_Y = -7.6;
-export const ABYSS_Y = -96;
+export const ABYSS_Y = -210;
 
 export function depthShift(cameraY) {
   const d = THREE.MathUtils.clamp((cameraY - SHELF_Y) / (SURFACE_Y - SHELF_Y), -1, 1);
@@ -14,7 +14,7 @@ export function depthShift(cameraY) {
 
 // 0 in the sunlit shallows, 1 in the black depths of the trenches.
 export function darkness(y) {
-  return THREE.MathUtils.smoothstep(-y, 12, 80);
+  return THREE.MathUtils.smoothstep(-y, 12, 130);
 }
 
 const stops = ['#05304f', '#0a5c94', '#1a9bdb', '#6fe6ff'].map((hex) => new THREE.Color(hex));

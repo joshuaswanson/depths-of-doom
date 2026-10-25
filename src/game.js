@@ -92,7 +92,7 @@ export class Game {
   }
 
   get bounds() {
-    return { top: SURFACE_Y + 0.5, bottom: (x) => seabedAt(x) + 0.7 };
+    return { bottom: (x) => seabedAt(x) + 0.7 };
   }
 
   onScreen(x, y, margin = 0) {
@@ -800,12 +800,15 @@ export class Game {
     const ty = pc.y + pl.vel.y * 0.2;
     this.cam.x = THREE.MathUtils.lerp(this.cam.x, tx, 1 - Math.exp(-dt * 2.2));
     this.cam.y = THREE.MathUtils.lerp(this.cam.y, ty, 1 - Math.exp(-dt * 2.2));
-    this.cam.y = THREE.MathUtils.clamp(this.cam.y, seabedAt(this.cam.x) + this.halfH - 3, SURFACE_Y - this.halfH + 4.5);
+    let lowest = Infinity;
+    for (let i = -2; i <= 2; i++) lowest = Math.min(lowest, seabedAt(this.cam.x + (i * this.halfW) / 2));
+    this.camFloor = THREE.MathUtils.lerp(this.camFloor ?? lowest, lowest, 1 - Math.exp(-dt * 1.5));
+    this.cam.y = THREE.MathUtils.clamp(this.cam.y, this.camFloor + this.halfH - 3, SURFACE_Y + 1);
   }
 
   splashCheck() {
     const pc = this.player.center;
-    const above = pc.y > SURFACE_Y - 0.3;
+    const above = this.player.group.position.y > SURFACE_Y;
     if (above !== this.wasAbove && this.player.alive) {
       this.effects.splash({ x: pc.x, y: SURFACE_Y, z: 0.5 }, 1.2);
       sfx.splash();

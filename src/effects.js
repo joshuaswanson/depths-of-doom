@@ -164,6 +164,7 @@ export class Effects {
   }
 
   bubble(pos, { spread = 0.2, size = [0.12, 0.3], vel = { x: 0, y: 0 }, life = [1.2, 2.2] } = {}) {
+    if (pos.y > SURFACE_Y) return;
     this.bubbles.emit({
       pos: { x: pos.x + rand(-spread, spread), y: pos.y + rand(-spread, spread), z: (pos.z ?? 0) + rand(-spread, spread) },
       vel: { x: vel.x + rand(-0.4, 0.4), y: vel.y + rand(0.3, 1.0), z: 0 },

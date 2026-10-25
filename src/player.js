@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { findNode, findNodes, spawn } from './assets.js';
 import { JUNK_PER_HULL, PART_MODEL, SOCKETS, UPGRADES, partCount } from './upgrades.js';
+import { SURFACE_Y } from './water.js';
 
 // Swimming in any direction shows the sub in full profile; idling, it drifts round to show three quarters of its
 // face.
@@ -10,6 +11,8 @@ const YAW = {
   left: { swim: -Math.PI, idle: -(Math.PI - 0.75) },
 };
 const DRAG = 1.5;
+const GRAVITY = 18;
+const AIR_DRAG = 0.15;
 const TURN_RATE = 2.4;
 const TURN_MAX_SPEED = 2.2;
 const MAX_PITCH = 1.52;
@@ -103,13 +106,14 @@ export class Player {
   constructor(scene) {
     this.scene = scene;
     this.group = new THREE.Group();
-    this.pitchPivot = new THREE.Group();
+    // Yaw turns the sub around; pitch tips its nose within its own frame, so nose-up stays nose-up mid-turn.
     this.yawPivot = new THREE.Group();
-    this.group.add(this.pitchPivot);
-    this.pitchPivot.add(this.yawPivot);
+    this.pitchPivot = new THREE.Group();
+    this.group.add(this.yawPivot);
+    this.yawPivot.add(this.pitchPivot);
     this.rig = new THREE.Group();
     this.rig.scale.setScalar(RIG_SCALE);
-    this.yawPivot.add(this.rig);
+    this.pitchPivot.add(this.rig);
     this.hullPivot = new THREE.Group();
     this.rig.add(this.hullPivot);
     this.hull = spawn('player_hull');
@@ -121,7 +125,7 @@ export class Player {
     this.duck.visible = false;
     this.hull.add(this.duck);
     this.shield = makeShieldBubble();
-    this.yawPivot.add(this.shield);
+    this.pitchPivot.add(this.shield);
 
     this.lamp = new THREE.Group();
     this.rig.add(this.lamp);
@@ -157,6 +161,7 @@ export class Player {
     this.facing = 1;
     this.yaw = YAW.right.idle;
     this.pitch = 0;
+    this.airborne = false;
     this.invuln = 0;
     this.sinceHit = 99;
     this.shieldCharges = 0;
@@ -175,7 +180,7 @@ export class Player {
 
   get speed() {
     const weight = this.parts.length * 0.11 + (this.levels.hull - 1) * 0.35;
-    return Math.max(3.4, 6.4 + (this.levels.propulsion - 1) * 1.3 - weight);
+    return Math.max(4.5, 8 + (this.levels.propulsion - 1) * 1.6 - weight);
   }
 
   get damageMult() {
@@ -255,7 +260,6 @@ export class Player {
   measure() {
     const scale = this.rig.scale.clone();
     const hullScale = this.hullPivot.scale.clone();
-    this.yawPivot.rotation.y = 0;
     this.rig.scale.setScalar(RIG_SCALE);
     this.hullPivot.scale.set(this.fatTarget.x, this.fatTarget.yz, this.fatTarget.yz);
     const saved = this.parts.map((p) => [p.pivot.position.clone(), p.pivot.scale.clone()]);
@@ -263,8 +267,8 @@ export class Player {
       part.pivot.position.copy(part.target);
       part.pivot.scale.setScalar(1);
     }
-    this.yawPivot.updateMatrixWorld(true);
-    const toLocal = this.yawPivot.matrixWorld.clone().invert();
+    this.group.updateMatrixWorld(true);
+    const toLocal = this.pitchPivot.matrixWorld.clone().invert();
     const box = new THREE.Box3();
     const parts = [this.hullPivot, ...this.parts.map((p) => p.pivot)];
     for (const root of parts) {
@@ -278,7 +282,6 @@ export class Player {
       p.pivot.position.copy(saved[i][0]);
       p.pivot.scale.copy(saved[i][1]);
     });
-    this.yawPivot.rotation.y = this.yaw;
     this.rig.scale.copy(scale);
     this.hullPivot.scale.copy(hullScale);
     const c = box.getCenter(new THREE.Vector3());
@@ -305,9 +308,14 @@ export class Player {
     return Math.cos(this.yaw) >= 0 ? 1 : -1;
   }
 
+  // Angle of the sub's silhouette on screen.
+  get screenTilt() {
+    return this.pitch * this.facingSign;
+  }
+
   // Point in the sub's own frame: x along its nose, y up through its tower.
   toLocal(x, y) {
-    const a = -this.pitchPivot.rotation.z;
+    const a = -this.screenTilt;
     const dx = x - this.group.position.x;
     const dy = y - this.group.position.y;
     const lx = dx * Math.cos(a) - dy * Math.sin(a);
@@ -325,7 +333,7 @@ export class Player {
 
   get center() {
     const e = this.extents;
-    const a = this.pitchPivot.rotation.z;
+    const a = this.screenTilt;
     return new THREE.Vector2(
       this.group.position.x + e.cx * Math.cos(a) - e.cy * Math.sin(a),
       this.group.position.y + e.cx * Math.sin(a) + e.cy * Math.cos(a),
@@ -356,7 +364,9 @@ export class Player {
     this.time += dt;
     const thrust = new THREE.Vector2(input.x, input.y);
     if (thrust.lengthSq() > 1) thrust.normalize();
-    if (!this.alive) thrust.set(0, 0);
+    const pushing = thrust.lengthSq() > 0.01;
+    const pushDir = pushing ? thrust.clone().normalize() : null;
+    if (!this.alive || this.airborne) thrust.set(0, 0);
     // Holding a steady heading builds up cruising speed; turning or letting go bleeds it away.
     if (thrust.lengthSq() > 0.01) {
       const dir = thrust.clone().normalize();
@@ -366,33 +376,43 @@ export class Player {
     } else {
       this.cruise = Math.max(0, this.cruise - dt * 1.5);
     }
-    const drag = DRAG / this.mass;
+    const drag = this.airborne ? AIR_DRAG : DRAG / this.mass;
     this.vel.addScaledVector(thrust, this.speed * (1 + this.cruise * CRUISE_BOOST) * drag * dt);
+    if (this.airborne) this.vel.y -= GRAVITY * dt;
     this.vel.multiplyScalar(Math.exp(-drag * dt));
     const p = this.group.position;
-    p.x += this.vel.x * dt;
-    p.y += this.vel.y * dt;
     const e = this.extents;
+    const nx = p.x + this.vel.x * dt;
+    if (bounds.bottom(nx) + e.hy > p.y + 0.4) {
+      this.vel.x *= -0.25;
+    } else {
+      p.x = nx;
+    }
+    p.y += this.vel.y * dt;
     const floor = bounds.bottom(p.x) + e.hy;
-    if (p.y < floor || p.y > bounds.top) {
-      p.y = THREE.MathUtils.clamp(p.y, floor, bounds.top);
+    if (p.y < floor) {
+      p.y = floor;
       this.vel.y *= -0.2;
     }
     if (bounds.left !== undefined) p.x = THREE.MathUtils.clamp(p.x, bounds.left, bounds.right);
+    if (bounds.top !== undefined) p.y = Math.min(p.y, bounds.top);
+    this.airborne = p.y > SURFACE_Y + 0.3;
 
     if (Math.abs(input.x) > 0.1) this.facing = Math.sign(input.x);
-    const swimming = Math.abs(input.x) + Math.abs(input.y) > 0.1;
+    const swimming = pushing || this.airborne;
     const pose = this.facing > 0 ? YAW.right : YAW.left;
     const wantYaw = swimming ? pose.swim : pose.idle;
     const step = (wantYaw - this.yaw) * (1 - Math.exp(-dt * TURN_RATE));
     this.yaw += THREE.MathUtils.clamp(step, -dt * TURN_MAX_SPEED, dt * TURN_MAX_SPEED);
     this.yawPivot.rotation.y = this.yaw;
     this.updateExtents();
-    const moving = Math.abs(input.x) + Math.abs(input.y) > 0.1;
-    const wantPitch = moving
-      ? THREE.MathUtils.clamp(Math.atan2(this.vel.y, Math.abs(this.vel.x) + 0.05), -MAX_PITCH, MAX_PITCH) : 0;
-    this.pitch = THREE.MathUtils.lerp(this.pitch, wantPitch, 1 - Math.exp(-dt * 5));
-    this.pitchPivot.rotation.z = this.pitch * this.facingSign;
+    // In the water the nose points where you push; in the air it follows the arc of the jump.
+    let wantPitch = 0;
+    if (this.airborne) wantPitch = Math.atan2(this.vel.y, Math.abs(this.vel.x) + 0.3);
+    else if (pushDir) wantPitch = Math.atan2(pushDir.y, Math.abs(pushDir.x));
+    wantPitch = THREE.MathUtils.clamp(wantPitch, -MAX_PITCH, MAX_PITCH);
+    this.pitch = THREE.MathUtils.lerp(this.pitch, wantPitch, 1 - Math.exp(-dt * (this.airborne ? 6 : 3.5)));
+    this.pitchPivot.rotation.z = this.pitch;
     this.pitchPivot.rotation.x = Math.sin(this.time * 1.7) * 0.03;
     this.rig.position.y = Math.sin(this.time * 2.1) * 0.08;
 
