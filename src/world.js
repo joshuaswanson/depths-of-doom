@@ -82,8 +82,8 @@ function reefGlow(x, z) {
   for (let c = cell - 1; c <= cell + 1; c++) {
     const m = moundOf(c);
     if (!m.reef) continue;
-    const dx = (x - m.x) / (m.width * 2.4);
-    const dz = (z - MOUND_Z) / 16;
+    const dx = (x - m.x) / (m.width * 3);
+    const dz = (z - MOUND_Z) / 20;
     g = Math.max(g, Math.exp(-dx * dx - dz * dz));
   }
   return g;
@@ -261,8 +261,8 @@ function makeWaterline() {
 
 const SHALLOW_COLORS = ['#1d5a55', '#2c7a60', '#4a9068', '#17474a'].map((c) => new THREE.Color(c));
 const RUBBLE = new THREE.Color('#5d8a95');
-const REEF_SAND = new THREE.Color('#3fb3c4');
-const REEF_LAGOON = new THREE.Color('#7fe3e6');
+const REEF_SAND = new THREE.Color('#2fa9d6');
+const REEF_LAGOON = new THREE.Color('#86e6f2');
 const DEEP_COLORS = ['#1a2430', '#252f3d', '#2d3644', '#151b26'].map((c) => new THREE.Color(c));
 
 function makeSeabedTile(material) {
@@ -311,9 +311,9 @@ function shapeTile(tile, target, budget = Infinity) {
     c.lerp(d, THREE.MathUtils.smoothstep(-y, 18, 45));
     const glow = shelf > 0 ? reefGlow(x, z) * shelf : 0;
     const ripple = 0.5 + 0.5 * Math.sin(x * 0.9 + z * 0.4) * Math.sin(x * 0.37 - z * 1.1);
-    c.lerp(REEF_SAND, glow * 0.75);
-    c.lerp(REEF_LAGOON, glow * ripple * 0.35);
-    c.lerp(RUBBLE, THREE.MathUtils.smoothstep(raised, 0.4, 2.0) * 0.55);
+    c.lerp(RUBBLE, THREE.MathUtils.smoothstep(raised, 0.4, 2.0) * 0.55 * (1 - glow));
+    c.lerp(REEF_SAND, THREE.MathUtils.smoothstep(glow, 0, 0.7) * 0.92);
+    c.lerp(REEF_LAGOON, glow * ripple * 0.4);
     glowAttr[i] = glow;
     col.setXYZ(i, c.r, c.g, c.b);
   }
@@ -367,9 +367,9 @@ function makeSeabedMaterial(uniforms) {
         float sPebble = smoothstep( 0.68, 0.74, dNoise( sp * 3.5 ) );
         float sPatch = dNoise( sp * 0.15 );
         float sShallow = smoothstep( -30.0, -12.0, vSeaWorld.y );
-        float sGrass = smoothstep( 0.55, 0.78, dNoise( sp * 0.35 + 5.0 ) ) * sShallow;
+        float sGrass = smoothstep( 0.55, 0.78, dNoise( sp * 0.35 + 5.0 ) ) * sShallow * ( 1.0 - vReef );
         float sSteep = 1.0 - smoothstep( 0.55, 0.85, inverseTransformDirection( normalize( vNormal ), viewMatrix ).y );
-        diffuseColor.rgb *= 0.85 + sRipple * 0.12 * ( 1.0 - sSteep ) + ( sPatch - 0.5 ) * 0.4;
+        diffuseColor.rgb *= 0.85 + sRipple * 0.12 * ( 1.0 - sSteep ) + ( sPatch - 0.5 ) * 0.4 * ( 1.0 - 0.6 * vReef );
         diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.12, 0.28, 0.11 ), sGrass * 0.5 );
         diffuseColor.rgb = mix( diffuseColor.rgb, diffuseColor.rgb * 0.55, sPebble * 0.6 );
         diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.2, 0.22, 0.26 ) * ( 0.7 + sPatch * 0.6 ), sSteep * 0.8 );`)
@@ -388,7 +388,7 @@ function makeSeabedMaterial(uniforms) {
         float cLight = cNet * cNet * 0.8 + cNet * cFine * 0.6;
         float cBand = 0.35 + 0.9 * dNoise( vec3( vSeaWorld.xz * 0.18 + uTime * 0.08, uTime * 0.15 ) );
         totalEmissiveRadiance += vec3( 0.5, 0.9, 0.95 ) * cLight * 0.6 * fadeC * cBand * ( 1.0 + vReef * 1.3 );
-        totalEmissiveRadiance += vec3( 0.02, 0.12, 0.15 ) * vReef * fadeC;`);
+        totalEmissiveRadiance += vec3( 0.02, 0.12, 0.2 ) * vReef * fadeC;`);
   };
   return mat;
 }
