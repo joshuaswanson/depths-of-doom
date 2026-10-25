@@ -229,10 +229,10 @@ function addSway(material) {
 }
 
 // Kelp and anemone tentacles bend in the current: still at the root, swaying more with height.
-const CURRENT_MATERIALS = new Set(['kelp_stipe', 'kelp_blade', 'kelp_bladder', 'anemone_tentacle', 'anemone_tip']);
+export const CURRENT_MATERIALS = new Set(['kelp_stipe', 'kelp_blade', 'kelp_bladder', 'anemone_tentacle', 'anemone_tip']);
 const CURRENT_GLSL = /* glsl */ `
-  float curH = max( transformed.y, 0.0 );
-  float curSeed = modelMatrix[ 3 ].x * 0.31 + modelMatrix[ 3 ].z * 0.17;
+  float curH = max( transformed.y - aBase, 0.0 );
+  float curSeed = ( modelMatrix[ 3 ].x + transformed.x ) * 0.31 + ( modelMatrix[ 3 ].z + transformed.z ) * 0.17;
   float curBend = pow( curH, 1.25 );
   transformed.x += sin( uTime * 0.9 + curSeed + curH * 0.35 ) * 0.07 * curBend;
   transformed.z += cos( uTime * 0.7 + curSeed * 1.7 + curH * 0.3 ) * 0.04 * curBend;
@@ -245,7 +245,7 @@ function addCurrent(material) {
     previous.call(material, shader, renderer);
     shader.uniforms.uTime = SHADER_TIME;
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nuniform float uTime;')
+      .replace('#include <common>', '#include <common>\nuniform float uTime;\nattribute float aBase;')
       .replace('#include <begin_vertex>', `#include <begin_vertex>\n${CURRENT_GLSL}`);
   };
   material.customProgramCacheKey = () => `${key}-current`;

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { findNode, plainMaterials, spawn, tint } from './assets.js';
-import { NOISE_GLSL } from './surface.js';
+import { CURRENT_MATERIALS, NOISE_GLSL } from './surface.js';
 import {
   ABYSS_Y, CAMERA_Z, SHELF_Y, SURFACE_Y, TAN_HALF_FOV, WATER_GRADIENT_GLSL, darkness, depthShift,
 } from './water.js';
@@ -431,6 +432,40 @@ function makeAngler() {
   return fish;
 }
 
+// Bake a cluster of placed models into one mesh per material, anchored at the cluster's lowest point.
+function mergeCluster(pieces) {
+  pieces.updateMatrixWorld(true);
+  let base = Infinity;
+  for (const p of pieces.children) base = Math.min(base, p.position.y);
+  const toLocal = new THREE.Matrix4().makeTranslation(0, -base, 0);
+  const buckets = new Map();
+  for (const piece of pieces.children) {
+    piece.traverse((o) => {
+      if (!o.isMesh) return;
+      const geo = o.geometry.clone().applyMatrix4(toLocal.clone().multiply(o.matrixWorld));
+      // Swaying plants bend from their own root, so each remembers where its base sits within the cluster.
+      if (CURRENT_MATERIALS.has(o.material.name)) {
+        const count = geo.attributes.position.count;
+        geo.setAttribute('aBase', new THREE.BufferAttribute(new Float32Array(count).fill(piece.position.y - base), 1));
+      }
+      const key = `${o.material.uuid}|${Object.keys(geo.attributes).sort().join(',')}`;
+      if (!buckets.has(key)) buckets.set(key, { material: o.material, order: o.renderOrder, geos: [] });
+      buckets.get(key).geos.push(geo);
+    });
+  }
+  const cluster = new THREE.Group();
+  cluster.position.y = base;
+  for (const { material, order, geos } of buckets.values()) {
+    const merged = mergeGeometries(geos, false);
+    for (const g of geos) g.dispose();
+    if (!merged) continue;
+    const mesh = new THREE.Mesh(merged, material);
+    mesh.renderOrder = order;
+    cluster.add(mesh);
+  }
+  return cluster;
+}
+
 function wrap(value, center, half) {
   const span = half * 2;
   return center + ((((value - center + half) % span) + span) % span) - half;
@@ -539,11 +574,18 @@ export class World {
     const hi = Math.floor((cx + span) / MOUND_CELL);
     for (const [cell, objs] of this.clusters) {
       if (cell >= lo && cell <= hi) continue;
-      for (const o of objs) this.scene.remove(o);
+      for (const o of objs) {
+        this.scene.remove(o);
+        o.traverse((m) => m.isMesh && m.geometry.dispose());
+      }
       this.clusters.delete(cell);
     }
     for (let cell = lo; cell <= hi; cell++) {
-      if (!this.clusters.has(cell)) this.clusters.set(cell, this.buildCluster(moundOf(cell)));
+      if (!this.clusters.has(cell)) {
+        const objs = this.buildCluster(moundOf(cell));
+        for (const o of objs) this.scene.add(o);
+        this.clusters.set(cell, objs);
+      }
     }
   }
 
@@ -553,19 +595,18 @@ export class World {
       seed += 1;
       return hash(seed, 7);
     };
-    const objs = [];
+    const pieces = new THREE.Group();
     const place = (name, x, z, scale) => {
       const obj = spawn(name);
       obj.scale.setScalar(scale);
       obj.position.set(x, seabedAt(x, z) - 0.2, z);
       obj.rotation.y = r() * Math.PI * 2;
-      this.scene.add(obj);
-      objs.push(obj);
+      pieces.add(obj);
     };
     const deep = floorY(m.x) < SHELF_Y - 6;
     if (deep) {
       for (let i = 0; i < 2; i++) place(r() < 0.5 ? 'rock_a' : 'rock_b', m.x + (r() - 0.5) * 8, -6 - r() * 8, 0.8 + r() * 0.6);
-      return objs;
+      return [mergeCluster(pieces)];
     }
     if (m.reef) {
       place('reef_large', m.x, MOUND_Z, 1.5 + r() * 0.5);
@@ -592,7 +633,7 @@ export class World {
       }
       place(r() < 0.5 ? 'rock_a' : 'rock_b', m.x + (r() - 0.5) * 6, MOUND_Z, 0.7 + r() * 0.5);
     }
-    return objs;
+    return [mergeCluster(pieces)];
   }
 
   spawnChain(x) {
