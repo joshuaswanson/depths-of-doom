@@ -61,7 +61,7 @@ const LAYERS = [
   },
 ];
 
-const CHAIN_Z = [-60, -14];
+const CHAIN_Z = [-70, -26];
 
 function makeBackdrop() {
   const mat = new THREE.ShaderMaterial({
@@ -439,15 +439,25 @@ export class World {
     }
   }
 
+  // Chains hang from mooring buoys bobbing at the waterline.
   spawnChain(x) {
     const group = new THREE.Group();
-    const links = 8;
-    for (let i = 0; i < links; i++) {
+    const links = 7;
+    for (let i = 1; i <= links; i++) {
       const link = spawn('chain');
       link.position.y = -i * 5.04;
       group.add(link);
     }
-    group.position.set(x, SURFACE_Y + 6, rand(CHAIN_Z[0], CHAIN_Z[1]));
+    const buoy = new THREE.Group();
+    const red = new THREE.MeshStandardMaterial({ color: '#c8352b', roughness: 0.6 });
+    const white = new THREE.MeshStandardMaterial({ color: '#e8e2d4', roughness: 0.6 });
+    const ball = new THREE.Mesh(new THREE.SphereGeometry(0.9, 20, 14), red);
+    const band = new THREE.Mesh(new THREE.CylinderGeometry(0.93, 0.93, 0.4, 20), white);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.22, 0.07, 8, 16), red);
+    ring.position.y = -0.95;
+    buoy.add(ball, band, ring);
+    group.add(buoy);
+    group.position.set(x, SURFACE_Y - 0.4, rand(CHAIN_Z[0], CHAIN_Z[1]));
     group.rotation.z = rand(-0.08, 0.08);
     group.userData.swing = rand(0, 6);
     this.scene.add(group);
@@ -515,6 +525,7 @@ export class World {
 
     for (const chain of this.chains) {
       chain.rotation.z = Math.sin(t * 0.4 + chain.userData.swing) * 0.03;
+      chain.position.y = SURFACE_Y - 0.4 + Math.sin(t * 1.3 + chain.userData.swing) * 0.12;
       chain.position.x = wrap(chain.position.x, cx, 70);
     }
 

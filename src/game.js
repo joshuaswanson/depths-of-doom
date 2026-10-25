@@ -14,6 +14,7 @@ const DESPAWN_DIST = 60;
 const ENEMY_TOP = SURFACE_Y - 1.8;
 const enemyFloor = (x) => seabedAt(x) + 1.8;
 const DAMAGE = { missile: 12, ram: 15, mine: 22 };
+const GRAVITY = 20;
 
 const ENEMY_TYPES = {
   scout: { model: 'enemy_scout', hp: 5, scale: 0.85, rx: 1.25, ry: 0.62, coins: 3, boom: 0.9, speed: 4.2 },
@@ -305,7 +306,7 @@ export class Game {
   fireWeapons(dt) {
     const pl = this.player;
     if (!pl.alive) return;
-    const active = this.enemiesOnScreen();
+    const active = this.enemiesOnScreen() && !pl.turning;
     const fwd = pl.forward;
     const side = new THREE.Vector2(-fwd.y, fwd.x);
     const cannonInterval = 0.2 - 0.012 * pl.levels.cannon;
@@ -335,7 +336,7 @@ export class Game {
       obj.scale.setScalar(0.8);
       obj.position.copy(this.tmp);
       this.scene.add(obj);
-      this.torpedoes.push({ obj, speed: 3, angle: Math.atan2(fwd.y, fwd.x), life: 4.5, trail: 0 });
+      this.torpedoes.push({ obj, vel: fwd.clone().multiplyScalar(3), life: 6, trail: 0 });
       sfx.torpedo();
     }
     for (const part of pl.partsOf('missile')) {
@@ -415,9 +416,8 @@ export class Game {
       }
     }
     part.pivot.rotation.z = THREE.MathUtils.lerp(part.pivot.rotation.z, g.state === 'idle' ? 0 : aim, 1 - Math.exp(-dt * 20));
-    part.twin.rotation.z = part.pivot.rotation.z;
-    for (const arm of part.arms) arm.scale.y = ext;
-    for (const claw of part.claws) claw.scale.y = 1 / ext;
+    if (part.arm) part.arm.scale.y = ext;
+    if (part.claw) part.claw.scale.y = 1 / ext;
   }
 
   steerEnemy(e, desired, dt, turn = 2) {
@@ -516,7 +516,8 @@ export class Game {
       if (e.type !== 'mine') {
         if (Math.abs(e.vel.x) > 0.4) e.facing = Math.sign(e.vel.x);
         const wantYaw = e.facing > 0 ? ENEMY_YAW_RIGHT : ENEMY_YAW_LEFT;
-        e.flip.rotation.y += THREE.MathUtils.clamp(wantYaw - e.flip.rotation.y, -dt * 4, dt * 4);
+        const step = (wantYaw - e.flip.rotation.y) * (1 - Math.exp(-dt * 1.8));
+        e.flip.rotation.y += THREE.MathUtils.clamp(step, -dt * 1.8, dt * 1.8);
         const pitch = THREE.MathUtils.clamp(Math.atan2(e.vel.y, Math.abs(e.vel.x) + 0.5), -0.6, 0.6);
         e.obj.rotation.z = THREE.MathUtils.lerp(e.obj.rotation.z, pitch * e.facing + Math.sin(e.t * 1.6) * 0.04,
           1 - Math.exp(-dt * 4));
@@ -612,26 +613,42 @@ export class Game {
 
     for (const t of this.torpedoes) {
       t.life -= dt;
-      t.speed = Math.min(15, t.speed + dt * 14);
       const p = t.obj.position;
-      const target = this.nearestEnemy(p.x, p.y);
-      if (target) t.angle = angleLerp(t.angle, Math.atan2(target.obj.position.y - p.y, target.obj.position.x - p.x), dt * 1.6);
-      p.x += Math.cos(t.angle) * t.speed * dt;
-      p.y += Math.sin(t.angle) * t.speed * dt;
-      t.obj.rotation.z = t.angle;
-      t.trail -= dt;
-      if (t.trail <= 0) {
-        t.trail = 0.025;
-        this.effects.bubble({ x: p.x - Math.cos(t.angle) * 0.5, y: p.y - Math.sin(t.angle) * 0.5, z: p.z },
-          { spread: 0.08, size: [0.1, 0.22], life: [0.6, 1.2] });
+      const airborne = p.y > SURFACE_Y;
+      if (airborne) {
+        t.vel.y -= GRAVITY * dt;
+        if (Math.random() < 0.5) this.effects.smokeTrail(p, 0.5);
+      } else {
+        const speed = Math.min(15, t.vel.length() + dt * 14);
+        let angle = Math.atan2(t.vel.y, t.vel.x);
+        const target = this.nearestEnemy(p.x, p.y);
+        if (target) angle = angleLerp(angle, Math.atan2(target.obj.position.y - p.y, target.obj.position.x - p.x), dt * 1.6);
+        t.vel.set(Math.cos(angle) * speed, Math.sin(angle) * speed);
+        t.trail -= dt;
+        if (t.trail <= 0) {
+          t.trail = 0.025;
+          const dir = t.vel.clone().normalize();
+          this.effects.bubble({ x: p.x - dir.x * 0.5, y: p.y - dir.y * 0.5, z: p.z },
+            { spread: 0.08, size: [0.1, 0.22], life: [0.6, 1.2] });
+        }
       }
+      p.x += t.vel.x * dt;
+      p.y += t.vel.y * dt;
+      if (airborne !== p.y > SURFACE_Y) {
+        this.effects.splash({ x: p.x, y: SURFACE_Y, z: p.z }, 0.5);
+        sfx.splash();
+      }
+      t.obj.rotation.z = Math.atan2(t.vel.y, t.vel.x);
       const hitE = this.enemies.find((e) => !e.dead && this.enemyHit(e, p.x, p.y, 0.2));
-      if (hitE || t.life <= 0 || p.y > SURFACE_Y) {
+      const floor = seabedAt(p.x);
+      if (hitE || t.life <= 0 || p.y < floor) {
         if (hitE) {
           this.damageEnemy(hitE, 5);
+          for (const e of this.enemies) if (e !== hitE && !e.dead && e.obj.position.distanceTo(p) < 2) this.damageEnemy(e, 2);
+        }
+        if (hitE || p.y < floor) {
           this.effects.explosion(p, 0.7);
           sfx.boom();
-          for (const e of this.enemies) if (e !== hitE && !e.dead && e.obj.position.distanceTo(p) < 2) this.damageEnemy(e, 2);
         }
         t.dead = true;
         this.scene.remove(t.obj);
@@ -777,12 +794,12 @@ export class Game {
   }
 
   updateCamera(dt) {
-    const pc = this.player.center;
-    const fwd = this.player.forward;
-    const tx = pc.x + fwd.x * 3 + this.player.vel.x * 0.25;
-    const ty = pc.y + this.player.vel.y * 0.15;
-    this.cam.x = THREE.MathUtils.lerp(this.cam.x, tx, 1 - Math.exp(-dt * 3));
-    this.cam.y = THREE.MathUtils.lerp(this.cam.y, ty, 1 - Math.exp(-dt * 3));
+    const pl = this.player;
+    const pc = pl.center;
+    const tx = pc.x + Math.cos(pl.yaw) * 2.5 + pl.vel.x * 0.3;
+    const ty = pc.y + pl.vel.y * 0.2;
+    this.cam.x = THREE.MathUtils.lerp(this.cam.x, tx, 1 - Math.exp(-dt * 2.2));
+    this.cam.y = THREE.MathUtils.lerp(this.cam.y, ty, 1 - Math.exp(-dt * 2.2));
     this.cam.y = THREE.MathUtils.clamp(this.cam.y, seabedAt(this.cam.x) + this.halfH - 3, SURFACE_Y - this.halfH + 4.5);
   }
 
@@ -810,9 +827,11 @@ export class Game {
 
     if (pl.alive) {
       const prop = pl.propellerWorld(this.tmp);
-      const rate = 0.5 + pl.vel.length() * 0.25 + pl.levels.propulsion * 0.15;
+      const rate = 0.5 + pl.vel.length() * 0.25 + pl.levels.propulsion * 0.15 + pl.cruise * 1.5;
       const back = pl.forward.multiplyScalar(-2);
-      if (Math.random() < rate) this.effects.bubble(prop, { spread: 0.25, vel: { x: back.x, y: back.y } });
+      for (let n = rate; n > 0; n--) {
+        if (Math.random() < n) this.effects.bubble(prop, { spread: 0.25, vel: { x: back.x, y: back.y } });
+      }
       for (const part of pl.partsOf('propulsion')) {
         if (Math.random() < 0.35 && part.props[0]) {
           part.props[0].getWorldPosition(this.tmp);

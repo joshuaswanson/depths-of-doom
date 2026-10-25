@@ -2,12 +2,19 @@ import * as THREE from 'three';
 import { findNode, findNodes, spawn } from './assets.js';
 import { JUNK_PER_HULL, PART_MODEL, SOCKETS, UPGRADES, partCount } from './upgrades.js';
 
-// The sub always shows three quarters of its front to the camera, so turning around swings the nose through
-// the viewer instead of showing the stern.
-const YAW_RIGHT = -0.75;
-const YAW_LEFT = -(Math.PI - 0.75);
-const TURN_SPEED = 7;
-const MAX_PITCH = 0.8;
+// Swimming in any direction shows the sub in full profile; idling, it drifts round to show three quarters of its
+// face.
+// Yaw stays within [-PI, 0], so every turn swings the nose past the camera instead of showing the stern.
+const YAW = {
+  right: { swim: 0, idle: -0.75 },
+  left: { swim: -Math.PI, idle: -(Math.PI - 0.75) },
+};
+const DRAG = 1.5;
+const TURN_RATE = 2.4;
+const TURN_MAX_SPEED = 2.2;
+const MAX_PITCH = 1.52;
+const CRUISE_BUILD = 0.32;
+const CRUISE_BOOST = 0.9;
 const RIG_SCALE = 0.82;
 const REGEN_DELAY = 5;
 const REGEN_RATE = 3;
@@ -141,15 +148,14 @@ export class Player {
 
   reset() {
     this.levels = Object.fromEntries(UPGRADES.map((u) => [u.id, u.start]));
-    for (const part of this.parts) {
-      part.pivot.removeFromParent();
-      part.twin.removeFromParent();
-    }
+    for (const part of this.parts) part.pivot.removeFromParent();
     this.parts = [];
     this.group.position.set(0, 0, 0);
     this.vel.set(0, 0);
+    this.cruise = 0;
+    this.heading = new THREE.Vector2(1, 0);
     this.facing = 1;
-    this.yaw = YAW_RIGHT;
+    this.yaw = YAW.right.idle;
     this.pitch = 0;
     this.invuln = 0;
     this.sinceHit = 99;
@@ -201,8 +207,7 @@ export class Player {
     };
   }
 
-  // Each part is bolted on twice, once per side, so the sub looks loaded from whichever side faces the camera.
-  mountPivot(cat, model, angle, animate) {
+  addPart(cat, model, x, angle, animate) {
     const pivot = new THREE.Group();
     const obj = spawn(model);
     pivot.add(obj);
@@ -211,20 +216,10 @@ export class Player {
     else pivot.rotation.x = rotX;
     if (animate) pivot.scale.setScalar(0.01);
     this.rig.add(pivot);
-    return { pivot, obj };
-  }
-
-  addPart(cat, model, x, angle, animate) {
-    const main = this.mountPivot(cat, model, angle, animate);
-    const twin = this.mountPivot(cat, model, 180 - angle, animate);
     const part = {
-      cat, obj: main.obj, pivot: main.pivot, twin: twin.pivot, twinObj: twin.obj, socket: [x, angle],
-      pop: animate ? 0 : 1, muzzle: findNode(main.obj, 'muzzle'),
-      props: [...findNodes(main.obj, 'thruster_prop'), ...findNodes(twin.obj, 'thruster_prop')],
-      dishes: [findNode(main.obj, 'sonar_dish'), findNode(twin.obj, 'sonar_dish')].filter(Boolean),
-      arms: [findNode(main.obj, 'grapple_arm'), findNode(twin.obj, 'grapple_arm')].filter(Boolean),
-      claws: [findNode(main.obj, 'grapple_claw'), findNode(twin.obj, 'grapple_claw')].filter(Boolean),
-      timer: Math.random(),
+      cat, obj, pivot, socket: [x, angle], pop: animate ? 0 : 1, muzzle: findNode(obj, 'muzzle'),
+      props: findNodes(obj, 'thruster_prop'), dish: findNode(obj, 'sonar_dish'),
+      arm: findNode(obj, 'grapple_arm'), claw: findNode(obj, 'grapple_claw'), timer: Math.random(),
     };
     this.parts.push(part);
     return part;
@@ -251,11 +246,7 @@ export class Player {
     }
     for (const part of this.parts) {
       part.target = this.socketTransform(...part.socket).pos;
-      part.twinTarget = part.target.clone().setZ(-part.target.z);
-      if (!animate) {
-        part.pivot.position.copy(part.target);
-        part.twin.position.copy(part.twinTarget);
-      }
+      if (!animate) part.pivot.position.copy(part.target);
     }
     this.measure();
     return added;
@@ -267,13 +258,10 @@ export class Player {
     this.yawPivot.rotation.y = 0;
     this.rig.scale.setScalar(RIG_SCALE);
     this.hullPivot.scale.set(this.fatTarget.x, this.fatTarget.yz, this.fatTarget.yz);
-    const saved = this.parts.map((p) => [p.pivot.position.clone(), p.pivot.scale.clone(), p.twin.position.clone(),
-      p.twin.scale.clone()]);
+    const saved = this.parts.map((p) => [p.pivot.position.clone(), p.pivot.scale.clone()]);
     for (const part of this.parts) {
       part.pivot.position.copy(part.target);
-      part.twin.position.copy(part.twinTarget);
       part.pivot.scale.setScalar(1);
-      part.twin.scale.setScalar(1);
     }
     this.yawPivot.updateMatrixWorld(true);
     const toLocal = this.yawPivot.matrixWorld.clone().invert();
@@ -289,18 +277,28 @@ export class Player {
     this.parts.forEach((p, i) => {
       p.pivot.position.copy(saved[i][0]);
       p.pivot.scale.copy(saved[i][1]);
-      p.twin.position.copy(saved[i][2]);
-      p.twin.scale.copy(saved[i][3]);
     });
     this.yawPivot.rotation.y = this.yaw;
     this.rig.scale.copy(scale);
     this.hullPivot.scale.copy(hullScale);
     const c = box.getCenter(new THREE.Vector3());
     const s = box.getSize(new THREE.Vector3());
-    const cosY = Math.abs(Math.cos(YAW_RIGHT));
-    this.extents = { hx: (s.x / 2) * cosY + 0.3, hy: s.y / 2, cx: c.x * cosY, cy: c.y };
+    this.box = { cx: c.x, cy: c.y, hx: s.x / 2, hy: s.y / 2, hz: s.z / 2 };
+    this.updateExtents();
     this.shield.position.set(c.x, c.y, 0);
     this.shield.scale.set(s.x * 0.62, s.y * 0.68, Math.max(s.y, s.x * 0.5) * 0.7);
+  }
+
+  // Silhouette as seen by the camera for the current yaw; cx is signed, so it flips with the heading.
+  updateExtents() {
+    const b = this.box;
+    const c = Math.cos(this.yaw);
+    const s = Math.abs(Math.sin(this.yaw));
+    this.extents = { hx: Math.max(b.hx * Math.abs(c), b.hz * s, b.hy * 0.8), hy: b.hy, cx: b.cx * c, cy: b.cy };
+  }
+
+  get mass() {
+    return 1 + this.parts.length * 0.045 + (this.levels.hull - 1) * 0.12;
   }
 
   get facingSign() {
@@ -314,7 +312,7 @@ export class Player {
     const dy = y - this.group.position.y;
     const lx = dx * Math.cos(a) - dy * Math.sin(a);
     const ly = dx * Math.sin(a) + dy * Math.cos(a);
-    return { x: lx * this.facing, y: ly };
+    return { x: lx, y: ly };
   }
 
   hitTest(x, y, r = 0) {
@@ -328,15 +326,19 @@ export class Player {
   get center() {
     const e = this.extents;
     const a = this.pitchPivot.rotation.z;
-    const lx = e.cx * this.facing;
     return new THREE.Vector2(
-      this.group.position.x + lx * Math.cos(a) - e.cy * Math.sin(a),
-      this.group.position.y + lx * Math.sin(a) + e.cy * Math.cos(a),
+      this.group.position.x + e.cx * Math.cos(a) - e.cy * Math.sin(a),
+      this.group.position.y + e.cx * Math.sin(a) + e.cy * Math.cos(a),
     );
   }
 
   get forward() {
-    return new THREE.Vector2(this.facing * Math.cos(this.pitch), Math.sin(this.pitch));
+    return new THREE.Vector2(this.facingSign * Math.cos(this.pitch), Math.sin(this.pitch));
+  }
+
+  // True while the nose is swinging past the camera, when guns would fire sideways.
+  get turning() {
+    return Math.abs(Math.cos(this.yaw)) < 0.45;
   }
 
   get radius() {
@@ -352,23 +354,43 @@ export class Player {
 
   update(dt, input, bounds) {
     this.time += dt;
-    const target = new THREE.Vector2(input.x, input.y);
-    if (target.lengthSq() > 1) target.normalize();
-    target.multiplyScalar(this.alive ? this.speed : 0);
-    this.vel.lerp(target, 1 - Math.exp(-dt * 6));
+    const thrust = new THREE.Vector2(input.x, input.y);
+    if (thrust.lengthSq() > 1) thrust.normalize();
+    if (!this.alive) thrust.set(0, 0);
+    // Holding a steady heading builds up cruising speed; turning or letting go bleeds it away.
+    if (thrust.lengthSq() > 0.01) {
+      const dir = thrust.clone().normalize();
+      const steady = dir.dot(this.heading) > 0.85;
+      this.cruise = steady ? Math.min(1, this.cruise + CRUISE_BUILD * dt) : Math.max(0, this.cruise - dt * 2.5);
+      this.heading.lerp(dir, 1 - Math.exp(-dt * 3)).normalize();
+    } else {
+      this.cruise = Math.max(0, this.cruise - dt * 1.5);
+    }
+    const drag = DRAG / this.mass;
+    this.vel.addScaledVector(thrust, this.speed * (1 + this.cruise * CRUISE_BOOST) * drag * dt);
+    this.vel.multiplyScalar(Math.exp(-drag * dt));
     const p = this.group.position;
     p.x += this.vel.x * dt;
     p.y += this.vel.y * dt;
     const e = this.extents;
-    p.y = THREE.MathUtils.clamp(p.y, bounds.bottom(p.x) + e.hy, bounds.top);
+    const floor = bounds.bottom(p.x) + e.hy;
+    if (p.y < floor || p.y > bounds.top) {
+      p.y = THREE.MathUtils.clamp(p.y, floor, bounds.top);
+      this.vel.y *= -0.2;
+    }
     if (bounds.left !== undefined) p.x = THREE.MathUtils.clamp(p.x, bounds.left, bounds.right);
 
     if (Math.abs(input.x) > 0.1) this.facing = Math.sign(input.x);
-    const wantYaw = this.facing > 0 ? YAW_RIGHT : YAW_LEFT;
-    this.yaw += THREE.MathUtils.clamp(wantYaw - this.yaw, -dt * TURN_SPEED, dt * TURN_SPEED);
+    const swimming = Math.abs(input.x) + Math.abs(input.y) > 0.1;
+    const pose = this.facing > 0 ? YAW.right : YAW.left;
+    const wantYaw = swimming ? pose.swim : pose.idle;
+    const step = (wantYaw - this.yaw) * (1 - Math.exp(-dt * TURN_RATE));
+    this.yaw += THREE.MathUtils.clamp(step, -dt * TURN_MAX_SPEED, dt * TURN_MAX_SPEED);
     this.yawPivot.rotation.y = this.yaw;
+    this.updateExtents();
     const moving = Math.abs(input.x) + Math.abs(input.y) > 0.1;
-    const wantPitch = moving ? THREE.MathUtils.clamp(Math.atan2(this.vel.y, Math.abs(this.vel.x) + 0.5), -MAX_PITCH, MAX_PITCH) : 0;
+    const wantPitch = moving
+      ? THREE.MathUtils.clamp(Math.atan2(this.vel.y, Math.abs(this.vel.x) + 0.05), -MAX_PITCH, MAX_PITCH) : 0;
     this.pitch = THREE.MathUtils.lerp(this.pitch, wantPitch, 1 - Math.exp(-dt * 5));
     this.pitchPivot.rotation.z = this.pitch * this.facingSign;
     this.pitchPivot.rotation.x = Math.sin(this.time * 1.7) * 0.03;
@@ -381,19 +403,15 @@ export class Player {
     this.lamp.position.set(1.85 * this.fat.x, -0.62 * this.fat.yz, 0);
 
     for (const part of this.parts) {
-      const k = 1 - Math.exp(-dt * 7);
-      part.pivot.position.lerp(part.target, k);
-      part.twin.position.lerp(part.twinTarget, k);
+      part.pivot.position.lerp(part.target, 1 - Math.exp(-dt * 7));
       if (part.pop < 1) {
         part.pop = Math.min(1, part.pop + dt * 1.8);
-        const s = Math.max(0.01, elasticOut(part.pop));
-        part.pivot.scale.setScalar(s);
-        part.twin.scale.setScalar(s);
+        part.pivot.scale.setScalar(Math.max(0.01, elasticOut(part.pop)));
       }
       for (const prop of part.props) prop.rotation.x += dt * 18;
-      for (const dish of part.dishes) dish.rotation.y += dt * 2.2;
+      if (part.dish) part.dish.rotation.y += dt * 2.2;
     }
-    const spin = 8 + this.levels.propulsion * 3 + this.vel.length() * 2;
+    const spin = 8 + this.levels.propulsion * 3 + this.vel.length() * 2 + this.cruise * 25;
     if (this.propeller) this.propeller.rotation.x -= dt * spin;
 
     if (this.shieldCharges < this.shieldMax) {
