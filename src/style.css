@@ -310,20 +310,22 @@ html, body {
   animation: bob 3s ease-in-out infinite;
 }
 .logo.small { font-size: 5vw; }
-.logo-svg {
+.logo-img {
   display: block;
-  width: min(58vw, 820px);
+  width: min(52vw, 760px);
   margin: 0 auto;
-  overflow: visible;
   filter: drop-shadow(0 1.2vw 1.6vw rgba(0, 0, 0, 0.45));
   animation: bob 3.4s ease-in-out infinite;
 }
-.logo-bubble { animation: logo-rise 4.2s ease-in-out infinite; transform-box: fill-box; }
-@keyframes logo-rise {
-  0% { transform: translateY(20px); opacity: 0; }
-  20% { opacity: 1; }
-  100% { transform: translateY(-90px); opacity: 0; }
+.byline {
+  margin-top: 0.6vh;
+  font-size: 1.7vw;
+  font-weight: 500;
+  letter-spacing: 0.3em;
+  color: #e6f6ff;
+  text-shadow: 0 2px 0 #0b2238, 0 0 12px rgba(0, 0, 0, 0.5);
 }
+
 .subtitle {
   margin-top: 2vh;
   font-size: 1.8vw;

@@ -1,7 +1,8 @@
-import { logoSVG } from './logo.js';
 import { UPGRADES, upgradeCost } from './upgrades.js';
 
 const ICON = (name) => `${import.meta.env.BASE_URL}icons/${name}.png`;
+const LOGO = `<img class="logo-img" src="${import.meta.env.BASE_URL}logo.png" alt="Depths of Doom">
+  <div class="byline">by Joshua Swanson</div>`;
 
 const HEART = `<svg viewBox="0 0 34 31" class="heart-svg"><defs>
   <linearGradient id="hg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff6b6b"/>
@@ -82,14 +83,14 @@ export class Hud {
 
   showLoading(progress) {
     this.overlay.className = 'overlay show';
-    this.overlay.innerHTML = `<div class="panel">${logoSVG()}
+    this.overlay.innerHTML = `<div class="panel">${LOGO}
       <div class="loading"><div class="loading-fill" style="width:${Math.round(progress * 100)}%"></div></div></div>`;
   }
 
   showTitle() {
     this.overlay.className = 'overlay show';
     this.overlay.innerHTML = `<div class="panel">
-      ${logoSVG()}
+      ${LOGO}
       <button class="big-btn">Dive!</button>
       <div class="controls">
         <div><kbd>WASD</kbd> / <kbd>Arrows</kbd> swim</div>
