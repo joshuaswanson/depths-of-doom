@@ -18,11 +18,75 @@ const ENEMY_YAW = {
 const SKULL_CHANCE = 1 / 3;
 const ENEMY_RELOAD = 0.9;
 const DARK_HINT_Y = -40;
+const CHAIN_SEGMENT = 1.08;
+const CHAIN_SINK = 5;
+const CHAIN_DRIFT = 6;
+const MAX_BROKEN_CHAINS = 12;
 // Where each enemy hull carries its missile drum, in model space (the nose points to -X).
 const POD_MOUNT = { scout: { x: -0.45, y: 0.55, scale: 0.8 }, gunner: { x: -0.6, y: 0.74, scale: 0.95 },
   boss: { x: -1.1, y: 1.3, scale: 1.4 } };
 const POD_COLORS = { blue: '#2c2e36', blue_dark: '#3a3d47', yellow: '#b8262b', red: '#ff3b30' };
 let podTemplate = null;
+
+// A torn mine chain as a rope of nodes pinned at its anchor. The blast flings the upper end aside, then it sinks
+// slowly and settles across the seabed.
+function brokenChain(anchor, top) {
+  const length = Math.hypot(top.x - anchor.x, top.y - anchor.y) - 0.45;
+  const count = Math.max(2, Math.ceil(length / CHAIN_SEGMENT));
+  const side = Math.random() < 0.5 ? -1 : 1;
+  const nodes = [];
+  for (let i = 0; i <= count; i++) {
+    const t = i / count;
+    const x = anchor.x + (top.x - anchor.x) * t;
+    const y = anchor.y + (top.y - anchor.y) * t;
+    const kick = side * t * rand(0.08, 0.14);
+    nodes.push({ x, y, px: x - kick, py: y });
+  }
+  return { nodes, segment: length / count, z: top.z, side };
+}
+
+function sinkChain(c, dt) {
+  const damp = Math.exp(-dt * 1.8);
+  for (let i = 1; i < c.nodes.length; i++) {
+    const n = c.nodes[i];
+    const t = i / (c.nodes.length - 1);
+    const vx = (n.x - n.px) * damp + c.side * CHAIN_DRIFT * t * dt * dt;
+    const vy = (n.y - n.py) * damp - CHAIN_SINK * dt * dt;
+    n.px = n.x;
+    n.py = n.y;
+    n.x += vx;
+    n.y += vy;
+  }
+  for (let k = 0; k < 8; k++) {
+    for (let i = 1; i < c.nodes.length; i++) {
+      const a = c.nodes[i - 1];
+      const b = c.nodes[i];
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const d = Math.hypot(dx, dy);
+      if (d <= c.segment) continue;
+      const pull = (d - c.segment) / d;
+      if (i === 1) {
+        b.x -= dx * pull;
+        b.y -= dy * pull;
+      } else {
+        a.x += dx * pull * 0.5;
+        a.y += dy * pull * 0.5;
+        b.x -= dx * pull * 0.5;
+        b.y -= dy * pull * 0.5;
+      }
+    }
+    for (let i = 1; i < c.nodes.length; i++) {
+      const n = c.nodes[i];
+      const floor = seabedAt(n.x, c.z) + 0.12;
+      if (n.y < floor) {
+        n.y = floor;
+        n.px = THREE.MathUtils.lerp(n.px, n.x, 0.5);
+        n.py = n.y;
+      }
+    }
+  }
+}
 
 function onShelf(x) {
   return floorY(x) > SHELF_Y - 3;
@@ -350,18 +414,22 @@ export class Game {
         this.chainMesh.setMatrixAt(n++, m);
       }
     }
-    // Chains of exploded mines stay anchored; the torn end drops to the seabed and lies there a while.
+    // Chains of exploded mines stay anchored and sink in a loose line across the seabed.
     for (const c of this.brokenChains) {
-      dir.set(c.end.x - c.anchor.x, c.end.y - c.anchor.y, 0);
-      const len = dir.length();
-      if (len < 0.2) continue;
-      dir.normalize();
-      q.setFromUnitVectors(up, dir);
-      for (let i = 0, links = Math.floor(len / 0.36); i < links && n < 6000; i++) {
-        twist.setFromAxisAngle(dir, (i % 2) * Math.PI / 2);
-        pos.set(c.anchor.x, c.anchor.y, c.end.z).addScaledVector(dir, 0.18 + i * 0.36);
-        m.compose(pos, twist.clone().multiply(q), one);
-        this.chainMesh.setMatrixAt(n++, m);
+      for (let s = 1; s < c.nodes.length; s++) {
+        const a = c.nodes[s - 1];
+        const b = c.nodes[s];
+        dir.set(b.x - a.x, b.y - a.y, 0);
+        const len = dir.length();
+        if (len < 0.05) continue;
+        dir.normalize();
+        q.setFromUnitVectors(up, dir);
+        for (let i = 0, links = Math.max(1, Math.round(len / 0.36)); i < links && n < 6000; i++) {
+          twist.setFromAxisAngle(dir, ((s * 3 + i) % 2) * Math.PI / 2);
+          pos.set(a.x, a.y, c.z).addScaledVector(dir, (i + 0.5) * (len / links));
+          m.compose(pos, twist.clone().multiply(q), one);
+          this.chainMesh.setMatrixAt(n++, m);
+        }
       }
     }
     this.chainMesh.count = n;
@@ -637,11 +705,8 @@ export class Game {
       this.hud.showBanner('Boss sunk!', 'Grab the loot!');
     }
     if (e.type === 'mine' && e.anchor) {
-      const side = Math.sign(p.x - e.anchor.x) || (Math.random() < 0.5 ? -1 : 1);
-      this.brokenChains.push({
-        anchor: { ...e.anchor }, end: new THREE.Vector3(p.x, p.y - 0.4, p.z), vel: new THREE.Vector2(rand(-1, 1), 0),
-        rest: e.anchor.x + side * Math.min(4, (p.y - e.anchor.y) * 0.4), t: 0,
-      });
+      this.brokenChains.push(brokenChain(e.anchor, p));
+      if (this.brokenChains.length > MAX_BROKEN_CHAINS) this.brokenChains.shift();
     }
     if (e.type === 'mine') {
       for (const other of this.enemies) {
@@ -1157,20 +1222,8 @@ export class Game {
       }
     }
     this.enemies = this.enemies.filter((e) => !e.dead);
-    for (const c of this.brokenChains) {
-      c.t += dt;
-      const floor = seabedAt(c.end.x) + 0.15;
-      if (c.end.y > floor) {
-        c.vel.y -= 9 * dt;
-        c.vel.x += (c.rest - c.end.x) * dt * 0.8;
-        c.end.x += c.vel.x * dt;
-        c.end.y = Math.max(floor, c.end.y + c.vel.y * dt);
-      } else {
-        c.end.x += (c.rest - c.end.x) * (1 - Math.exp(-dt * 2));
-        c.end.y = seabedAt(c.end.x) + 0.15;
-      }
-    }
-    this.brokenChains = this.brokenChains.filter((c) => c.t < 30 && Math.abs(c.anchor.x - this.cam.x) < 80);
+    for (const c of this.brokenChains) sinkChain(c, dt);
+    this.brokenChains = this.brokenChains.filter((c) => Math.abs(c.nodes[0].x - this.cam.x) < 80);
     this.updateMineChains();
   }
 
