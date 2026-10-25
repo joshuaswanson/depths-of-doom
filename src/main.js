@@ -25,8 +25,10 @@ import { World } from './world.js';
 installWaterFog();
 
 const canvas = document.getElementById('game');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
+const MAX_PIXEL_RATIO = Math.min(window.devicePixelRatio, 1.5);
+let pixelRatio = MAX_PIXEL_RATIO;
+renderer.setPixelRatio(pixelRatio);
 renderer.toneMapping = THREE.NeutralToneMapping;
 renderer.toneMappingExposure = 1.0;
 
@@ -127,6 +129,31 @@ function resize() {
 }
 window.addEventListener('resize', resize);
 
+// Trade sharpness for frame rate: drop the render resolution when frames run long, raise it again with headroom.
+const fpsWindow = { time: 0, frames: 0, good: 0 };
+function adaptResolution(dt) {
+  if (document.hidden || dt > 0.5) return;
+  fpsWindow.time += dt;
+  fpsWindow.frames++;
+  if (fpsWindow.time < 1) return;
+  const fps = fpsWindow.frames / fpsWindow.time;
+  fpsWindow.time = 0;
+  fpsWindow.frames = 0;
+  let next = pixelRatio;
+  if (fps < 52) {
+    next = Math.max(1, pixelRatio - 0.15);
+    fpsWindow.good = 0;
+  } else if (fps > 58 && ++fpsWindow.good >= 3) {
+    next = Math.min(MAX_PIXEL_RATIO, pixelRatio + 0.1);
+    fpsWindow.good = 0;
+  }
+  if (next !== pixelRatio) {
+    pixelRatio = next;
+    renderer.setPixelRatio(pixelRatio);
+    resize();
+  }
+}
+
 function startGame() {
   unlockAudio();
   game.reset();
@@ -158,7 +185,7 @@ async function boot() {
   hud.showTitle();
   if (new URLSearchParams(location.search).has('autostart')) startGame();
   window.__game = game;
-  window.__debug = { scene, world, bloom, renderer, composer, effects, player };
+  window.__debug = { scene, world, bloom, renderer, composer, effects, player, get pixelRatio() { return pixelRatio; } };
   renderer.setAnimationLoop(frame);
 }
 
@@ -167,7 +194,9 @@ let titleT = 0;
 
 function frame() {
   timer.update();
-  const dt = Math.min(timer.getDelta(), 1 / 20);
+  const rawDt = timer.getDelta();
+  adaptResolution(rawDt);
+  const dt = Math.min(rawDt, 1 / 20);
   SHADER_TIME.value += dt;
   if (state === 'playing') {
     game.update(dt, readInput());
