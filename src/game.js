@@ -864,9 +864,21 @@ export class Game {
     const res = this.player.takeHit(amount * (1 + this.wave * 0.04), from);
     this.hud.flashHealth();
     const c = this.player.center;
-    if (res === 'shield') {
-      sfx.shield();
-      this.effects.sparkle({ x: c.x, y: c.y, z: 1 }, '#9eeaff', 16, 7);
+    if (res === 'shield' || res === 'shield-broken') {
+      // Sparks and a flare where the hit lands on the bubble's skin, between the sub and whatever struck it.
+      const at = from ?? c;
+      const dx = at.x - c.x;
+      const dy = at.y - c.y;
+      const d = Math.hypot(dx, dy) || 1;
+      const reach = Math.min(d, Math.max(this.player.extents.hx, this.player.extents.hy) * 1.15);
+      const hit = { x: c.x + (dx / d) * reach, y: c.y + (dy / d) * reach, z: 1 };
+      this.effects.shieldImpact(hit, { x: dx / d, y: dy / d });
+      if (res === 'shield-broken') {
+        sfx.shieldBreak();
+        this.effects.shieldShatter({ x: c.x, y: c.y, z: 0.8 }, this.player.extents.hx);
+      } else {
+        sfx.shield();
+      }
       return;
     }
     sfx.hurt();
@@ -1714,6 +1726,8 @@ export class Game {
     const ext = pl.extents;
     group.position.set(pl.group.position.x, pl.group.position.y + ext.cy + ext.hy + 0.75, 1.5);
     setBar(bar, Math.max(0, pl.hp / pl.maxHp), dt);
+    if (pl.shieldCharges > (this.lastShieldCharges ?? 0)) sfx.shieldUp();
+    this.lastShieldCharges = pl.shieldCharges;
     const max = pl.shieldMax;
     pips.forEach((pip, i) => {
       pip.visible = i < max;

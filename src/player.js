@@ -97,12 +97,18 @@ const sootTexture = (() => {
   return tex;
 })();
 
+// Energy bubble over the hull: a faint hex lattice with a bright rim. A blocked hit flares where it lands and sends a
+// ripple across the surface; a recharge sweeps a band of light up the bubble; losing the last charge makes the
+// cells flicker out.
 function makeShieldBubble() {
   const mat = new THREE.ShaderMaterial({
     transparent: true,
     depthWrite: false,
     blending: THREE.AdditiveBlending,
-    uniforms: { uTime: { value: 0 }, uFlash: { value: 0 }, uStrength: { value: 0 } },
+    uniforms: {
+      uTime: { value: 0 }, uFlash: { value: 0 }, uStrength: { value: 0 }, uHitDir: { value: new THREE.Vector3(1, 0, 0) },
+      uHitAge: { value: 10 }, uCharge: { value: -1 }, uBreak: { value: 0 },
+    },
     vertexShader: /* glsl */ `
       varying vec3 vNormal;
       varying vec3 vView;
@@ -115,19 +121,48 @@ function makeShieldBubble() {
         gl_Position = projectionMatrix * mv;
       }`,
     fragmentShader: /* glsl */ `
-      uniform float uTime, uFlash, uStrength;
+      uniform float uTime, uFlash, uStrength, uHitAge, uCharge, uBreak;
+      uniform vec3 uHitDir;
       varying vec3 vNormal;
       varying vec3 vView;
       varying vec3 vPos;
+      vec4 hexCell( vec2 p ) {
+        vec2 r = vec2( 1.0, 1.7320508 );
+        vec2 h = r * 0.5;
+        vec2 a = mod( p, r ) - h;
+        vec2 b = mod( p - h, r ) - h;
+        vec2 g = dot( a, a ) < dot( b, b ) ? a : b;
+        return vec4( g, p - g );
+      }
       void main() {
+        vec3 n = normalize( vPos );
         float rim = pow( 1.0 - abs( dot( vNormal, vView ) ), 2.2 );
-        float bands = 0.5 + 0.5 * sin( vPos.y * 14.0 - uTime * 3.0 + vPos.x * 4.0 );
-        vec3 col = mix( vec3( 0.25, 0.75, 1.0 ), vec3( 0.8, 0.97, 1.0 ), rim );
-        float a = ( rim * 0.38 + bands * 0.02 + 0.008 ) * uStrength + uFlash * ( 0.3 + rim );
+        // The atan seam sits on the far side of the bubble, away from the camera.
+        vec2 sp = vec2( atan( n.x, n.z ) * 3.2, n.y * 5.0 );
+        vec4 cell = hexCell( sp );
+        vec2 g = abs( cell.xy );
+        float edge = smoothstep( 0.42, 0.49, max( dot( g, vec2( 0.5, 0.8660254 ) ), g.x ) );
+        float cellRand = fract( sin( dot( cell.zw, vec2( 12.9898, 78.233 ) ) ) * 43758.5453 );
+        float shimmer = 0.5 + 0.5 * sin( uTime * 2.2 + cellRand * 6.2831 + n.y * 3.0 );
+
+        float d = acos( clamp( dot( n, uHitDir ), -1.0, 1.0 ) );
+        float ring = exp( -pow( ( d - uHitAge * 5.0 ) * 5.0, 2.0 ) ) * exp( -uHitAge * 2.2 );
+        float spot = exp( -d * d * 6.0 ) * exp( -uHitAge * 6.0 );
+        float level = mix( -1.15, 1.15, uCharge );
+        float sweep = uCharge >= 0.0 ? exp( -pow( ( n.y - level ) * 7.0, 2.0 ) ) : 0.0;
+
+        float idle = rim * 0.36 + edge * ( 0.03 + 0.05 * shimmer ) * ( 0.4 + rim ) + 0.006;
+        float a = idle * uStrength;
+        a += ( ring * ( 0.35 + edge * 1.2 ) + spot * ( 0.9 + edge ) ) * max( uStrength, 0.6 );
+        a += sweep * ( 0.18 + edge * 0.7 );
+        a += uFlash * ( 0.12 + rim * 0.5 + edge * 0.3 );
+        float alive = uBreak > 0.0 ? step( cellRand, uBreak ) * step( 0.35, fract( uTime * 13.0 + cellRand * 7.0 ) ) : 1.0;
+        a += uBreak * edge * alive * 0.9;
+        vec3 col = mix( vec3( 0.25, 0.75, 1.0 ), vec3( 0.85, 0.98, 1.0 ), clamp( rim + spot + ring * 0.6, 0.0, 1.0 ) );
         gl_FragColor = vec4( col * a, 1.0 );
       }`,
   });
-  return new THREE.Mesh(new THREE.SphereGeometry(1, 40, 24), mat);
+  return new THREE.Mesh(new THREE.SphereGeometry(1, 48, 32), mat);
 }
 
 export function makeBeam(color = '#fff0b8') {
@@ -255,6 +290,9 @@ export class Player {
     this.shieldCharges = 0;
     this.shieldTimer = 0;
     this.shieldFlash = 0;
+    this.shieldHitAge = 10;
+    this.shieldCharge = -1;
+    this.shieldBreak = 0;
     this.grapple = { state: 'idle', t: 0, cooldown: 0, target: null };
     this.alive = true;
     this.group.visible = true;
@@ -688,15 +726,23 @@ export class Player {
       if (this.shieldTimer > 9 - this.levels.shield) {
         this.shieldTimer = 0;
         this.shieldCharges++;
-        this.shieldFlash = 0.6;
+        this.shieldFlash = 0.15;
+        this.shieldCharge = 0;
       }
     }
     this.shieldFlash = Math.max(0, this.shieldFlash - dt * 2);
+    this.shieldHitAge += dt;
+    this.shieldBreak = Math.max(0, this.shieldBreak - dt * 1.4);
+    if (this.shieldCharge >= 0) this.shieldCharge = this.shieldCharge + dt * 1.6 > 1 ? -1 : this.shieldCharge + dt * 1.6;
     const su = this.shield.material.uniforms;
     su.uTime.value = this.time;
     su.uFlash.value = this.shieldFlash;
+    su.uHitAge.value = this.shieldHitAge;
+    su.uCharge.value = this.shieldCharge;
+    su.uBreak.value = this.shieldBreak;
     su.uStrength.value = THREE.MathUtils.lerp(su.uStrength.value, this.shieldCharges > 0 ? 1 : 0, 1 - Math.exp(-dt * 5));
-    this.shield.visible = su.uStrength.value > 0.02 || this.shieldFlash > 0.01;
+    this.shield.visible = su.uStrength.value > 0.02 || this.shieldFlash > 0.01 || this.shieldHitAge < 1.2
+      || this.shieldBreak > 0 || this.shieldCharge >= 0;
 
     this.sinceHit += dt;
     if (this.alive && this.sinceHit > REGEN_DELAY) this.hp = Math.min(this.maxHp, this.hp + REGEN_RATE * dt);
@@ -749,14 +795,21 @@ export class Player {
     return spots.length ? spots : [this.hull];
   }
 
-  // Returns 'shield', 'hit', or 'dead'.
+  // Returns 'shield', 'shield-broken', 'hit', or 'dead'.
   takeHit(amount, from) {
     if (this.shieldCharges > 0) {
       this.shieldCharges--;
       this.shieldTimer = 0;
-      this.shieldFlash = 1;
+      this.shieldFlash = 0.5;
+      this.shieldHitAge = 0;
+      if (from) {
+        this.shield.updateWorldMatrix(true, false);
+        this.shield.material.uniforms.uHitDir.value.copy(this.shield.worldToLocal(new THREE.Vector3(from.x, from.y, 0)))
+          .normalize();
+      }
+      if (this.shieldCharges === 0) this.shieldBreak = 1;
       this.invuln = 0.4;
-      return 'shield';
+      return this.shieldCharges === 0 ? 'shield-broken' : 'shield';
     }
     this.hp -= amount;
     this.sinceHit = 0;

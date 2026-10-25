@@ -261,6 +261,31 @@ export class Effects {
     this.shake = Math.min(1.2, this.shake + 0.35 * scale);
   }
 
+  // A blocked hit: a flash of light on the bubble, sparks thrown back along the line of attack, and a quick glow
+  // spreading over the skin.
+  shieldImpact(pos, out) {
+    this.glow.emit({ pos, life: 0.2, size: 1.4, size1: 2.4, color: '#e8fbff', alpha: 1, alpha1: 0 });
+    this.glow.emit({ pos, life: 0.45, size: 0.8, size1: 3.4, color: '#6fd8ff', alpha: 0.5, alpha1: 0 });
+    for (let i = 0; i < 18; i++) {
+      const a = Math.atan2(out.y, out.x) + rand(-1.1, 1.1);
+      const s = rand(3, 9);
+      this.glow.emit({ pos, vel: { x: Math.cos(a) * s, y: Math.sin(a) * s }, life: rand(0.25, 0.5),
+        size: rand(0.18, 0.35), size1: 0.05, color: '#ffffff', color1: '#5fd0ff', alpha: 1, alpha1: 0, drag: 4 });
+    }
+  }
+
+  // The last charge gives out: shards of the bubble fly off and fade.
+  shieldShatter(pos, radius) {
+    for (let i = 0; i < 36; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const r = radius * rand(0.9, 1.2);
+      const s = rand(2, 6);
+      this.glow.emit({ pos: { x: pos.x + Math.cos(a) * r, y: pos.y + Math.sin(a) * r * 0.6, z: pos.z },
+        vel: { x: Math.cos(a) * s, y: Math.sin(a) * s }, life: rand(0.5, 0.9), size: rand(0.25, 0.5), size1: 0.05,
+        color: '#c8f4ff', color1: '#3aa8ff', alpha: 0.95, alpha1: 0, drag: 2.5, rise: -2 });
+    }
+  }
+
   splash(pos, scale = 1) {
     for (let i = 0; i < 22 * scale; i++) {
       const a = rand(0.25, Math.PI - 0.25);

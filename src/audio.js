@@ -86,8 +86,20 @@ export const sfx = {
     noise({ dur: 0.3, vol: 0.3, freq: 900, to: 100 });
   },
   shield() {
-    tone({ type: 'triangle', freq: 1400, to: 700, dur: 0.35, vol: 0.2 });
-    tone({ type: 'sine', freq: 2100, to: 1800, dur: 0.4, vol: 0.1 });
+    tone({ type: 'sine', freq: 180, to: 90, dur: 0.35, vol: 0.28 });
+    tone({ type: 'triangle', freq: 1400, to: 600, dur: 0.3, vol: 0.16 });
+    tone({ type: 'sine', freq: 2400, to: 2000, dur: 0.45, vol: 0.07, delay: 0.02 });
+    noise({ dur: 0.12, vol: 0.18, freq: 5000, to: 2500 });
+  },
+  shieldBreak() {
+    [1900, 1500, 1150, 850].forEach((f, i) => tone({ type: 'triangle', freq: f, to: f * 0.7, dur: 0.22, vol: 0.12,
+      delay: i * 0.05 }));
+    tone({ type: 'sine', freq: 220, to: 60, dur: 0.5, vol: 0.25 });
+    noise({ dur: 0.45, vol: 0.25, freq: 6000, to: 800 });
+  },
+  shieldUp() {
+    tone({ type: 'sine', freq: 500, to: 1300, dur: 0.4, vol: 0.12 });
+    tone({ type: 'triangle', freq: 1600, dur: 0.18, vol: 0.06, delay: 0.32 });
   },
   upgrade() {
     [523, 659, 784, 1047].forEach((f, i) => tone({ type: 'triangle', freq: f, dur: 0.16, vol: 0.18, delay: i * 0.07 }));
