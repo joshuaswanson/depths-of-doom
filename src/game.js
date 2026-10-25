@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { ownMaterials, spawn } from './assets.js';
+import { cloneMaterial, findNode, ownMaterials, spawn } from './assets.js';
 import { makeBeam } from './player.js';
 import { sfx } from './audio.js';
 import { UPGRADES, upgradeCost } from './upgrades.js';
@@ -15,6 +15,25 @@ const ENEMY_YAW = {
   right: { swim: Math.PI, idle: Math.PI - 0.75 },
 };
 const SKULL_CHANCE = 1 / 3;
+// Where each enemy hull carries its missile drum, in model space (the nose points to -X).
+const POD_MOUNT = { scout: { x: -0.45, y: 0.55, scale: 0.8 }, gunner: { x: -0.6, y: 0.74, scale: 0.95 },
+  boss: { x: -1.1, y: 1.3, scale: 1.4 } };
+const POD_COLORS = { blue: '#2c2e36', blue_dark: '#3a3d47', yellow: '#b8262b', red: '#ff3b30' };
+let podTemplate = null;
+
+// The player's missile drum, repainted in enemy colours.
+function enemyPod() {
+  if (!podTemplate) {
+    podTemplate = spawn('part_missile');
+    podTemplate.traverse((o) => {
+      if (!o.isMesh || !POD_COLORS[o.material.name]) return;
+      o.material = cloneMaterial(o.material);
+      o.material.color.set(POD_COLORS[o.material.name]);
+      if (o.material.name === 'red') o.material.emissive = new THREE.Color('#ff2a1f').multiplyScalar(0.6);
+    });
+  }
+  return podTemplate.clone(true);
+}
 const HALO_SIZE = { scout: 1.3, gunner: 1.6, boss: 2.6 };
 const BAR_WIDTH = { scout: 1.4, gunner: 1.9, boss: 3.4, player: 2.6 };
 const BAR_HEIGHT = 0.26;
@@ -415,6 +434,13 @@ export class Game {
     if (e.muzzle && spec.type !== 'mine') {
       e.glow = viewportGlow(spec.type);
       e.muzzle.add(e.glow.group);
+      const pod = POD_MOUNT[spec.type];
+      const launcher = enemyPod();
+      launcher.position.set(pod.x, pod.y, 0);
+      launcher.rotation.y = Math.PI;
+      launcher.scale.setScalar(pod.scale);
+      model.add(launcher);
+      e.muzzle = findNode(launcher, 'muzzle');
     }
     if (BAR_WIDTH[spec.type]) {
       e.bar = healthBar(spec.type);
@@ -484,7 +510,7 @@ export class Game {
     }
     if (e.type === 'mine') {
       for (const other of this.enemies) {
-        if (other !== e && !other.dead && other.obj.position.distanceTo(p) < 2.8) this.damageEnemy(other, 8);
+        if (other !== e && !other.dead && other.obj.position.distanceTo(p) < 3) this.damageEnemy(other, 12);
       }
       if (this.player.alive && this.player.hitTest(p.x, p.y, 1.4)) this.hurtPlayer(DAMAGE.mine, p);
     }
@@ -846,10 +872,17 @@ export class Game {
       }
 
       e.bumpCooldown = Math.max(0, (e.bumpCooldown ?? 0) - dt);
-      if (pl.alive && pl.hitTest(p.x, p.y, Math.min(e.def.ry, 1.0))) {
+      if (e.type === 'mine') {
+        const victim = this.enemies.find((o) => o !== e && !o.dead && o.type !== 'mine' && this.enemyHit(o, p.x, p.y, 0.55));
+        if (victim) {
+          this.killEnemy(e);
+          continue;
+        }
+      }
+      if (pl.alive) {
         if (e.type === 'mine') {
-          if (pl.invuln <= 0) this.killEnemy(e);
-        } else {
+          if (pl.invuln <= 0 && pl.hitTest(p.x, p.y, e.def.ry)) this.killEnemy(e);
+        } else if (this.hullContact(e)) {
           this.bump(e);
         }
       }
@@ -877,12 +910,28 @@ export class Game {
     this.updateMineChains();
   }
 
+  // Points along an enemy hull's length, so its whole body counts in collisions, not just its middle.
+  hullPoints(e) {
+    const p = e.obj.position;
+    const a = e.pitch * e.facing;
+    const reach = e.def.rx * 0.7;
+    const dx = Math.cos(a) * e.facing * reach;
+    const dy = Math.sin(a) * reach;
+    return [{ x: p.x, y: p.y }, { x: p.x + dx, y: p.y + dy }, { x: p.x - dx, y: p.y - dy }];
+  }
+
+  hullContact(e) {
+    const r = e.def.ry * 0.95;
+    return this.hullPoints(e).find((q) => this.player.hitTest(q.x, q.y, r)) ?? null;
+  }
+
   // Subs that collide bounce apart with no damage: a momentum exchange along the line between them, plus a clank.
   bump(e) {
     const pl = this.player;
     const pc = pl.center;
     const p = e.obj.position;
-    const n = new THREE.Vector2(pc.x - p.x, pc.y - p.y);
+    const contact = this.hullContact(e) ?? p;
+    const n = new THREE.Vector2(pc.x - contact.x, pc.y - contact.y);
     if (n.lengthSq() < 1e-4) n.set(1, 0);
     n.normalize();
     const mPlayer = pl.mass * 1.3;
@@ -891,10 +940,14 @@ export class Game {
     const j = Math.max(2.5, -(1 + BUMP_BOUNCE) * Math.min(approach, 0)) / (1 / mPlayer + 1 / mEnemy);
     pl.vel.addScaledVector(n, j / mPlayer);
     e.vel.addScaledVector(n, -j / mEnemy);
-    pl.group.position.x += n.x * 0.08;
-    pl.group.position.y += n.y * 0.08;
-    p.x -= n.x * 0.08;
-    p.y -= n.y * 0.08;
+    // Push the hulls apart until they no longer overlap, the lighter sub moving further.
+    const share = mEnemy / (mPlayer + mEnemy);
+    for (let i = 0; i < 30 && this.hullContact(e); i++) {
+      pl.group.position.x += n.x * 0.05 * share;
+      pl.group.position.y += n.y * 0.05 * share;
+      p.x -= n.x * 0.05 * (1 - share);
+      p.y -= n.y * 0.05 * (1 - share);
+    }
     if (e.bumpCooldown > 0) return;
     e.bumpCooldown = 0.25;
     const hit = { x: (pc.x + p.x) / 2, y: (pc.y + p.y) / 2, z: 0.8 };
