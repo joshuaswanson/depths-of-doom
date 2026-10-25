@@ -1420,6 +1420,7 @@ export class Game {
     }
 
     this.emitDamageSmoke();
+    this.castEnemyGlow(dt);
     this.updateWetness(dt);
     this.updateStatus(dt);
     this.kickUpSand(dt);
@@ -1439,6 +1440,34 @@ export class Game {
       pip.position.set((i - (max - 1) / 2) * 0.38, 0.36, 0);
       pip.material.opacity = i < pl.shieldCharges ? 1 : 0.25;
     });
+  }
+
+  // In the dark, enemy viewports bathe the sub in red: one light placed on the side of the strongest nearby glow.
+  castEnemyGlow(dt) {
+    const pl = this.player;
+    const pc = pl.center;
+    const dark = this.world.dark;
+    let best = null;
+    let bestW = 0;
+    for (const e of this.enemies) {
+      if (e.dead || !e.glow) continue;
+      const p = e.obj.position;
+      const d = Math.hypot(p.x - pc.x, p.y - pc.y);
+      if (d > 14) continue;
+      const facing = (pc.x - p.x) * e.facing > 0 ? 1 : 0.45;
+      const w = (1 - d / 14) * facing * (e.type === 'boss' ? 1.6 : 1);
+      if (w > bestW) {
+        bestW = w;
+        best = p;
+      }
+    }
+    const light = pl.redGlow;
+    const want = best ? bestW * dark * 70 : 0;
+    light.intensity = THREE.MathUtils.lerp(light.intensity, want, 1 - Math.exp(-dt * 5));
+    if (best) {
+      const toward = new THREE.Vector2(best.x - pc.x, best.y - pc.y).normalize();
+      light.position.set(pc.x + toward.x * 2.4, pc.y + toward.y * 2.4, 2.2);
+    }
   }
 
   // Surfacing soaks the sub; it drips and slowly dries while it stays above the water.

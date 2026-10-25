@@ -212,6 +212,9 @@ export class Player {
     this.glow = new THREE.PointLight('#9fdfff', 0, 12, 1.4);
     this.glow.position.set(0, 1.5, 3);
     this.rig.add(this.glow);
+    // Red light cast on the sub by the nearest enemy viewport; lives in the scene so it can sit on the enemy's side.
+    this.redGlow = new THREE.PointLight('#ff2a14', 0, 16, 1.3);
+    scene.add(this.redGlow);
     scene.add(this.group);
 
     this.parts = [];

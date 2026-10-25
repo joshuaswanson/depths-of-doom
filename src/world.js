@@ -104,12 +104,12 @@ const LAYERS = [
   {
     z: [-16, -2], gap: [7, 14], scale: [0.85, 1.35],
     props: ['ruin_pillar_b', 'rock_b', 'anchor', 'rock_a', 'ruin_wall'],
-    deep: ['rock_a', 'rock_b', 'coral_brain', 'anchor', 'rock_b'],
+    deep: ['rock_a', 'rock_b', 'anchor', 'rock_b', 'ruin_pillar_b'],
   },
   {
     z: [9, 13], gap: [5, 10], scale: [1.0, 1.5], tint: ['#0b2a3f', 0.6],
     props: ['kelp_short', 'coral_fan', 'coral_staghorn', 'sponge_cluster', 'kelp_short', 'coral_brain'],
-    deep: ['rock_b', 'coral_brain'],
+    deep: ['rock_b', 'rock_a'],
   },
 ];
 
