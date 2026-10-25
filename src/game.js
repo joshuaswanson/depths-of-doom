@@ -1112,9 +1112,15 @@ export class Game {
         }
       }
 
-      if (e.type !== 'boss' && dist > DESPAWN_DIST) {
+      if (e.type === 'mine' && dist > DESPAWN_DIST) {
         e.dead = true;
         this.scene.remove(e.obj);
+      } else if (dist > DESPAWN_DIST) {
+        // Subs left far behind come back from just off screen, so a wave only ends when every sub is sunk.
+        const spot = this.offscreenSpot(Math.atan2(p.y - this.cam.y, p.x - this.cam.x), e.def.rx * e.def.scale + 2);
+        p.x = spot.x;
+        p.y = spot.y;
+        e.vel.set(0, 0);
       }
     }
     this.enemies = this.enemies.filter((e) => !e.dead);
