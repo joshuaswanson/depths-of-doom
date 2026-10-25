@@ -215,7 +215,7 @@ function makeWaterline() {
       }`,
   });
   const strip = new THREE.Mesh(new THREE.PlaneGeometry(240, 0.9, 240, 1), mat);
-  strip.position.set(0, SURFACE_Y - 0.35, 0.6);
+  strip.position.set(0, SURFACE_Y - 0.35, 0);
   strip.renderOrder = 8;
   return strip;
 }

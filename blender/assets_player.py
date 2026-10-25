@@ -109,8 +109,29 @@ def nose_viewport(part, mats, body, nose_x, sign=1, glow=None):
                 scale=(0.01, r0 * 0.15, r0 * 0.06), rot=(0.7, 0, 0), segs=10, rings=6)
 
 
-def player_hull(P):
-    root = empty("player_hull")
+# The big hull has a flat front deck between the conning tower and the nose viewport, at this height.
+DECK_START, DECK_END, DECK_HEIGHT = 0.72, 0.97, 0.56
+
+
+def deck_cap(x):
+    t = max(0.0, min(1.0, (x - DECK_START) / (DECK_END - DECK_START)))
+    t = t * t * (3 - 2 * t)
+    return 10.0 * (1 - t) + DECK_HEIGHT * t
+
+
+def flatten_deck(part, body, first):
+    """Press every vertex added since `first` down onto the deck, keeping its height above the round hull."""
+    part.bm.verts.ensure_lookup_table()
+    for v in part.bm.verts[first:]:
+        x, y, z = v.co
+        if z <= 0:
+            continue
+        lift = max(0.0, math.hypot(y, z) - body.r(x))
+        v.co.z = min(z, deck_cap(x) + lift)
+
+
+def player_hull(P, big=False):
+    root = empty("player_hull_big" if big else "player_hull")
     b = BODY
     part = Part()
     nose_x = viewport_x(b)
@@ -130,10 +151,20 @@ def player_hull(P):
         part.extrude(P["orange"], [(x, z * sz) for x, z in fin], depth=0.12, rot=(math.pi / 2, 0, 0), bevel=0.04)
         part.extrude(P["orange"], [(x, y * sz) for x, y in fin], depth=0.12, bevel=0.04)
 
+    if big:
+        flatten_deck(part, b, 0)
     nose_viewport(part, (P["gunmetal"], P["brass"], P["brass"], P["viewport_glass"], P["eye_shine"], P["cockpit"],
                          (P["dial_green"], P["dial_red"], P["dial_amber"])), b, nose_x)
+    trim_start = len(part.bm.verts)
     band(part, P["white"], b, nose_x - 0.38, nose_x - 0.16, lift=0.02)
     rivet_ring(part, P["brass"], b, nose_x - 0.27, count=20, size=0.03)
+    if big:
+        flatten_deck(part, b, trim_start)
+        for side in (-1, 1):
+            rail = [(x, side * 0.42, deck_cap(x) + 0.12) for x in (0.95, 1.12, 1.3, 1.45)]
+            part.tube(P["steel"], rail, radius=0.02, segs=6)
+            for x, _, z in rail:
+                part.cylinder(P["steel"], loc=(x, side * 0.42, z - 0.06), radius=0.015, depth=0.12, segs=6)
     for theta in (math.radians(4), math.radians(176)):
         porthole(part, P, b, 0.35, theta)
         porthole(part, P, b, -0.3, theta, radius=0.14)
@@ -162,6 +193,7 @@ def player_hull(P):
     part.cylinder(P["glass"], loc=grow(1.01, 1.94), radius=0.155, depth=0.04, rot=(0, math.pi / 2, 0), segs=24)
     part.torus(P["yellow_dark"], loc=grow(0.5, 1.6), major=0.125, minor=0.035, segs=24)
 
+    seams_start = len(part.bm.verts)
     for a in (45, 135, -45, -135, -90):
         theta = math.radians(a)
         seam = [b.point(x, theta, lift=0.008) for x in [-0.86 + 1.72 * i / 23 for i in range(24)]]
@@ -180,6 +212,12 @@ def player_hull(P):
                 part.sphere(P["brass"], matrix=f @ trs((sx * 0.13, sy * 0.085, 0.02), scale=(0.022, 0.022, 0.016)),
                             segs=8, rings=6)
 
+    if big:
+        flatten_deck(part, b, seams_start)
     part.build("hull_body", root)
     propeller(P, "propeller", root, (-2.82, 0, 0), size=1.2)
     return root
+
+
+def player_hull_big(P):
+    return player_hull(P, big=True)

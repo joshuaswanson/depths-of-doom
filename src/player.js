@@ -20,6 +20,14 @@ const CRUISE_BUILD = 0.32;
 const CRUISE_BOOST = 0.9;
 const RIG_SCALE = 0.82;
 const REGEN_DELAY = 5;
+// From this hull level the sub gets the long "car" hull with a flat front deck and a deck-mounted gun.
+const BIG_HULL_LEVEL = 4;
+const DECK = { start: 0.72, end: 0.97, height: 0.56 };
+const DECK_SOCKET = [1.2, 90];
+
+function deckCap(x) {
+  return THREE.MathUtils.lerp(10, DECK.height, THREE.MathUtils.smoothstep(x, DECK.start, DECK.end));
+}
 // Portholes that bolted-on parts must not sit on, as [x, angle around the hull, radius], plus how far toward the
 // nose viewport a part may sit. Only a part's mounting base counts: barrels and other overhangs may hang over a
 // window as long as the base stays off it.
@@ -172,16 +180,13 @@ export class Player {
     this.pitchPivot.add(this.rig);
     this.hullPivot = new THREE.Group();
     this.rig.add(this.hullPivot);
-    this.hull = spawn('player_hull');
-    this.hullPivot.add(this.hull);
-    this.mats = ownMaterials(this.hull).map((m) => ({ m, e: m.emissive.clone(), hull: true }));
-    this.scorches = [];
-    this.propeller = findNode(this.hull, 'propeller');
     this.duck = spawn('junk_duck');
     this.duck.position.set(-0.05, 1.58, 0.05);
     this.duck.scale.setScalar(1.3);
     this.duck.visible = false;
-    this.hull.add(this.duck);
+    this.mats = [];
+    this.setHullModel('player_hull');
+    this.scorches = [];
     this.shield = makeShieldBubble();
     this.pitchPivot.add(this.shield);
 
@@ -293,13 +298,35 @@ export class Player {
     return this.syncParts(true);
   }
 
+  // Swap the hull mesh, carrying the rubber duck and keeping the hit-flash material list in step.
+  setHullModel(name) {
+    if (this.hullModel === name) return;
+    if (this.hull) this.hull.removeFromParent();
+    this.mats = this.mats.filter((x) => !x.hull);
+    this.hull = spawn(name);
+    this.hullModel = name;
+    this.hullPivot.add(this.hull);
+    for (const m of ownMaterials(this.hull)) this.mats.push({ m, e: m.emissive.clone(), hull: true });
+    this.propeller = findNode(this.hull, 'propeller');
+    this.hull.add(this.duck);
+  }
+
+  get bigHull() {
+    return this.levels.hull >= BIG_HULL_LEVEL;
+  }
+
   socketTransform(x, angleDeg) {
     const a = THREE.MathUtils.degToRad(angleDeg);
     const r = hullRadius(x);
+    const up = this.bigHull ? Math.min(r * Math.sin(a), deckCap(x)) : r * Math.sin(a);
     return {
-      pos: new THREE.Vector3(x * this.fatTarget.x, r * Math.sin(a) * this.fatTarget.yz, r * Math.cos(a) * this.fatTarget.yz),
+      pos: new THREE.Vector3(x * this.fatTarget.x, up * this.fatTarget.yz, r * Math.cos(a) * this.fatTarget.yz),
       rotX: Math.PI / 2 - a,
     };
+  }
+
+  socketsFor(cat) {
+    return this.bigHull && cat === 'cannon' ? [DECK_SOCKET, ...SOCKETS.cannon] : SOCKETS[cat];
   }
 
   // Slide a mount around the hull until its base sits clear of every porthole and its body clear of other parts.
@@ -370,15 +397,20 @@ export class Player {
     if (!animate) this.fat = { ...this.fatTarget };
     this.duck.visible = L >= 2;
     const added = [];
-    for (const part of this.parts.filter((q) => q.model !== partModel(q.cat, this.levels[q.cat]) && q.cat !== 'junk')) {
+    const hullName = this.bigHull ? 'player_hull_big' : 'player_hull';
+    // Growing into the big hull re-bolts everything so the new front-deck mount gets the first cannon.
+    const rebuild = hullName !== this.hullModel;
+    this.setHullModel(hullName);
+    for (const part of this.parts.filter((q) => q.cat !== 'junk' && (rebuild || q.model !== partModel(q.cat, this.levels[q.cat])))) {
       part.pivot.removeFromParent();
       this.parts.splice(this.parts.indexOf(part), 1);
     }
     for (const cat of Object.keys(PART_MODEL)) {
+      const sockets = this.socketsFor(cat);
       const have = this.parts.filter((p) => p.cat === cat).length;
-      const want = Math.min(partCount(cat, this.levels[cat]), SOCKETS[cat].length);
+      const want = Math.min(partCount(cat, this.levels[cat]), sockets.length);
       for (let i = have; i < want; i++) {
-        const [x, angle] = SOCKETS[cat][i];
+        const [x, angle] = sockets[i];
         added.push(this.addPart(cat, partModel(cat, this.levels[cat]), x, angle, animate));
       }
     }
