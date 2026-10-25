@@ -153,16 +153,15 @@ export function setAmbience(dt, { active = false, surface = 0, speed = 0, underw
 }
 
 // Music tracks streamed from files, each looped by starting a fresh copy as the old one fades out at its end.
-// Tracks not yet made fall back to the closest one that exists, or stay silent.
 const MUSIC_VOLUME = 0.55;
 const MUSIC_FADE = 4;
 // `tail` is how long each recording takes to fade out at its end; the next copy starts as that fade begins.
 const TRACKS = {
   surface: { file: 'sunlight_on_the_reef.m4a', tail: 4.5 },
   deep: { file: 'below_the_pressure.m4a', tail: 6.5 },
+  battle: { file: 'reef_pirates_charge.m4a', tail: 1.6 },
   battleDeep: { file: 'shadows_in_the_trench.m4a', tail: 1.5 },
 };
-const FALLBACK = { battle: 'surface', battleDeep: 'deep' };
 const music = {};
 
 function musicTrack(name) {
@@ -200,15 +199,9 @@ function startCopy(track) {
 // `mix` gives each track's target loudness from 0 to 1.
 export function setMusic(mix) {
   if (!ctx) return;
-  const targets = {};
-  for (const [name, level] of Object.entries(mix)) {
-    let track = name;
-    while (track && !TRACKS[track]) track = FALLBACK[track];
-    if (track) targets[track] = Math.max(targets[track] ?? 0, level);
-  }
   const now = ctx.currentTime;
   for (const name of Object.keys(TRACKS)) {
-    const level = targets[name] ?? 0;
+    const level = mix[name] ?? 0;
     if (level <= 0 && !music[name]) continue;
     const track = musicTrack(name);
     track.bus.gain.setTargetAtTime(level * MUSIC_VOLUME, now, 1.2);
