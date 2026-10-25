@@ -272,15 +272,15 @@ export const sfx = {
   // Hull on hull: a sharp strike, a dull thump, then a metallic ring. The partials follow a struck plate's
   // inharmonic modes, and a detuned twin on two of them gives the ring its shimmer.
   bump(strength = 0.5) {
-    const v = 0.1 + 0.18 * strength;
-    const f0 = 170 + Math.random() * 90;
-    noise({ type: 'bandpass', dur: 0.05, vol: v * 1.4, freq: 4200, to: 2600, q: 1.2 });
-    tone({ type: 'sine', freq: 95, to: 55, dur: 0.18, vol: v * 0.9 });
-    const modes = [[1, 0.9, 1], [2.76, 0.7, 0.75], [5.4, 0.45, 0.5], [8.93, 0.28, 0.32], [13.34, 0.16, 0.18]];
+    const v = 0.12 + 0.2 * strength;
+    const f0 = 82 + Math.random() * 30;
+    noise({ type: 'bandpass', dur: 0.06, vol: v * 1.1, freq: 1600, to: 900, q: 1.1 });
+    tone({ type: 'sine', freq: 70, to: 38, dur: 0.28, vol: v * 1.1 });
+    const modes = [[1, 1.4, 1], [2.76, 1.0, 0.8], [5.4, 0.65, 0.5], [8.93, 0.4, 0.26]];
     modes.forEach(([ratio, ring, amp]) => {
       const f = f0 * ratio;
-      tone({ type: 'sine', freq: f, to: f * 0.995, dur: ring * (0.6 + strength * 0.5), vol: v * amp * 0.55 });
-      if (ratio === 2.76 || ratio === 5.4) tone({ type: 'sine', freq: f * 1.012, dur: ring * 0.8, vol: v * amp * 0.3 });
+      tone({ type: 'sine', freq: f, to: f * 0.99, dur: ring * (0.6 + strength * 0.5), vol: v * amp * 0.6 });
+      if (ratio === 2.76 || ratio === 5.4) tone({ type: 'sine', freq: f * 1.01, dur: ring * 0.8, vol: v * amp * 0.32 });
     });
   },
   clank() {
