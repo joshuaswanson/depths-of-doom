@@ -40,7 +40,7 @@ export class Hud {
     this.waveTag = el('div', 'wave-tag');
     topLeft.append(this.waveTag);
 
-    this.pauseBtn = el('button', 'pause-btn', '<span></span><span></span>');
+    this.pauseBtn = el('button', 'pause-btn', '<span class="bars"><i></i><i></i></span>Pause');
     this.pauseBtn.setAttribute('aria-label', 'Pause');
     this.pauseBtn.addEventListener('pointerdown', (e) => {
       e.preventDefault();

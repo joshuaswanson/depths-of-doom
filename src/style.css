@@ -131,33 +131,30 @@ html, body {
 
 .pause-btn {
   position: absolute;
-  top: 2.4vh;
-  right: calc(1.4vw + max(10.5vw, 110px) + 1vw);
-  width: 3.8vw;
-  min-width: 42px;
-  aspect-ratio: 1;
+  top: 1.8vh;
+  left: 50%;
+  transform: translateX(-50%);
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 16%;
-  background: radial-gradient(circle at 40% 32%, #6c7884, #3c4651 60%, #1f262e);
-  border: 0.3vw solid #c9973f;
-  border-radius: 50%;
-  box-shadow: 0 0 0 0.12vw #5a3d12, inset 0 0.15vw 0 rgba(255, 255, 255, 0.3), inset 0 -0.25vw 0 rgba(0, 0, 0, 0.35),
-    0 0.4vw 0.8vw rgba(0, 0, 0, 0.5);
+  gap: 0.45vw;
+  padding: 0.5vh 1.6vw 0.6vh;
+  font-family: inherit;
+  font-size: 1.3vw;
+  font-weight: 700;
+  color: #4a1d02;
+  background: linear-gradient(#ffe36b, #f5a515);
+  border: 0.2vw solid #8a3d06;
+  border-radius: 999px;
+  box-shadow: 0 0.3vw 0 #8a3d06, 0 0.6vw 1vw rgba(0, 0, 0, 0.35);
   cursor: pointer;
   pointer-events: auto;
-  transition: transform 0.12s, filter 0.2s;
+  transition: transform 0.1s;
 }
-.pause-btn:hover { transform: scale(1.07); filter: brightness(1.12); }
-.pause-btn:active { transform: scale(0.95); }
-.pause-btn span {
-  width: 15%;
-  height: 40%;
-  border-radius: 0.15vw;
-  background: linear-gradient(#f5d27a, #c9973f 60%, #9e7128);
-  box-shadow: 0 0.08vw 0 #3a2406, inset 0 0.06vw 0 rgba(255, 255, 255, 0.5);
-}
+.pause-btn:hover { transform: translateX(-50%) translateY(-2px) scale(1.04); }
+.pause-btn:active { transform: translateX(-50%) translateY(2px); box-shadow: 0 0.1vw 0 #8a3d06; }
+.pause-btn .bars { display: flex; gap: 0.22vw; }
+.pause-btn .bars i { display: block; width: 0.32vw; height: 1.05vw; border-radius: 0.1vw; background: #4a1d02; }
 .radar {
   position: absolute;
   top: 1.6vh;
@@ -169,7 +166,7 @@ html, body {
 
 .boss-bar {
   position: absolute;
-  top: 3vh;
+  top: 8vh;
   left: 50%;
   transform: translateX(-50%) translateY(-200%);
   width: 36vw;
