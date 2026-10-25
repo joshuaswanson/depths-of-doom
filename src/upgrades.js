@@ -8,7 +8,7 @@ export const UPGRADES = [
   { id: 'missile', name: 'Missiles', icon: 'missile', start: 0, max: 5, base: 120, growth: 1.7,
     blurb: 'Fire and forget. Missiles chase down the nearest enemy, but do less damage.' },
   { id: 'shield', name: 'Shield', icon: 'shield', start: 0, max: 5, base: 60, growth: 1.7,
-    blurb: 'Adds a shield charge. Each charge blocks one hit and refills over time.' },
+    blurb: 'Adds a shield generator. Each generator blocks one hit and recharges over time.' },
   { id: 'grapple', name: 'Grapple', icon: 'grapple', start: 0, max: 4, base: 45, growth: 1.8,
     blurb: 'A claw that grabs nearby coins and pinches enemies in reach. Reaches further each level.' },
   { id: 'sonar', name: 'Sonar', icon: 'sonar', start: 0, max: 4, base: 50, growth: 1.8,

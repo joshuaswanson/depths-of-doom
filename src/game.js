@@ -168,6 +168,8 @@ function dizzyStars() {
 }
 const MINE_LANE = 2.6;
 const MAX_CHAIN = 70;
+// Fraction of the half-screen height taken up by the store panel along the bottom.
+const PANEL_SHARE = 0.17;
 const LOOSE_COIN_RANGE = 70;
 
 const ENEMY_TYPES = {
@@ -540,6 +542,7 @@ export class Game {
       launcher.scale.setScalar(pod.scale);
       model.add(launcher);
       e.muzzle = findNode(launcher, 'muzzle');
+      for (const m of ownMaterials(launcher)) e.mats.push({ m, e: m.emissive.clone(), c: m.color.clone() });
     }
     if (spec.type !== 'mine') {
       e.stars = dizzyStars();
@@ -1491,13 +1494,14 @@ export class Game {
     const pl = this.player;
     const pc = pl.center;
     const tx = pc.x + Math.cos(pl.yaw) * 2.5 + pl.vel.x * 0.3;
-    const ty = pc.y + pl.vel.y * 0.2;
+    // The store panel covers the bottom of the screen, so frame the sub in the open water above it.
+    const ty = pc.y + pl.vel.y * 0.2 - this.halfH * PANEL_SHARE;
     this.cam.x = THREE.MathUtils.lerp(this.cam.x, tx, 1 - Math.exp(-dt * 2.2));
     this.cam.y = THREE.MathUtils.lerp(this.cam.y, ty, 1 - Math.exp(-dt * 2.2));
     let lowest = Infinity;
     for (let i = -2; i <= 2; i++) lowest = Math.min(lowest, seabedAt(this.cam.x + (i * this.halfW) / 2));
     this.camFloor = THREE.MathUtils.lerp(this.camFloor ?? lowest, lowest, 1 - Math.exp(-dt * 1.5));
-    const floorLimit = Math.min(this.camFloor + this.halfH - 3, pc.y + 1.5);
+    const floorLimit = Math.min(this.camFloor + this.halfH - 3, pc.y + 1.5 - this.halfH * PANEL_SHARE);
     this.cam.y = THREE.MathUtils.clamp(this.cam.y, floorLimit, SURFACE_Y + 1);
   }
 
