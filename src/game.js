@@ -26,6 +26,7 @@ const MAX_WRECKS = 14;
 const MAX_COINS = 400;
 const FIRST_WAVE_DELAY = 22;
 const COMBAT_HOLD = 2;
+const DEEP_COMBAT_LEAD = 4;
 // Breathing room between waves, long enough for the calm music to come back.
 const WAVE_BREAK = 25;
 // Where each enemy hull carries its missile drum, in model space (the nose points to -X).
@@ -1992,15 +1993,19 @@ export class Game {
     if (big !== null) sfx.blip(big);
   }
 
-  // Combat music starts once an enemy sub comes into view, carries on until the wave is over, and lingers a moment
-  // after its last sub is sunk; the break between waves gets the calm track.
+  // Combat music starts once an enemy sub comes into view, or in the dark of the deep a few seconds before the wave
+  // arrives. It carries on until the wave is over and lingers a moment after its last sub is sunk; the break between
+  // waves gets the calm track.
   get inCombat() {
     return this.combatHold > 0;
   }
 
   updateCombatHold(dt) {
     const subs = this.enemies.filter((e) => e.type !== 'mine');
-    if (!this.queue.length && !subs.length) this.combatOn = false;
+    const between = !this.queue.length && !subs.length;
+    if (between) this.combatOn = false;
+    const waveSoon = this.waveBreak > 0 && this.waveBreak < DEEP_COMBAT_LEAD;
+    if (between && waveSoon && this.world.dark > 0.3) this.combatOn = true;
     if (subs.some((e) => this.onScreen(e.obj.position.x, e.obj.position.y))) this.combatOn = true;
     this.combatHold = this.combatOn ? COMBAT_HOLD : Math.max(0, (this.combatHold ?? 0) - dt);
   }
