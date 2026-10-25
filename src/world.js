@@ -1189,6 +1189,8 @@ export class World {
       chain.rotation.z = Math.sin(t * 0.4 + chain.userData.swing) * 0.03;
       chain.position.y = SURFACE_Y - 0.4 + Math.sin(t * 1.3 + chain.userData.swing) * 0.12;
       chain.position.x = wrap(chain.position.x, cx, 70);
+      // Moorings only reach the shelf floor, so there are none over the trenches.
+      chain.visible = floorY(chain.position.x) > SHELF_Y - 3;
     }
 
     const dpos = this.dust.geometry.attributes.position;
