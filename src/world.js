@@ -168,8 +168,8 @@ const FOOTPRINT = {
   ruin_pillar_a: 1.0, ruin_pillar_b: 1.0, ruin_arch: 2.8, ruin_wall: 2.8, ruin_pier: 7, ruin_tower: 1.6, anchor: 1.0,
 };
 const CORALS = ['coral_staghorn', 'coral_fan', 'coral_table', 'sponge_cluster', 'anemone_patch', 'coral_brain'];
-// Fixed resting places for sunken enemy subs: one on the sunlit shelf near the start, one on a trench floor.
-const WRECKS = [{ x: -48, z: -16, yaw: 0.5, roll: 0.18 }, { x: 236, z: -12, yaw: -0.4, roll: -0.12 }];
+// Fixed resting places for sunken enemy subs: one in the murk near the western cliff, one on a trench floor.
+const WRECKS = [{ x: -150, z: -16, yaw: 0.5, roll: 0.18 }, { x: 236, z: -12, yaw: -0.4, roll: -0.12 }];
 
 function makeBackdrop() {
   const mat = new THREE.ShaderMaterial({
