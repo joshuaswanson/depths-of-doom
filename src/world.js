@@ -377,14 +377,49 @@ const ANGLER_BAND = [4, 16];
 function makeAngler() {
   const fish = spawn('anglerfish');
   fish.scale.setScalar(rand(1.0, 1.6));
+  const esca = findNode(fish, 'Esca');
+  esca.material = esca.material.clone();
   const halo = new THREE.Sprite(new THREE.SpriteMaterial({
     map: softDot(), color: new THREE.Color(0.9, 2.4, 2.2), blending: THREE.AdditiveBlending, depthWrite: false,
-    transparent: true, fog: false, opacity: 0.8,
+    transparent: true, fog: false, opacity: 0,
   }));
   halo.scale.setScalar(1.1);
-  findNode(fish, 'Esca').add(halo);
-  fish.userData = { halo, phase: rand(0, 6), dir: Math.random() < 0.5 ? -1 : 1, speed: rand(0.5, 0.9), yaw: 0 };
+  esca.add(halo);
+  fish.userData = {
+    halo, esca, escaBase: esca.material.emissiveIntensity, glow: 0, litFor: 0, phase: rand(0, 6),
+    vel: new THREE.Vector2(rand(-0.5, 0.5), 0), target: null, retarget: 0, yaw: 0, facing: 1,
+  };
   return fish;
+}
+
+// Anglerfish wander between waypoints near the trench floor and light their lure when the sub comes close.
+function updateAngler(a, dt, t, cx, sub) {
+  const u = a.userData;
+  const p = a.position;
+  u.retarget -= dt;
+  if (!u.target || u.retarget <= 0 || Math.hypot(u.target.x - p.x, u.target.y - p.y) < 1.5) {
+    let x = p.x + rand(-14, 14);
+    if (floorY(x) > ANGLER_FLOOR) x = p.x - (x - p.x);
+    u.target = new THREE.Vector2(x, floorY(x) + rand(ANGLER_BAND[0], ANGLER_BAND[1]));
+    u.retarget = rand(5, 11);
+  }
+  const want = new THREE.Vector2(u.target.x - p.x, u.target.y - p.y);
+  const speed = 0.9;
+  if (want.lengthSq() > 0.01) want.setLength(speed);
+  u.vel.lerp(want, 1 - Math.exp(-dt * 0.5));
+  p.x += u.vel.x * dt;
+  p.y = Math.max(floorY(p.x) + ANGLER_BAND[0] - 1, p.y + u.vel.y * dt + Math.sin(t * 0.6 + u.phase) * 0.08 * dt);
+  if (Math.abs(u.vel.x) > 0.2) u.facing = Math.sign(u.vel.x);
+  u.yaw += ((u.facing > 0 ? 0 : -Math.PI) - u.yaw) * (1 - Math.exp(-dt * 0.8));
+  a.rotation.y = u.yaw;
+  a.rotation.z = THREE.MathUtils.clamp(Math.atan2(u.vel.y, Math.abs(u.vel.x) + 0.3), -0.35, 0.35) * u.facing * 0.8;
+  const near = sub && a.position.distanceTo(sub) < 11 * a.scale.x;
+  if (near) u.litFor = rand(6, 10) > u.litFor ? Math.max(u.litFor, 6) : u.litFor;
+  u.litFor = Math.max(0, u.litFor - dt);
+  u.glow += THREE.MathUtils.clamp((u.litFor > 0 ? 1 : 0) - u.glow, -dt * 0.6, dt * 1.2);
+  const flicker = 0.92 + 0.08 * Math.sin(t * 2.4 + u.phase);
+  u.esca.material.emissiveIntensity = u.escaBase * (0.04 + 0.96 * u.glow) * flicker;
+  u.halo.material.opacity = 0.75 * u.glow * flicker;
 }
 
 // Jellies gather in one glowing layer in the dark trenches, with a few stragglers drifting deeper.
@@ -573,6 +608,7 @@ export class World {
     this.anglers = Array.from({ length: 3 }, () => {
       const a = makeAngler();
       a.position.set(rand(-45, 45), -200, rand(-20, -4));
+      a.position.y = floorY(a.position.x) + rand(ANGLER_BAND[0], ANGLER_BAND[1]);
       scene.add(a);
       return a;
     });
@@ -820,22 +856,15 @@ export class World {
       if (j.visible) updateJellyGlow(j, dt, sub);
     }
     for (const a of this.anglers) {
-      const u = a.userData;
-      if (floorY(a.position.x + u.dir * 6) > ANGLER_FLOOR) u.dir *= -1;
-      a.position.x += u.dir * u.speed * dt;
-      const floor = floorY(a.position.x);
-      const cruise = floor + (ANGLER_BAND[0] + ANGLER_BAND[1]) / 2 + Math.sin(t * 0.25 + u.phase) * 3;
-      a.position.y += (cruise - a.position.y) * (1 - Math.exp(-dt * 0.4));
-      u.yaw += ((u.dir > 0 ? 0 : -Math.PI) - u.yaw) * (1 - Math.exp(-dt * 0.7));
-      a.rotation.y = u.yaw;
-      a.rotation.z = Math.sin(t * 0.5 + u.phase) * 0.05;
-      u.halo.material.opacity = 0.6 + Math.sin(t * 2.4 + u.phase) * 0.2;
       const wrapped = wrap(a.position.x, cx, 50);
       if (Math.abs(wrapped - a.position.x) > 1) {
         a.position.x = wrapped;
         a.position.y = floorY(wrapped) + ANGLER_BAND[1] - 2;
+        a.userData.target = null;
       }
+      const floor = floorY(a.position.x);
       a.visible = floor < ANGLER_FLOOR && this.dark > 0.5;
+      if (a.visible) updateAngler(a, dt, t, cx, sub);
     }
     const m = new THREE.Matrix4();
     const q = new THREE.Quaternion();

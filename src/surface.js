@@ -230,9 +230,16 @@ export function addWaterline(material) {
 
 // The anglerfish swims by bending the rear of its body in a travelling wave, fading out toward the head so the
 // jaws, eyes, and lure stay steady.
+// Its lower jaw hinges at the back of the gape and slowly works open and shut as an idle chew.
+const JAW_HINGE = [0.2, -0.1];
 const SWAY_GLSL = /* glsl */ `
-  float swayRear = smoothstep( 0.3, -1.7, transformed.x );
   float swaySeed = modelMatrix[ 3 ].x * 0.37 + modelMatrix[ 3 ].y * 0.21;
+  float jawW = smoothstep( 0.1, 0.5, transformed.x ) * smoothstep( -0.02, -0.2, transformed.y );
+  float jawA = 0.09 * sin( uTime * 0.8 + swaySeed * 1.7 ) * jawW;
+  vec2 jawP = transformed.xy - vec2( ${JAW_HINGE[0]}, ${JAW_HINGE[1]} );
+  transformed.xy = vec2( ${JAW_HINGE[0]}, ${JAW_HINGE[1]} )
+    + vec2( cos( jawA ) * jawP.x + sin( jawA ) * jawP.y, -sin( jawA ) * jawP.x + cos( jawA ) * jawP.y );
+  float swayRear = smoothstep( 0.3, -1.7, transformed.x );
   transformed.z += sin( uTime * 3.0 - transformed.x * 2.2 + swaySeed ) * 0.22 * swayRear * swayRear;
 `;
 
