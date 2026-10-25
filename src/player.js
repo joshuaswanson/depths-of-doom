@@ -10,8 +10,7 @@ const DRAG = 1.9;
 const MAX_SPOTLIGHTS = 4;
 const GRAVITY = 18;
 const AIR_DRAG = 0.15;
-const TURN_RATE = 4.0;
-const TURN_MAX_SPEED = 3.8;
+const TURN_TIME = 0.7;
 const MAX_PITCH = 1.52;
 const CRUISE_BUILD = 0.32;
 const CRUISE_BOOST = 0.9;
@@ -234,6 +233,7 @@ export class Player {
     this.heading = new THREE.Vector2(1, 0);
     this.facing = 1;
     this.yaw = YAW.right;
+    this.turn = null;
     this.pitch = 0;
     this.airborne = false;
     this.invuln = 0;
@@ -542,10 +542,17 @@ export class Player {
     if (bounds.top !== undefined) p.y = Math.min(p.y, bounds.top);
     this.airborne = p.y > SURFACE_Y + 0.3;
 
-    if (Math.abs(input.x) > 0.1) this.facing = Math.sign(input.x);
-    const wantYaw = this.facing > 0 ? YAW.right : YAW.left;
-    const step = (wantYaw - this.yaw) * (1 - Math.exp(-dt * TURN_RATE));
-    this.yaw += THREE.MathUtils.clamp(step, -dt * TURN_MAX_SPEED, dt * TURN_MAX_SPEED);
+    // Turning around is a committed animation: once started it always plays to the end, and input for the other
+    // way waits until it finishes.
+    if (this.turn) {
+      this.turn.t = Math.min(1, this.turn.t + dt / TURN_TIME);
+      const e = this.turn.t * this.turn.t * (3 - 2 * this.turn.t);
+      this.yaw = this.turn.from + (this.turn.to - this.turn.from) * e;
+      if (this.turn.t >= 1) this.turn = null;
+    } else if (Math.abs(input.x) > 0.1 && Math.sign(input.x) !== this.facing) {
+      this.facing = Math.sign(input.x);
+      this.turn = { from: this.yaw, to: this.facing > 0 ? YAW.right : YAW.left, t: 0 };
+    }
     this.yawPivot.rotation.y = this.yaw;
     this.updateExtents();
     // In the water the nose points where you push and holds that tilt when you let go; in the air it follows the
