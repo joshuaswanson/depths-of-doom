@@ -156,7 +156,7 @@ async function boot() {
   hud.showTitle();
   if (new URLSearchParams(location.search).has('autostart')) startGame();
   window.__game = game;
-  window.__debug = { scene, world, bloom, renderer };
+  window.__debug = { scene, world, bloom, renderer, composer, effects, player };
   renderer.setAnimationLoop(frame);
 }
 
@@ -183,7 +183,7 @@ function frame() {
   const shake = state === 'paused' ? 0 : effects.shake;
   camera.position.x = game.cam.x + (Math.random() - 0.5) * shake * 0.5;
   camera.position.y = game.cam.y + (Math.random() - 0.5) * shake * 0.5;
-  if (state !== 'paused') world.update(dt, camera, player.alive ? player.group.position : null);
+  if (state !== 'paused') world.update(dt, camera);
   lightForDepth(world.dark);
   player.setDarkness(world.dark);
   if (state === 'playing' || state === 'gameover') {

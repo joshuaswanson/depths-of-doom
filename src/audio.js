@@ -118,12 +118,6 @@ export const sfx = {
     noise({ dur: 0.5, vol: 0.25 * strength, freq: 500, to: 60 });
     tone({ type: 'sine', freq: 90, to: 40, dur: 0.35, vol: 0.3 * Math.min(1, strength) });
   },
-  gull() {
-    [0, 0.22, 0.4].forEach((d) => {
-      tone({ type: 'sawtooth', freq: 1900, to: 1100, dur: 0.16, vol: 0.05, delay: d });
-      tone({ type: 'square', freq: 2400, to: 1500, dur: 0.12, vol: 0.02, delay: d });
-    });
-  },
   sonar() {
     tone({ type: 'sine', freq: 1500, to: 1400, dur: 0.6, vol: 0.06 });
   },

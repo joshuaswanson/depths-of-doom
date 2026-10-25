@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import { findNode, spawn, tint } from './assets.js';
-import { sfx } from './audio.js';
 import { NOISE_GLSL } from './surface.js';
 import {
   ABYSS_Y, CAMERA_Z, SHELF_Y, SURFACE_Y, TAN_HALF_FOV, WATER_GRADIENT_GLSL, darkness, depthShift,
@@ -69,8 +68,6 @@ const LAYERS = [
 const CHAIN_Z = [-70, -26];
 // Fixed resting places for sunken enemy subs: one on the sunlit shelf near the start, one on a trench floor.
 const WRECKS = [{ x: -48, z: -16, yaw: 0.5, roll: 0.18 }, { x: 236, z: -12, yaw: -0.4, roll: -0.12 }];
-const GULLS = 9;
-const GULL_SCARE = 7;
 
 function makeBackdrop() {
   const mat = new THREE.ShaderMaterial({
@@ -455,73 +452,10 @@ export class World {
       scene.add(wreck);
       return wreck;
     });
-    this.gulls = Array.from({ length: GULLS }, () => {
-      const gull = spawn('seagull');
-      gull.scale.setScalar(2.0);
-      gull.userData = {
-        wings: [findNode(gull, 'wing_l'), findNode(gull, 'wing_r')], folded: findNode(gull, 'wings_folded'),
-        state: 'float', phase: rand(0, 6),
-        vel: new THREE.Vector2(), dir: 1, timer: 0,
-      };
-      this.landGull(gull, rand(-40, 40));
-      scene.add(gull);
-      return gull;
-    });
   }
 
   setAspect(aspect) {
     this.aspect = aspect;
-  }
-
-  landGull(gull, x) {
-    const u = gull.userData;
-    u.state = 'float';
-    u.dir = Math.random() < 0.5 ? -1 : 1;
-    gull.position.set(x, SURFACE_Y - 0.05, rand(0.7, 1.2));
-    gull.rotation.set(0, u.dir > 0 ? 0 : Math.PI, 0);
-  }
-
-  // Gulls bob on the swell and flap off when the sub comes too close; returns how many just took off.
-  updateGulls(dt, cx, sub) {
-    let scared = 0;
-    for (const gull of this.gulls) {
-      const u = gull.userData;
-      const [wl, wr] = u.wings;
-      if (u.state === 'float') {
-        gull.position.y = SURFACE_Y - 0.05 + Math.sin(this.time * 1.6 + gull.position.x * 0.5) * 0.1;
-        gull.rotation.x = 0;
-        gull.rotation.z = Math.sin(this.time * 1.3 + u.phase) * 0.08;
-        u.folded.visible = true;
-        wl.visible = wr.visible = false;
-        const near = sub && Math.abs(sub.x - gull.position.x) < GULL_SCARE && sub.y > SURFACE_Y - GULL_SCARE;
-        if (near) {
-          u.state = 'fly';
-          u.dir = Math.sign(gull.position.x - sub.x) || 1;
-          u.vel.set(u.dir * rand(3, 5), rand(4, 6));
-          gull.rotation.y = u.dir > 0 ? 0 : Math.PI;
-          scared++;
-        }
-        const wrapped = wrap(gull.position.x, cx, 45);
-        if (Math.abs(wrapped - gull.position.x) > 1) this.landGull(gull, wrapped);
-      } else {
-        u.vel.y = Math.max(1.2, u.vel.y - dt * 1.5);
-        gull.position.x += u.vel.x * dt;
-        gull.position.y += u.vel.y * dt;
-        u.folded.visible = false;
-        wl.visible = wr.visible = true;
-        // Beat hard while climbing, then mix in glides; banked toward the camera so the wings read from the side.
-        const climbing = u.vel.y > 2.5;
-        const cycle = this.time * (climbing ? 15 : 10) + u.phase;
-        const gliding = !climbing && Math.sin(this.time * 0.9 + u.phase) > 0.35;
-        const flap = gliding ? 0.35 + Math.sin(cycle * 0.3) * 0.05 : 0.6 + Math.sin(cycle) * 0.7;
-        wl.rotation.set(flap, 0, 0);
-        wr.rotation.set(-flap, 0, 0);
-        gull.rotation.x = 0.32;
-        gull.rotation.z = 0.15 + Math.max(0, u.vel.y) * 0.03;
-        if (gull.position.y > SURFACE_Y + 22) this.landGull(gull, cx + (Math.random() < 0.5 ? -1 : 1) * rand(30, 44));
-      }
-    }
-    return scared;
   }
 
   placeProp(prop, x) {
@@ -603,11 +537,10 @@ export class World {
     }
   }
 
-  update(dt, camera, sub = null) {
+  update(dt, camera) {
     this.time += dt;
     const cx = camera.position.x;
     const cy = camera.position.y;
-    if (this.updateGulls(dt, cx, sub) > 0) sfx.gull();
     const t = this.time;
     this.uniforms.uTime.value = t;
     const shift = depthShift(cy);
