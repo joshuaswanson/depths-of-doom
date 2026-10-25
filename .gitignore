@@ -4,3 +4,6 @@ dist/
 *.blend1
 __pycache__/
 .DS_Store
+# Full-size source art and the original music renders; the game ships trimmed copies from public/.
+art/logo/
+art/music/
