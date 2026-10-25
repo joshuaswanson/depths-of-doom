@@ -130,9 +130,9 @@ function resize() {
 window.addEventListener('resize', resize);
 
 // Trade sharpness for frame rate: drop the render resolution when frames run long, raise it again with headroom.
-const fpsWindow = { time: 0, frames: 0, good: 0 };
+const fpsWindow = { time: 0, frames: 0, good: 0, locked: false };
 function adaptResolution(dt) {
-  if (document.hidden || dt > 0.5) return;
+  if (fpsWindow.locked || document.hidden || dt > 0.5) return;
   fpsWindow.time += dt;
   fpsWindow.frames++;
   if (fpsWindow.time < 1) return;
@@ -185,7 +185,8 @@ async function boot() {
   hud.showTitle();
   if (new URLSearchParams(location.search).has('autostart')) startGame();
   window.__game = game;
-  window.__debug = { scene, world, bloom, renderer, composer, effects, player, get pixelRatio() { return pixelRatio; } };
+  window.__debug = { scene, world, bloom, renderer, composer, effects, player, get pixelRatio() { return pixelRatio; },
+    lockResolution(r) { fpsWindow.locked = true; pixelRatio = r; renderer.setPixelRatio(r); resize(); } };
   renderer.setAnimationLoop(frame);
 }
 

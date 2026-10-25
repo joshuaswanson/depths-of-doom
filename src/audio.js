@@ -96,6 +96,13 @@ export const sfx = {
   denied() {
     tone({ type: 'square', freq: 180, to: 150, dur: 0.15, vol: 0.08 });
   },
+  bump(strength = 0.5) {
+    const v = 0.12 + 0.2 * strength;
+    tone({ type: 'square', freq: 190, to: 95, dur: 0.12, vol: v });
+    tone({ type: 'triangle', freq: 620, to: 540, dur: 0.35, vol: v * 0.6 });
+    tone({ type: 'sine', freq: 1240, to: 1180, dur: 0.25, vol: v * 0.3, delay: 0.01 });
+    noise({ dur: 0.12, vol: v * 0.8, freq: 3000, to: 900 });
+  },
   clank() {
     tone({ type: 'square', freq: 260, to: 120, dur: 0.08, vol: 0.1 });
   },

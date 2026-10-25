@@ -99,9 +99,11 @@ function viewportGlow(type) {
 const DESPAWN_DIST = 60;
 const ENEMY_TOP = SURFACE_Y - 1.8;
 const enemyFloor = (x) => seabedAt(x) + 1.8;
-const DAMAGE = { missile: 12, ram: 15, mine: 22 };
+const DAMAGE = { missile: 12, mine: 22 };
 const GRAVITY = 20;
 const LOOSE_COIN_MAX = 10;
+const ENEMY_MASS = { scout: 0.9, gunner: 1.6, boss: 6 };
+const BUMP_BOUNCE = 0.6;
 const MINE_LANE = 2.6;
 const LOOSE_COIN_RANGE = 70;
 
@@ -843,12 +845,12 @@ export class Game {
         for (const { m, e: base } of e.mats) m.emissive.copy(base).lerp(WHITE, e.flash * 0.35);
       }
 
-      if (pl.alive && pl.invuln <= 0 && pl.hitTest(p.x, p.y, Math.min(e.def.ry, 1.0))) {
+      e.bumpCooldown = Math.max(0, (e.bumpCooldown ?? 0) - dt);
+      if (pl.alive && pl.hitTest(p.x, p.y, Math.min(e.def.ry, 1.0))) {
         if (e.type === 'mine') {
-          this.killEnemy(e);
+          if (pl.invuln <= 0) this.killEnemy(e);
         } else {
-          this.hurtPlayer(DAMAGE.ram, p);
-          this.damageEnemy(e, 6);
+          this.bump(e);
         }
       }
 
@@ -873,6 +875,33 @@ export class Game {
     }
     this.brokenChains = this.brokenChains.filter((c) => c.t < 30 && Math.abs(c.anchor.x - this.cam.x) < 80);
     this.updateMineChains();
+  }
+
+  // Subs that collide bounce apart with no damage: a momentum exchange along the line between them, plus a clank.
+  bump(e) {
+    const pl = this.player;
+    const pc = pl.center;
+    const p = e.obj.position;
+    const n = new THREE.Vector2(pc.x - p.x, pc.y - p.y);
+    if (n.lengthSq() < 1e-4) n.set(1, 0);
+    n.normalize();
+    const mPlayer = pl.mass * 1.3;
+    const mEnemy = ENEMY_MASS[e.type];
+    const approach = new THREE.Vector2().subVectors(pl.vel, e.vel).dot(n);
+    const j = Math.max(2.5, -(1 + BUMP_BOUNCE) * Math.min(approach, 0)) / (1 / mPlayer + 1 / mEnemy);
+    pl.vel.addScaledVector(n, j / mPlayer);
+    e.vel.addScaledVector(n, -j / mEnemy);
+    pl.group.position.x += n.x * 0.08;
+    pl.group.position.y += n.y * 0.08;
+    p.x -= n.x * 0.08;
+    p.y -= n.y * 0.08;
+    if (e.bumpCooldown > 0) return;
+    e.bumpCooldown = 0.25;
+    const hit = { x: (pc.x + p.x) / 2, y: (pc.y + p.y) / 2, z: 0.8 };
+    const strength = Math.min(1, Math.abs(approach) / 8);
+    this.effects.sparkle(hit, '#ffe6a0', 6 + Math.round(10 * strength), 3 + 4 * strength);
+    this.effects.shake = Math.min(1, this.effects.shake + 0.15 + 0.35 * strength);
+    sfx.bump(strength);
   }
 
   muzzleOf(e) {
