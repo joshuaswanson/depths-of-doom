@@ -62,6 +62,12 @@ export function moundOf(cell) {
   return m;
 }
 
+// Kelp and anchors only rest on flat shelf with room to spare, never on a cliff face or hanging over its lip.
+const SHELF_ONLY = /^(kelp|anchor)/;
+function onFlatShelf(x) {
+  return [-3, 0, 3].every((dx) => floorY(x + dx) > SHELF_Y - 0.8);
+}
+
 // 1 halfway between a shelf's two cliff edges, falling to 0 at either edge and over the deep floor.
 function shelfCentre(x) {
   const onShelf = (at) => floorY(at) > SHELF_Y - 3;
@@ -1017,6 +1023,7 @@ export class World {
       for (const dz of [-half, 0, half]) ground = Math.min(ground, seabedAt(x + (i * half) / 2, z + dz));
     }
     prop.obj.position.set(x, ground - 0.25, z);
+    prop.obj.visible = !SHELF_ONLY.test(prop.obj.userData.model) || onFlatShelf(x);
     prop.obj.rotation.set(0, rand(-0.5, 0.5), 0);
     if (prop.obj.userData.model === 'anchor') settleAnchor(prop.obj);
   }
@@ -1084,6 +1091,7 @@ export class World {
     const pieces = new THREE.Group();
     const footprints = [];
     const place = (name, x, z, scale) => {
+      if (SHELF_ONLY.test(name) && !onFlatShelf(x)) return;
       footprints.push({ x, z, r: (FOOTPRINT[name] ?? 1) * scale });
       const obj = spawn(name);
       obj.scale.setScalar(scale);
