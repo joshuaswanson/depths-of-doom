@@ -50,7 +50,7 @@ const bubbleTexture = canvasTexture((g, s) => {
 });
 
 class ParticlePool {
-  constructor(scene, { max, texture, blending, ceiling = Infinity }) {
+  constructor(scene, { max, texture, blending, ceiling = Infinity, deepShade = 1 }) {
     this.max = max;
     this.ceiling = ceiling;
     this.count = 0;
@@ -69,16 +69,18 @@ class ParticlePool {
       transparent: true,
       depthWrite: false,
       blending,
-      uniforms: { uMap: { value: texture }, uScale: { value: 400 } },
+      uniforms: { uMap: { value: texture }, uScale: { value: 400 }, uDeepShade: { value: deepShade } },
       vertexShader: /* glsl */ `
         attribute float alpha;
         attribute float size;
         attribute vec3 color;
         uniform float uScale;
+        uniform float uDeepShade;
         varying vec3 vColor;
         varying float vAlpha;
         void main() {
-          vColor = color;
+          // Unlit particles fade toward the dark of the deep water, matching the trench's darkness curve.
+          vColor = color * mix( 1.0, uDeepShade, smoothstep( 12.0, 130.0, -position.y ) );
           vAlpha = alpha;
           vec4 mv = modelViewMatrix * vec4( position, 1.0 );
           gl_PointSize = size * uScale / -mv.z;
@@ -150,7 +152,8 @@ export class Effects {
     this.bubbles = new ParticlePool(scene, {
       max: 4000, texture: bubbleTexture, blending: THREE.NormalBlending, ceiling: SURFACE_Y - 0.15,
     });
-    this.puffs = new ParticlePool(scene, { max: 1400, texture: puffTexture, blending: THREE.NormalBlending });
+    this.puffs = new ParticlePool(scene, { max: 1400, texture: puffTexture, blending: THREE.NormalBlending,
+      deepShade: 0.12 });
     this.glow = new ParticlePool(scene, { max: 700, texture: softTexture, blending: THREE.AdditiveBlending });
     this.puffs.points.renderOrder = 5;
     this.glow.points.renderOrder = 6;
