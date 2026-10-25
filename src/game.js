@@ -4,8 +4,8 @@ import { makeBeam } from './player.js';
 import { WATER, addWaterline } from './surface.js';
 import { sfx } from './audio.js';
 import { UPGRADES, upgradeCost } from './upgrades.js';
-import { CAMERA_Z, SURFACE_Y, TAN_HALF_FOV } from './water.js';
-import { murkAt, seabedAt } from './world.js';
+import { CAMERA_Z, SHELF_Y, SURFACE_Y, TAN_HALF_FOV } from './water.js';
+import { floorY, murkAt, seabedAt } from './world.js';
 
 const rand = (a, b) => a + Math.random() * (b - a);
 const WHITE = new THREE.Color(1, 1, 1);
@@ -22,6 +22,10 @@ const POD_MOUNT = { scout: { x: -0.45, y: 0.55, scale: 0.8 }, gunner: { x: -0.6,
   boss: { x: -1.1, y: 1.3, scale: 1.4 } };
 const POD_COLORS = { blue: '#2c2e36', blue_dark: '#3a3d47', yellow: '#b8262b', red: '#ff3b30' };
 let podTemplate = null;
+
+function onShelf(x) {
+  return floorY(x) > SHELF_Y - 3;
+}
 
 // Halfway through a turn the drum points at the camera, so missiles wait until it swings round.
 function midTurn(e) {
@@ -505,8 +509,9 @@ export class Game {
     if (spec.type === 'mine') obj.position.z = rand(-0.5, 0.5);
     let anchor = null;
     if (spec.type === 'mine') {
-      // Every mine is moored to the seabed. Wave mines hang just out of view, mostly ahead of the sub; mines the
-      // boss drops are chained to the floor beneath them. Where the water is too deep for a chain, none appear.
+      // Every mine is moored to the shelf. Wave mines hang just out of view, mostly ahead of the sub; mines the
+      // boss drops are chained to the floor beneath them. Past a cliff edge there is nothing to moor to, so none
+      // appear.
       const pc = this.player.center;
       let x = spec.pos?.x;
       let y = spec.pos?.y;
@@ -516,15 +521,16 @@ export class Game {
         for (let i = 0; i < 6; i++) {
           const side = Math.random() < 0.7 ? this.player.facing : -this.player.facing;
           const cx = this.cam.x + side * (this.halfW + rand(3, 14));
-          const score = murkAt(cx) + rand(0, 0.15);
+          const score = onShelf(cx) ? murkAt(cx) + rand(0, 0.15) : -1;
           if (score > best) {
             best = score;
             x = cx;
           }
         }
-        if (!spec.prewarm && best < 0.25 && Math.random() < 0.65) return null;
+        if (!spec.prewarm && (best < 0 || (best < 0.25 && Math.random() < 0.65))) return null;
         y = pc.y + rand(-4, 4);
       }
+      if (!spec.prewarm && !onShelf(x)) return null;
       const floor = seabedAt(x);
       y = THREE.MathUtils.clamp(y, floor + 3, Math.min(ENEMY_TOP, floor + MAX_CHAIN));
       if (!spec.prewarm && Math.abs(y - (spec.pos?.y ?? pc.y)) > 12) return null;
