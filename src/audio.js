@@ -103,6 +103,79 @@ export function setAmbience(dt, { active = false, surface = 0, speed = 0 } = {})
   }
 }
 
+// Music tracks streamed from files, each looped by starting a fresh copy as the old one fades out at its end.
+// Tracks not yet made fall back to the closest one that exists, or stay silent.
+const MUSIC_VOLUME = 0.55;
+const MUSIC_FADE = 4;
+// `tail` is how long each recording takes to fade out at its end; the next copy starts as that fade begins.
+const TRACKS = {
+  surface: { file: 'sunlight_on_the_reef.m4a', tail: 4.5 },
+  deep: { file: 'below_the_pressure.m4a', tail: 6.5 },
+};
+const FALLBACK = { battle: 'surface', battleDeep: 'deep' };
+const music = {};
+
+function musicTrack(name) {
+  if (music[name]) return music[name];
+  const bus = ctx.createGain();
+  bus.gain.value = 0;
+  bus.connect(master);
+  const players = [0, 1].map(() => {
+    const el = new Audio(`${import.meta.env.BASE_URL}music/${TRACKS[name].file}`);
+    el.preload = 'auto';
+    const gain = ctx.createGain();
+    gain.gain.value = 0;
+    ctx.createMediaElementSource(el).connect(gain).connect(bus);
+    return { el, gain };
+  });
+  music[name] = { bus, players, current: -1, level: 0 };
+  return music[name];
+}
+
+function startCopy(track) {
+  const now = ctx.currentTime;
+  const prev = track.players[track.current];
+  track.current = (track.current + 1) % 2;
+  const next = track.players[track.current];
+  next.el.currentTime = 0;
+  next.el.play().catch(() => {});
+  next.gain.gain.cancelScheduledValues(now);
+  next.gain.gain.setValueAtTime(prev ? 0 : 1, now);
+  if (prev) {
+    next.gain.gain.linearRampToValueAtTime(1, now + MUSIC_FADE * 0.5);
+    prev.gain.gain.setTargetAtTime(0, now, MUSIC_FADE / 4);
+  }
+}
+
+// `mix` gives each track's target loudness from 0 to 1.
+export function setMusic(mix) {
+  if (!ctx) return;
+  const targets = {};
+  for (const [name, level] of Object.entries(mix)) {
+    let track = name;
+    while (track && !TRACKS[track]) track = FALLBACK[track];
+    if (track) targets[track] = Math.max(targets[track] ?? 0, level);
+  }
+  const now = ctx.currentTime;
+  for (const name of Object.keys(TRACKS)) {
+    const level = targets[name] ?? 0;
+    if (level <= 0 && !music[name]) continue;
+    const track = musicTrack(name);
+    track.bus.gain.setTargetAtTime(level * MUSIC_VOLUME, now, 1.2);
+    if (level > 0 && track.current < 0) startCopy(track);
+    const playing = track.players[track.current];
+    if (!playing) continue;
+    const { el } = playing;
+    if (el.duration && el.currentTime > el.duration - TRACKS[name].tail) startCopy(track);
+    track.level = level > 0 ? 1 : track.level - 1 / 600;
+    if (track.level <= 0) {
+      for (const p of track.players) p.el.pause();
+      track.current = -1;
+      track.level = 0;
+    }
+  }
+}
+
 export const sfx = {
   torpedo() {
     noise({ dur: 0.5, vol: 0.25, freq: 1500, to: 300 });

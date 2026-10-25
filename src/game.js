@@ -1984,6 +1984,10 @@ export class Game {
     if (big !== null) sfx.blip(big);
   }
 
+  get inCombat() {
+    return this.enemies.some((e) => e.type !== 'mine' && this.onScreen(e.obj.position.x, e.obj.position.y, 8));
+  }
+
   get radarRange() {
     return 18 + this.player.levels.sonar * 9;
   }

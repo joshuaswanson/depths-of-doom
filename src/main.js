@@ -12,7 +12,7 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 
 import { loadModels, warmUp } from './assets.js';
 import { SHADER_TIME, WATER } from './surface.js';
-import { setAmbience, toggleMute, unlockAudio } from './audio.js';
+import { setAmbience, setMusic, toggleMute, unlockAudio } from './audio.js';
 import { Effects } from './effects.js';
 import { Game } from './game.js';
 import { Hud } from './hud.js';
@@ -195,6 +195,18 @@ async function boot() {
 const timer = new THREE.Timer();
 let titleT = 0;
 
+// Sunlit music near the surface gives way to the deep track below; fights swap in the battle tracks.
+function musicMix() {
+  if (state === 'title') return {};
+  const deep = THREE.MathUtils.smoothstep(world.dark, 0.15, 0.45);
+  const fight = game.inCombat ? 1 : 0;
+  const duck = state === 'paused' ? 0.35 : 1;
+  return {
+    surface: (1 - deep) * (1 - fight) * duck, deep: deep * (1 - fight) * duck,
+    battle: (1 - deep) * fight * duck, battleDeep: deep * fight * duck,
+  };
+}
+
 function frame() {
   timer.update();
   const rawDt = timer.getDelta();
@@ -221,10 +233,10 @@ function frame() {
   if (state !== 'paused') world.update(dt, camera, player.alive ? player.group.position : null, player.alive ? player : null);
   setAmbience(dt, state === 'playing' && {
     active: true,
-    depth: world.dark,
     surface: 1 - THREE.MathUtils.smoothstep(Math.abs(player.center.y - SURFACE_Y), 0.8, 5),
     speed: THREE.MathUtils.clamp(player.vel.length() / 9, 0, 1),
   });
+  setMusic(musicMix());
   lightForDepth(world.dark);
   player.setDarkness(world.dark);
   if (state === 'playing' || state === 'gameover') {
