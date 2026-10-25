@@ -16,11 +16,17 @@ const ENEMY_YAW = {
   right: { swim: Math.PI, idle: Math.PI - 0.75 },
 };
 const SKULL_CHANCE = 1 / 3;
+const ENEMY_RELOAD = 0.9;
 // Where each enemy hull carries its missile drum, in model space (the nose points to -X).
 const POD_MOUNT = { scout: { x: -0.45, y: 0.55, scale: 0.8 }, gunner: { x: -0.6, y: 0.74, scale: 0.95 },
   boss: { x: -1.1, y: 1.3, scale: 1.4 } };
 const POD_COLORS = { blue: '#2c2e36', blue_dark: '#3a3d47', yellow: '#b8262b', red: '#ff3b30' };
 let podTemplate = null;
+
+// Halfway through a turn the drum points at the camera, so missiles wait until it swings round.
+function midTurn(e) {
+  return Math.abs(Math.cos(e.flip.rotation.y)) < 0.5;
+}
 
 // The player's missile drum, repainted in enemy colours.
 function enemyPod() {
@@ -552,7 +558,11 @@ export class Game {
       launcher.scale.setScalar(pod.scale);
       model.add(launcher);
       e.muzzle = findNode(launcher, 'muzzle');
+      e.launcher = launcher;
       for (const m of ownMaterials(launcher)) e.mats.push({ m, e: m.emissive.clone(), c: m.color.clone() });
+      e.podTips = [];
+      launcher.traverse((o) => o.isMesh && o.material.name === 'red' && e.podTips.push(o));
+      e.reload = 0;
     }
     if (spec.type !== 'mine') {
       e.stars = dizzyStars();
@@ -969,6 +979,11 @@ export class Game {
     for (const e of this.enemies) {
       if (e.dead) continue;
       e.t += dt;
+      if (e.reload > 0) {
+        // The fired missile's tip sinks into the drum, then the next one slides out.
+        e.reload = Math.max(0, e.reload - dt / ENEMY_RELOAD);
+        for (const tip of e.podTips) tip.position.x = -0.26 * THREE.MathUtils.smoothstep(e.reload, 0, 0.6);
+      }
       const dazzle = e.dazzled > 0 ? 0.5 : 1;
       const fireMult = (1 + this.wave * 0.05) * dazzle;
       const p = e.obj.position;
@@ -993,7 +1008,7 @@ export class Game {
         const weave = tangent.clone().multiplyScalar(Math.sin(e.t * 2.2) * 1.4);
         this.steerEnemy(e, desired.add(weave), dt, 1.5);
         e.fire -= dt * fireMult;
-        if (e.fire <= 0 && visible && dist < 15) {
+        if (e.fire <= 0 && visible && dist < 15 && !midTurn(e)) {
           e.fire = rand(2.0, 3.2);
           this.enemyAimed(e, pc, rand(-0.1, 0.1));
         }
@@ -1002,7 +1017,7 @@ export class Game {
         desired.copy(dir).multiplyScalar(THREE.MathUtils.clamp(range, -1, 1) * speed).add(tangent.clone().multiplyScalar(speed * 0.5));
         this.steerEnemy(e, desired, dt, 1.2);
         e.fire -= dt * fireMult;
-        if (e.fire <= 0 && visible) {
+        if (e.fire <= 0 && visible && !midTurn(e)) {
           e.fire = rand(2.8, 3.6);
           const n = 2 + Math.floor(this.wave / 4);
           for (let i = 0; i < n; i++) {
@@ -1016,7 +1031,7 @@ export class Game {
         desired.copy(dir).multiplyScalar(THREE.MathUtils.clamp(range, -1, 1) * speed).add(tangent.clone().multiplyScalar(speed * 0.35));
         this.steerEnemy(e, desired, dt, 0.8);
         e.fire -= dt * (1 + this.wave * 0.02) * dazzle;
-        if (e.fire <= 0 && visible) {
+        if (e.fire <= 0 && visible && !midTurn(e)) {
           e.attack = (e.attack + 1) % 3;
           const base = Math.atan2(dir.y, dir.x);
           if (e.attack === 0) {
@@ -1236,18 +1251,47 @@ export class Game {
   enemyAimed(e, target, spread, angle = null, speed = 7.2 + this.wave * 0.12) {
     const pos = this.muzzleOf(e);
     const a = (angle ?? Math.atan2(target.y - pos.y, target.x - pos.x)) + spread;
-    this.spawnEnemyMissile(pos, Math.cos(a) * speed, Math.sin(a) * speed);
+    if (!e.launcher) {
+      this.spawnEnemyMissile(pos, Math.cos(a) * speed, Math.sin(a) * speed);
+      return;
+    }
+    // The missile leaves its tube along the drum's facing, then curves onto its aim.
+    const forward = new THREE.Vector3(1, 0, 0).transformDirection(e.launcher.matrixWorld);
+    const tube = midTurn(e) ? (e.facing > 0 ? 0 : Math.PI) : Math.atan2(forward.y, forward.x);
+    pos.x -= Math.cos(tube) * 0.3;
+    pos.y -= Math.sin(tube) * 0.3;
+    this.spawnEnemyMissile(pos, Math.cos(tube) * speed * 0.45, Math.sin(tube) * speed * 0.45, { aim: a, speed });
+    e.reload = 1;
   }
 
-  spawnEnemyMissile(pos, vx, vy) {
+  spawnEnemyMissile(pos, vx, vy, steer = null) {
     const obj = spawn('proj_missile');
-    obj.scale.setScalar(0.9);
-    obj.position.set(pos.x, pos.y, 0.2);
+    obj.scale.setScalar(steer ? 0.45 : 0.9);
+    obj.position.set(pos.x, pos.y, steer ? pos.z : 0.2);
     obj.rotation.z = Math.atan2(vy, vx);
     this.scene.add(obj);
-    this.enemyMissiles.push({ obj, vx, vy, life: 6, trail: 0 });
+    this.enemyMissiles.push({ obj, vx, vy, life: 6, trail: 0, steer, age: 0 });
     this.effects.muzzle(pos);
     sfx.enemyShot();
+  }
+
+  // Clears the tube for a moment, then turns toward the aim and speeds up, growing to full size as it goes.
+  steerEnemyMissile(em, dt) {
+    const { aim, speed } = em.steer;
+    em.obj.scale.setScalar(THREE.MathUtils.lerp(0.45, 0.9, Math.min(1, em.age / 0.18)));
+    em.obj.position.z = THREE.MathUtils.lerp(em.obj.position.z, 0.2, 1 - Math.exp(-dt * 10));
+    let heading = Math.atan2(em.vy, em.vx);
+    let v = Math.hypot(em.vx, em.vy);
+    if (em.age > 0.12) {
+      const turn = Math.atan2(Math.sin(aim - heading), Math.cos(aim - heading));
+      heading += THREE.MathUtils.clamp(turn, -9 * dt, 9 * dt);
+      v = Math.min(speed, v + speed * 3 * dt);
+      if (Math.abs(turn) < 0.01 && v >= speed) em.steer = null;
+    } else {
+      v += speed * dt;
+    }
+    em.vx = Math.cos(heading) * v;
+    em.vy = Math.sin(heading) * v;
   }
 
   // Splash and bubbles whenever a projectile crosses the waterline in either direction.
@@ -1405,8 +1449,10 @@ export class Game {
         continue;
       }
       em.life -= dt;
+      em.age += dt;
       const p = em.obj.position;
       const above = p.y > SURFACE_Y;
+      if (em.steer && !above) this.steerEnemyMissile(em, dt);
       if (above) em.vy -= GRAVITY * dt;
       p.x += em.vx * dt;
       p.y += em.vy * dt;
