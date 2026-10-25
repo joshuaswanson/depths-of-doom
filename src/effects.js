@@ -148,7 +148,7 @@ class ParticlePool {
 export class Effects {
   constructor(scene) {
     this.bubbles = new ParticlePool(scene, {
-      max: 900, texture: bubbleTexture, blending: THREE.NormalBlending, ceiling: SURFACE_Y - 0.15,
+      max: 2200, texture: bubbleTexture, blending: THREE.NormalBlending, ceiling: SURFACE_Y - 0.15,
     });
     this.puffs = new ParticlePool(scene, { max: 900, texture: puffTexture, blending: THREE.NormalBlending });
     this.glow = new ParticlePool(scene, { max: 700, texture: softTexture, blending: THREE.AdditiveBlending });
@@ -173,9 +173,30 @@ export class Effects {
     });
   }
 
-  muzzle(pos) {
-    this.glow.emit({ pos, life: 0.06, size: 0.7, size1: 0.4, color: '#fff3a0', alpha: 0.8, alpha1: 0.1 });
-    this.glow.emit({ pos, life: 0.08, size: 0.45, size1: 0.8, color: '#ffb52e', alpha: 0.6, alpha1: 0 });
+  muzzle(pos, dir = null) {
+    this.glow.emit({ pos, life: 0.07, size: 1.0, size1: 0.5, color: '#fff3a0', alpha: 0.9, alpha1: 0.1 });
+    this.glow.emit({ pos, life: 0.1, size: 0.6, size1: 1.1, color: '#ffb52e', alpha: 0.7, alpha1: 0 });
+    if (!dir) return;
+    const tip = { x: pos.x + dir.x * 0.35, y: pos.y + dir.y * 0.35, z: pos.z };
+    this.glow.emit({ pos: tip, vel: { x: dir.x * 6, y: dir.y * 6 }, life: 0.08, size: 0.5, size1: 0.9,
+      color: '#ffd76a', alpha: 0.7, alpha1: 0 });
+    if (pos.y > SURFACE_Y) return;
+    for (let i = 0; i < 3; i++) {
+      this.bubbles.emit({
+        pos: { x: tip.x + rand(-0.1, 0.1), y: tip.y + rand(-0.1, 0.1), z: tip.z },
+        vel: { x: dir.x * rand(2, 5) + rand(-0.6, 0.6), y: dir.y * rand(2, 5) + rand(-0.6, 0.6) },
+        life: rand(0.5, 1.0), size: rand(0.07, 0.16), size1: 0.2, alpha: 0.9, alpha1: 0, drag: 4, rise: 2.5, wobble: 1,
+      });
+    }
+  }
+
+  trailBubble(pos) {
+    if (pos.y > SURFACE_Y) return;
+    this.bubbles.emit({
+      pos: { x: pos.x + rand(-0.05, 0.05), y: pos.y + rand(-0.05, 0.05), z: pos.z },
+      vel: { x: rand(-0.2, 0.2), y: rand(0.1, 0.4) }, life: rand(0.35, 0.6), size: rand(0.05, 0.1), size1: 0.12,
+      alpha: 0.7, alpha1: 0, drag: 3, rise: 1.5,
+    });
   }
 
   smokeTrail(pos, scale = 1) {

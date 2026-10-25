@@ -40,39 +40,66 @@ def porthole(part, P, body, x, theta, radius=0.17):
                 segs=8, rings=6)
 
 
-def nose_viewport(part, mats, body, sign=1, fraction=0.66, glow=None):
-    """A big bolted glass viewport capping the nose. `sign` picks the nose end: +1 for +X, -1 for -X."""
-    target = body.radius * fraction
+def viewport_x(body, sign=1, fraction=0.5):
+    """Where the nose is cut open for the viewport. `sign` picks the nose end: +1 for +X, -1 for -X."""
     x = body.x0
-    while body.r(x + sign * 0.01) > target:
+    while body.r(x + sign * 0.01) > body.radius * fraction:
         x += sign * 0.01
+    return x
+
+
+def open_hull(body, nose_x, sign=1):
+    """Hull profile cut off at the viewport, ordered with h increasing for an open lathe."""
+    pts = [(h, r) for h, r in body.profile() if (h - nose_x) * sign < 0]
+    nose = (nose_x, body.r(nose_x))
+    return pts + [nose] if sign > 0 else [nose] + pts
+
+
+def nose_viewport(part, mats, body, nose_x, sign=1, glow=None):
+    """A bolted glass viewport over a recessed cockpit at the open end of the hull."""
+    x = nose_x
     r0 = body.r(x)
-    rim, ring, bolt, glass, shine = mats
+    rim, ring, bolt, glass, shine, cockpit, dials = mats
 
     def at(dx):
         return (x + sign * dx, 0, 0)
 
     along = (0, math.pi / 2, 0)
-    part.cylinder(rim, loc=at(-0.04), radius=r0 * 1.02, depth=0.16, rot=along, segs=40)
+    part.cavity(cockpit, loc=at(-0.17), radius=r0 * 0.74, depth=0.38, sign=sign)
+    part.lathe(rim, [(x - 0.03, r0 * 0.7), (x - 0.03, r0 * 1.01), (x + 0.03, r0 * 1.01), (x + 0.03, r0 * 0.7)],
+               segs=40, loop=True)
     part.torus(rim, loc=at(0.04), major=r0 * 0.9, minor=r0 * 0.16, rot=along, segs=40, tube_segs=12)
-    part.torus(ring, loc=at(0.1), major=r0 * 0.72, minor=r0 * 0.06, rot=along, segs=40, tube_segs=10)
+    part.torus(ring, loc=at(0.1), major=r0 * 0.74, minor=r0 * 0.05, rot=along, segs=40, tube_segs=10)
     for i in range(12):
         a = 2 * math.pi * (i + 0.5) / 12
         part.sphere(bolt, loc=(x + sign * (0.04 + r0 * 0.14), r0 * 0.9 * math.cos(a), r0 * 0.9 * math.sin(a)),
                     scale=r0 * 0.065, segs=10, rings=8)
+
+    back = x - sign * 0.34
+    part.box(cockpit, loc=(back + sign * 0.05, 0, -r0 * 0.3), size=(0.1, r0 * 1.0, r0 * 0.35), bevel=0.02)
+    for i, (dy, color) in enumerate(((-0.25, 0), (-0.08, 1), (0.09, 2), (0.26, 0))):
+        part.sphere(dials[color], loc=(back + sign * 0.105, dy * r0 * 1.6, -r0 * 0.22), scale=r0 * 0.045,
+                    segs=8, rings=6)
+    gauge = (back + sign * 0.02, r0 * 0.25, r0 * 0.18)
+    part.torus(ring, loc=gauge, major=r0 * 0.14, minor=r0 * 0.025, rot=along, segs=20, tube_segs=6)
+    part.cylinder(shine, loc=gauge, radius=r0 * 0.12, depth=0.01, rot=along, segs=20)
     if glow is not None:
-        part.sphere(glow, loc=at(-0.02), scale=(r0 * 0.12, r0 * 0.3, r0 * 0.3), segs=16, rings=10)
-    part.sphere(glass, loc=at(0.06), scale=(r0 * 0.28, r0 * 0.74, r0 * 0.74), segs=32, rings=16)
-    part.sphere(shine, loc=(x + sign * (0.06 + r0 * 0.2), -r0 * 0.3, r0 * 0.32),
-                scale=(0.012, r0 * 0.16, r0 * 0.07), rot=(0.7, 0, 0), segs=10, rings=6)
-    return x
+        part.sphere(glow, loc=(back + sign * 0.12, 0, r0 * 0.05), scale=r0 * 0.22, segs=16, rings=10)
+
+    lens = [(x + sign * (0.05 + r0 * 0.72 * math.sqrt(max(0.0, 1 - (i / 12) ** 2))), r0 * 0.76 * i / 12)
+            for i in range(13)]
+    lens = sorted(lens)
+    part.lathe(glass, lens, segs=40, caps=False)
+    part.sphere(shine, loc=(x + sign * (0.05 + r0 * 0.6), -r0 * 0.26, r0 * 0.3),
+                scale=(0.01, r0 * 0.15, r0 * 0.06), rot=(0.7, 0, 0), segs=10, rings=6)
 
 
 def player_hull(P):
     root = empty("player_hull")
     b = BODY
     part = Part()
-    part.lathe(P["yellow"], b.profile(), segs=48)
+    nose_x = viewport_x(b)
+    part.lathe(P["yellow"], open_hull(b, nose_x), segs=48, caps=False)
     band(part, P["red"], b, -1.45, -1.27)
     band(part, P["white"], b, -1.27, -1.1)
     band(part, P["red"], b, -1.1, -0.92)
@@ -88,7 +115,8 @@ def player_hull(P):
         part.extrude(P["orange"], [(x, z * sz) for x, z in fin], depth=0.12, rot=(math.pi / 2, 0, 0), bevel=0.04)
         part.extrude(P["orange"], [(x, y * sz) for x, y in fin], depth=0.12, bevel=0.04)
 
-    nose_x = nose_viewport(part, (P["gunmetal"], P["brass"], P["brass"], P["viewport_glass"], P["eye_shine"]), b)
+    nose_viewport(part, (P["gunmetal"], P["brass"], P["brass"], P["viewport_glass"], P["eye_shine"], P["cockpit"],
+                         (P["dial_green"], P["dial_red"], P["dial_amber"])), b, nose_x)
     band(part, P["white"], b, nose_x - 0.38, nose_x - 0.16, lift=0.02)
     rivet_ring(part, P["brass"], b, nose_x - 0.27, count=20, size=0.03)
     for theta in (math.radians(4), math.radians(176)):

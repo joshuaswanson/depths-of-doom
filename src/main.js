@@ -145,7 +145,7 @@ async function boot() {
   player = new Player(scene);
   game = new Game({ scene, camera, world, effects, player, hud });
   resize();
-  warmUp(renderer, scene, camera);
+  await warmUp(renderer, scene, camera);
   state = 'title';
   hud.showTitle();
   if (new URLSearchParams(location.search).has('autostart')) startGame();

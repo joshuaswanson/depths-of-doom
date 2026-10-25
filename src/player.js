@@ -68,7 +68,7 @@ function makeShieldBubble() {
   return new THREE.Mesh(new THREE.SphereGeometry(1, 40, 24), mat);
 }
 
-function makeBeam() {
+export function makeBeam(color = '#fff0b8') {
   const geo = new THREE.ConeGeometry(3.2, 13, 32, 1, true);
   geo.translate(0, -6.5, 0);
   geo.rotateZ(Math.PI / 2);
@@ -77,7 +77,7 @@ function makeBeam() {
     depthWrite: false,
     blending: THREE.AdditiveBlending,
     side: THREE.DoubleSide,
-    uniforms: { uStrength: { value: 0 } },
+    uniforms: { uStrength: { value: 0 }, uColor: { value: new THREE.Color(color) } },
     vertexShader: /* glsl */ `
       varying float vAlong;
       varying vec3 vNormal;
@@ -91,13 +91,14 @@ function makeBeam() {
       }`,
     fragmentShader: /* glsl */ `
       uniform float uStrength;
+      uniform vec3 uColor;
       varying float vAlong;
       varying vec3 vNormal;
       varying vec3 vView;
       void main() {
         float facing = abs( dot( vNormal, vView ) );
         float a = ( 1.0 - vAlong ) * ( 1.0 - vAlong ) * facing * uStrength;
-        gl_FragColor = vec4( vec3( 1.0, 0.92, 0.7 ) * a, 1.0 );
+        gl_FragColor = vec4( uColor * a, 1.0 );
       }`,
   });
   return new THREE.Mesh(geo, mat);
@@ -240,7 +241,9 @@ export class Player {
       cat, obj, pivot, socket: [x, angle], pop: animate ? 0 : 1, muzzle: findNode(obj, 'muzzle'),
       props: findNodes(obj, 'thruster_prop'), dish: findNode(obj, 'sonar_dish'),
       arm: findNode(obj, 'grapple_arm'), claw: findNode(obj, 'grapple_claw'), timer: Math.random(),
+      barrels: findNode(obj, 'cannon_barrels'),
     };
+    if (cat === 'cannon') obj.scale.setScalar(1.25);
     if (cat === 'spotlight') {
       const lens = findNode(obj, 'lens');
       part.spot = this.spots[this.parts.filter((q) => q.cat === 'spotlight').length];

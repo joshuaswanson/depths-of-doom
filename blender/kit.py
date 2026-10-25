@@ -137,8 +137,11 @@ class Part:
             faces = faces + res["faces"]
         return faces
 
-    def lathe(self, material, profile, segs=32, matrix=None, loop=False, smooth=True, sharp=()):
-        """Revolve (h, r) points around local X. Points with r == 0 become poles."""
+    def lathe(self, material, profile, segs=32, matrix=None, loop=False, smooth=True, sharp=(), caps=True):
+        """Revolve (h, r) points around local X. Points with r == 0 become poles.
+
+        With caps=False the open ends stay open; list the profile with h increasing so faces point outward.
+        """
         m = matrix if matrix is not None else IDENTITY
         bm = self.bm
         rings = []
@@ -164,13 +167,15 @@ class Part:
                     faces.append(bm.faces.new((a[i], a[j], b[0])))
                 else:
                     faces.append(bm.faces.new((a[i], a[j], b[j], b[i])))
+        open_ends = not caps
         caps = []
-        if not loop:
+        if not loop and not open_ends:
             if len(rings[0]) > 1:
                 caps.append(bm.faces.new(list(reversed(rings[0]))))
             if len(rings[-1]) > 1:
                 caps.append(bm.faces.new(rings[-1]))
-        bmesh.ops.recalc_face_normals(bm, faces=faces + caps)
+        if not open_ends:
+            bmesh.ops.recalc_face_normals(bm, faces=faces + caps)
         self._paint(faces, material, smooth)
         self._paint(caps, material, False)
         for k in sharp:
@@ -216,6 +221,15 @@ class Part:
         self._paint(faces, material, True)
         self._paint(end_caps, material, False)
         return faces + end_caps
+
+    def cavity(self, material, loc, radius, depth, sign=1, segs=32):
+        """An inside-out cup along X, open toward `sign`, for looking into through a window."""
+        faces = self.cylinder(material, loc=loc, radius=radius, depth=depth, rot=(0, math.pi / 2, 0), segs=segs)
+        front = max((f for f in faces if len(f.verts) == segs), key=lambda f: f.calc_center_median().x * sign)
+        faces.remove(front)
+        bmesh.ops.delete(self.bm, geom=[front], context="FACES_ONLY")
+        bmesh.ops.reverse_faces(self.bm, faces=faces)
+        return faces
 
     def torus(self, material, loc=(0, 0, 0), major=0.5, minor=0.1, rot=(0, 0, 0), segs=32, tube_segs=12,
               scale=(1, 1, 1), matrix=None):

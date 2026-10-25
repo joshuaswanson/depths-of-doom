@@ -3,7 +3,7 @@ import math
 
 from mathutils import Vector
 
-from assets_player import band, nose_viewport, propeller, rivet_ring
+from assets_player import band, nose_viewport, open_hull, propeller, rivet_ring, viewport_x
 from body import Body
 from kit import Part, empty, frame, trs
 
@@ -56,15 +56,17 @@ def enemy_sub(P, name="enemy_sub", length=3.4, radius=0.85, tower=True, skull_ma
     b = Body(length=length, radius=radius, p_front=2.2, p_back=2.7)
     h = length / 2
     part = Part()
-    part.lathe(P["enemy_hull"], b.profile(), segs=48)
+    nose_x = viewport_x(b, sign=-1)
+    part.lathe(P["enemy_hull"], open_hull(b, nose_x, sign=-1), segs=48, caps=False)
     band(part, P["enemy_red"], b, h * 0.42, h * 0.52, lift=0.02)
     band(part, P["enemy_plate"], b, -h * 0.45, -h * 0.38, lift=0.015, samples=3)
     band(part, P["enemy_plate"], b, h * 0.05, h * 0.12, lift=0.015, samples=3)
     rivet_ring(part, P["enemy_plate"], b, -h * 0.3, count=20, size=0.03)
     rivet_ring(part, P["enemy_plate"], b, h * 0.2, count=20, size=0.03)
     enemy_tail(part, P, b, h * 0.75, h * 1.38, b.r(h * 0.75))
-    nose_viewport(part, (P["enemy_plate"], P["enemy_red"], P["steel"], P["enemy_glass"], P["eye_shine"]), b,
-                  sign=-1, glow=P["enemy_light"])
+    nose_viewport(part, (P["enemy_plate"], P["enemy_red"], P["steel"], P["enemy_glass"], P["eye_shine"],
+                         P["enemy_cockpit"], (P["enemy_light"], P["enemy_light"], P["dial_amber"])), b, nose_x,
+                  sign=-1, glow=P["enemy_glow_core"])
 
     for mirror in (False, True):
         side = (lambda a: math.pi - a) if mirror else (lambda a: a)
@@ -95,9 +97,10 @@ def enemy_sub(P, name="enemy_sub", length=3.4, radius=0.85, tower=True, skull_ma
         part.cylinder(P["enemy_light"], loc=(tx - 0.28, 0, tz + t_h * 1.45), radius=0.06 * radius, depth=0.02,
                       rot=(0, math.pi / 2, 0))
 
-    if skull_mark:
-        for theta in (math.radians(12), math.radians(168)):
-            skull(part, P, b.frame(h * 0.18, theta, lift=0.02, up=(0, 0, 1)), size=radius * 0.95)
+    marks = Part()
+    for theta in (math.radians(12), math.radians(168)):
+        skull(marks, P, b.frame(h * 0.18, theta, lift=0.02, up=(0, 0, 1)), size=radius * 0.95)
+    marks.build("skull_mark" if skull_mark else "skull_mark_optional", root)
 
     for i in range(spikes):
         x = -h * 0.55 + h * 1.1 * i / max(spikes - 1, 1)

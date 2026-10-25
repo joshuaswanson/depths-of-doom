@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { spawn, tint } from './assets.js';
+import { findNode, spawn, tint } from './assets.js';
 import { NOISE_GLSL } from './surface.js';
 import {
   ABYSS_Y, CAMERA_Z, SHELF_Y, SURFACE_Y, TAN_HALF_FOV, WATER_GRADIENT_GLSL, darkness, depthShift,
@@ -311,37 +311,62 @@ function makeFishGeometry() {
   return new THREE.ShapeGeometry(shape);
 }
 
-const JELLY_COLORS = ['#ff5fd2', '#5fe8ff', '#b47bff', '#7dffb4'];
+// Jellies only drift in the dark lower reaches of the trenches.
+const JELLY_CEILING = 90;
+const JELLY_COLORS = ['#ff5fd2', '#5fe8ff', '#b47bff', '#7dffb4', '#ffb35f'];
 
-function makeJelly() {
+// Jelly flesh: see-through in the middle, glowing at the silhouette, with tentacles rippling down their length.
+function jellyMaterial(base, color, uniforms, wave) {
+  const m = base.clone();
+  m.color = color.clone();
+  m.emissive = color.clone();
+  m.emissiveIntensity = base.emissiveIntensity;
+  m.transparent = true;
+  m.depthWrite = false;
+  m.side = THREE.DoubleSide;
+  m.onBeforeCompile = (shader) => {
+    shader.uniforms.uTime = uniforms.uTime;
+    if (wave) {
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', '#include <common>\nuniform float uTime;')
+        .replace('#include <begin_vertex>', /* glsl */ `#include <begin_vertex>
+          float hang = max( 0.0, - transformed.y );
+          float seed = modelMatrix[ 3 ].x * 0.7 + modelMatrix[ 3 ].y * 0.3;
+          transformed.x += sin( uTime * 1.7 + hang * 1.9 + seed ) * 0.07 * hang;
+          transformed.z += cos( uTime * 1.3 + hang * 1.6 + seed ) * 0.05 * hang;`);
+    }
+    shader.fragmentShader = shader.fragmentShader.replace('#include <opaque_fragment>', /* glsl */ `
+      float jellyRim = pow( 1.0 - abs( dot( normal, normalize( vViewPosition ) ) ), 2.0 );
+      diffuseColor.a = clamp( diffuseColor.a * 0.6 + jellyRim * 0.7, 0.0, 1.0 );
+      outgoingLight += emissive * jellyRim * 1.5;
+      #include <opaque_fragment>`);
+  };
+  m.customProgramCacheKey = () => `jelly-${wave}`;
+  return m;
+}
+
+function makeJelly(uniforms) {
+  const jelly = spawn('deep_jelly');
   const color = new THREE.Color(pick(JELLY_COLORS));
-  const group = new THREE.Group();
-  const bell = new THREE.Mesh(
-    new THREE.SphereGeometry(0.6, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2),
-    new THREE.MeshStandardMaterial({
-      color, emissive: color, emissiveIntensity: 1.6, transparent: true, opacity: 0.55, roughness: 0.2,
-      side: THREE.DoubleSide, depthWrite: false,
-    }),
-  );
-  bell.scale.y = 0.8;
-  group.add(bell);
-  const core = new THREE.Mesh(new THREE.SphereGeometry(0.22, 12, 8),
-    new THREE.MeshBasicMaterial({ color: color.clone().multiplyScalar(2.5) }));
-  core.position.y = 0.15;
-  group.add(core);
-  const tentacleMat = new THREE.MeshBasicMaterial({ color: color.clone().multiplyScalar(1.6), transparent: true, opacity: 0.6 });
-  const tentacles = [];
-  for (let i = 0; i < 6; i++) {
-    const a = (i / 6) * Math.PI * 2;
-    const pts = [];
-    for (let k = 0; k <= 8; k++) pts.push(new THREE.Vector3(Math.cos(a) * 0.35, -k * 0.28, Math.sin(a) * 0.35));
-    const t = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 16, 0.025, 4), tentacleMat);
-    t.userData.phase = a;
-    group.add(t);
-    tentacles.push(t);
-  }
-  group.userData = { bell, tentacles, phase: rand(0, 6), drift: rand(0.2, 0.5) };
-  return group;
+  jelly.traverse((o) => {
+    if (!o.isMesh) return;
+    const wave = o.name.startsWith('jelly_arms') || o.name.startsWith('jelly_tentacles');
+    o.material = jellyMaterial(o.material, color, uniforms, wave);
+  });
+  jelly.scale.setScalar(rand(1.0, 2.0));
+  jelly.userData = { bell: findNode(jelly, 'jelly_bell'), phase: rand(0, 6), drift: rand(0.2, 0.5) };
+  return jelly;
+}
+
+function makeAngler() {
+  const fish = spawn('anglerfish');
+  const scale = rand(1.4, 2.4);
+  fish.scale.setScalar(scale);
+  fish.userData = {
+    jaw: findNode(fish, 'jaw'), lure: findNode(fish, 'lure'), phase: rand(0, 6), dir: Math.random() < 0.5 ? -1 : 1,
+    speed: rand(0.6, 1.4), yaw: 0,
+  };
+  return fish;
 }
 
 function makeEyes() {
@@ -397,10 +422,16 @@ export class World {
     this.makeFish();
 
     this.jellies = Array.from({ length: 16 }, () => {
-      const j = makeJelly();
-      j.position.set(rand(-40, 40), rand(-200, -30), rand(-25, -2));
+      const j = makeJelly(this.uniforms);
+      j.position.set(rand(-40, 40), rand(-200, -JELLY_CEILING), rand(-25, -2));
       scene.add(j);
       return j;
+    });
+    this.anglers = Array.from({ length: 6 }, () => {
+      const a = makeAngler();
+      a.position.set(rand(-45, 45), rand(-190, -40), rand(-22, -4));
+      scene.add(a);
+      return a;
     });
     this.eyes = Array.from({ length: 10 }, () => {
       const e = makeEyes();
@@ -546,15 +577,31 @@ export class World {
     for (const j of this.jellies) {
       const u = j.userData;
       const pulse = Math.sin(t * 1.8 + u.phase);
-      u.bell.scale.set(1 + pulse * 0.12, 0.8 - pulse * 0.12, 1 + pulse * 0.12);
+      u.bell.scale.set(1 + pulse * 0.1, 1 - pulse * 0.12, 1 + pulse * 0.1);
       j.position.y += (u.drift + Math.max(0, pulse) * 0.6) * dt;
-      for (const tt of u.tentacles) tt.rotation.x = Math.sin(t * 2 + tt.userData.phase) * 0.15;
       const floor = floorY(j.position.x) + 3;
-      if (j.position.y > -24 || j.position.y < floor) {
-        j.position.y = Math.max(floor + 2, Math.min(-30, cy - rand(4, 14)));
+      if (j.position.y > -JELLY_CEILING || j.position.y < floor) {
+        j.position.y = Math.max(floor + 2, Math.min(-JELLY_CEILING - 4, cy - rand(4, 14)));
       }
       j.position.x = wrap(j.position.x, cx, 40);
-      j.visible = floorY(j.position.x) < -30;
+      j.visible = floorY(j.position.x) < -JELLY_CEILING - 10 && this.dark > 0.45;
+    }
+    for (const a of this.anglers) {
+      const u = a.userData;
+      a.position.x += u.dir * u.speed * dt;
+      a.position.y += Math.sin(t * 0.6 + u.phase) * dt * 0.4;
+      if (Math.random() < dt * 0.05) u.dir *= -1;
+      u.yaw += ((u.dir > 0 ? 0 : -Math.PI) - u.yaw) * (1 - Math.exp(-dt * 1.2));
+      a.rotation.y = u.yaw;
+      a.rotation.z = Math.sin(t * 0.8 + u.phase) * 0.08;
+      u.jaw.rotation.z = -Math.max(0, Math.sin(t * 0.9 + u.phase)) * 0.45;
+      u.lure.rotation.z = Math.sin(t * 2.1 + u.phase) * 0.12;
+      a.position.x = wrap(a.position.x, cx, 50);
+      const floor = floorY(a.position.x) + 4;
+      if (Math.abs(a.position.y - cy) > 40 || a.position.y < floor || a.position.y > -35) {
+        a.position.y = Math.max(floor + 2, Math.min(-38, cy + rand(-20, 20)));
+      }
+      a.visible = floorY(a.position.x) < -40 && this.dark > 0.2;
     }
     for (const e of this.eyes) {
       const u = e.userData;

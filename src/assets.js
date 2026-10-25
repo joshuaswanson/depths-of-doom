@@ -7,7 +7,8 @@ const MODEL_NAMES = [
   'part_thruster', 'part_spotlight', 'junk_crate', 'junk_ammo', 'junk_toolbox', 'junk_canister', 'junk_barrel', 'junk_duck',
   'proj_torpedo', 'proj_missile', 'proj_player_missile', 'pickup_coin', 'enemy_scout', 'enemy_gunner', 'enemy_boss',
   'mine', 'ruin_pillar_a', 'ruin_pillar_b', 'ruin_arch', 'ruin_wall', 'ruin_pier', 'ruin_tower', 'anchor', 'chain',
-  'seaweed_a', 'seaweed_b', 'coral_pink', 'coral_orange', 'coral_brain', 'rock_a', 'rock_b',
+  'seaweed_a', 'seaweed_b', 'coral_pink', 'coral_orange', 'coral_brain', 'rock_a', 'rock_b', 'deep_jelly',
+  'anglerfish',
 ];
 
 const models = {};
@@ -27,12 +28,12 @@ export async function loadModels(onProgress) {
 }
 
 // Compile every model's shaders up front so the first enemy or upgrade of each kind doesn't stall a frame.
-export function warmUp(renderer, scene, camera) {
+export async function warmUp(renderer, scene, camera) {
   const holder = new THREE.Group();
   for (const name of MODEL_NAMES) holder.add(spawn(name));
   holder.position.set(0, 0, -5);
   scene.add(holder);
-  renderer.compile(scene, camera);
+  await renderer.compileAsync(scene, camera);
   scene.remove(holder);
 }
 

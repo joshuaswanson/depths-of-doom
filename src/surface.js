@@ -14,6 +14,7 @@ const PROFILE_BY_MATERIAL = {
   rust: ['rust'],
   coral: ['coral_pink', 'coral_purple', 'coral_orange'],
   weed: ['seaweed', 'seaweed_dark'],
+  angler: ['angler_skin', 'angler_belly', 'angler_fin'],
 };
 
 const PROFILES = {
@@ -27,6 +28,7 @@ const PROFILES = {
   rust: { scale: 2.5, mottle: 0.25, scratch: 0.2, grime: 0.3, rust: 0.8, bump: 1.0, crack: 0.0, rough: 0.1 },
   coral: { scale: 9.0, mottle: 0.25, scratch: 0.0, grime: 0.25, rust: 0.0, bump: 1.4, crack: 0.0, rough: 0.0 },
   weed: { scale: 4.0, mottle: 0.22, scratch: 0.0, grime: 0.2, rust: 0.0, bump: 0.6, crack: 0.0, rough: 0.0 },
+  angler: { scale: 5.0, mottle: 0.3, scratch: 0.0, grime: 0.25, rust: 0.0, bump: 1.3, crack: 0.0, rough: 0.0 },
 };
 
 export const NOISE_GLSL = /* glsl */ `
@@ -113,6 +115,11 @@ function patch(material, profileName) {
       .replace('#include <roughnessmap_fragment>', /* glsl */ `#include <roughnessmap_fragment>
         roughnessFactor = clamp( roughnessFactor + ( dMottle - 0.5 ) * ${f(p.rough * 2)} + dScratch * ${f(p.scratch * 0.3)} + dRust * 0.4, 0.04, 1.0 );
       `)
+      .replace('#include <emissivemap_fragment>', /* glsl */ `#include <emissivemap_fragment>
+        ${profileName === 'angler'
+          ? 'totalEmissiveRadiance += vec3( 0.25, 0.45, 0.6 ) * pow( 1.0 - saturate( dot( normal, normalize( vViewPosition ) ) ), 2.5 ) * 0.35;'
+          : ''}
+      `)
       .replace('#include <normal_fragment_maps>', /* glsl */ `#include <normal_fragment_maps>
         float dHeight = dMottle * 0.35 - dScratch * 0.5 - dCrack * 0.9 * ${f(p.crack)} + dGrain * 0.5 - dPore * 0.8
           + dNoise( dp * 4.0 ) * 0.25 + dRust * dNoise( dp * 6.0 ) * 0.6;
@@ -123,14 +130,46 @@ function patch(material, profileName) {
   material.needsUpdate = true;
 }
 
+// Viewport glass: clear in the middle, mirror-bright at grazing angles, with sharp environment reflections.
+function glass(color, opacity) {
+  const m = new THREE.MeshPhysicalMaterial({
+    color, transparent: true, opacity, roughness: 0.02, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.02,
+    envMapIntensity: 2.5, depthWrite: false, side: THREE.FrontSide,
+  });
+  m.onBeforeCompile = (shader) => {
+    shader.fragmentShader = shader.fragmentShader.replace('#include <opaque_fragment>', /* glsl */ `
+      float glassFresnel = pow( 1.0 - saturate( dot( normal, normalize( vViewPosition ) ) ), 3.0 );
+      diffuseColor.a = mix( diffuseColor.a, 1.0, glassFresnel * 0.85 );
+      outgoingLight += vec3( 0.6, 0.9, 1.0 ) * glassFresnel * 0.35;
+      #include <opaque_fragment>`);
+  };
+  m.customProgramCacheKey = () => 'viewport-glass';
+  return m;
+}
+
+const REPLACEMENTS = {
+  viewport_glass: () => glass('#bff3ff', 0.18),
+  enemy_glass: () => glass('#7a2a2a', 0.35),
+};
+
 const lookup = new Map();
 for (const [profile, names] of Object.entries(PROFILE_BY_MATERIAL)) for (const n of names) lookup.set(n, profile);
 
 const patched = new WeakSet();
 
+const replaced = new Map();
+
 export function applySurfaceDetail(root) {
   root.traverse((o) => {
-    if (!o.isMesh || patched.has(o.material)) return;
+    if (!o.isMesh) return;
+    const make = REPLACEMENTS[o.material.name];
+    if (make) {
+      if (!replaced.has(o.material.name)) replaced.set(o.material.name, make());
+      o.material = replaced.get(o.material.name);
+      o.renderOrder = 2;
+      return;
+    }
+    if (patched.has(o.material)) return;
     const profile = lookup.get(o.material.name);
     if (!profile) return;
     patch(o.material, profile);

@@ -55,20 +55,27 @@ def part_cannon(P):
     root = empty("part_cannon")
     part = Part()
     mount_plate(part, P)
-    part.box(P["gunmetal"], loc=(0, 0, 0.18), size=(0.22, 0.16, 0.16), bevel=0.03)
-    part.cylinder(P["gunmetal"], loc=(0.0, 0, 0.32), radius=0.2, depth=0.55, rot=ALONG_X, bevel=0.05, segs=28)
-    part.sphere(P["gunmetal"], loc=(-0.27, 0, 0.32), scale=(0.08, 0.17, 0.17), segs=20, rings=10)
-    part.cylinder(P["red"], loc=(0.22, 0, 0.32), radius=0.212, depth=0.09, rot=ALONG_X, segs=28)
-    part.cylinder(P["red"], loc=(-0.12, 0, 0.32), radius=0.212, depth=0.05, rot=ALONG_X, segs=28)
+    part.box(P["steel_dark"], loc=(0, 0, 0.18), size=(0.22, 0.16, 0.16), bevel=0.03)
+    part.cylinder(P["blue"], loc=(0.0, 0, 0.32), radius=0.2, depth=0.55, rot=ALONG_X, bevel=0.05, segs=28)
+    part.sphere(P["blue_dark"], loc=(-0.27, 0, 0.32), scale=(0.08, 0.17, 0.17), segs=20, rings=10)
+    part.cylinder(P["yellow"], loc=(0.22, 0, 0.32), radius=0.212, depth=0.09, rot=ALONG_X, segs=28)
+    part.cylinder(P["yellow"], loc=(-0.12, 0, 0.32), radius=0.212, depth=0.05, rot=ALONG_X, segs=28)
+    part.build("cannon_body", root)
+
+    barrels = Part()
     for i in range(6):
         a = 2 * math.pi * i / 6
-        y, z = 0.105 * math.cos(a), 0.32 + 0.105 * math.sin(a)
-        part.cylinder(P["steel"], loc=(0.65, y, z), radius=0.042, depth=0.8, rot=ALONG_X, segs=12)
-        part.cylinder(P["black"], loc=(1.051, y, z), radius=0.026, depth=0.01, rot=ALONG_X, segs=10)
-    part.cylinder(P["steel_dark"], loc=(0.65, 0, 0.32), radius=0.05, depth=0.8, rot=ALONG_X, segs=12)
+        y, z = 0.105 * math.cos(a), 0.105 * math.sin(a)
+        barrels.cylinder(P["steel"], loc=(0.65, y, z), radius=0.042, depth=0.8, rot=ALONG_X, segs=12)
+        barrels.cylinder(P["black"], loc=(1.051, y, z), radius=0.026, depth=0.01, rot=ALONG_X, segs=10)
+    barrels.cylinder(P["steel_dark"], loc=(0.65, 0, 0), radius=0.05, depth=0.8, rot=ALONG_X, segs=12)
     for x in (0.55, 0.95):
-        part.torus(P["steel_dark"], loc=(x, 0, 0.32), major=0.15, minor=0.03, rot=ALONG_X, segs=24)
-    part.build("cannon_body", root)
+        barrels.torus(P["steel_dark"], loc=(x, 0, 0), major=0.15, minor=0.03, rot=ALONG_X, segs=24)
+        for i in range(3):
+            a = 2 * math.pi * i / 3
+            barrels.box(P["yellow"] if x > 0.9 else P["steel_dark"], loc=(x, 0.17 * math.cos(a), 0.17 * math.sin(a)),
+                        size=(0.05, 0.05, 0.05), bevel=0.012)
+    barrels.build("cannon_barrels", root, location=(0, 0, 0.32))
     empty("muzzle", root, (1.08, 0, 0.32))
     return root
 

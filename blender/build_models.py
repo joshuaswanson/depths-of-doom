@@ -14,6 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from kit import bake_ao, descendants, export_glb  # noqa: E402
 from palette import palette  # noqa: E402
+import assets_deep  # noqa: E402
 import assets_enemies  # noqa: E402
 import assets_env  # noqa: E402
 import assets_parts  # noqa: E402
@@ -32,10 +33,12 @@ ASSETS = {
     )},
     **{name: getattr(assets_enemies, name) for name in ("enemy_scout", "enemy_gunner", "enemy_boss", "mine")},
     **{name: getattr(assets_env, name) for name in assets_env.ENV_ASSETS},
+    "deep_jelly": assets_deep.deep_jelly,
+    "anglerfish": assets_deep.anglerfish,
 }
 
 
-AO_DISTANCE = {"ruin": 1.4, "rock": 1.2, "coral": 0.5, "seaweed": 0.8, "anchor": 1.0, "chain": 0.3, "enemy": 0.8}
+AO_DISTANCE = {"deep": 0.5, "anglerfish": 0.6, "ruin": 1.4, "rock": 1.2, "coral": 0.5, "seaweed": 0.8, "anchor": 1.0, "chain": 0.3, "enemy": 0.8}
 
 
 def parse_args():

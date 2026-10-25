@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { ownMaterials, spawn } from './assets.js';
+import { makeBeam } from './player.js';
 import { sfx } from './audio.js';
 import { UPGRADES, upgradeCost } from './upgrades.js';
 import { CAMERA_Z, SURFACE_Y, TAN_HALF_FOV } from './water.js';
@@ -7,9 +8,43 @@ import { seabedAt } from './world.js';
 
 const rand = (a, b) => a + Math.random() * (b - a);
 const WHITE = new THREE.Color(1, 1, 1);
-// Enemy models face -X; these yaws keep their faces turned toward the camera while heading left or right.
-const ENEMY_YAW_LEFT = 0.75;
-const ENEMY_YAW_RIGHT = Math.PI - 0.75;
+// Enemy models face -X. Like the player, they show full profile while cruising and turn three quarters toward the
+// camera when slow; yaw stays within [0, PI] so turns swing the nose past the viewer.
+const ENEMY_YAW = {
+  left: { swim: 0, idle: 0.75 },
+  right: { swim: Math.PI, idle: Math.PI - 0.75 },
+};
+const SKULL_CHANCE = 0.4;
+const HALO_SIZE = { scout: 1.3, gunner: 1.6, boss: 2.6 };
+
+const haloTexture = (() => {
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 64;
+  const g = canvas.getContext('2d');
+  const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  grad.addColorStop(0, 'rgba(255,255,255,1)');
+  grad.addColorStop(0.35, 'rgba(255,255,255,0.45)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 64, 64);
+  return new THREE.CanvasTexture(canvas);
+})();
+
+// Red light spilling out of an enemy viewport: a soft halo at the window and a faint beam ahead of it.
+function viewportGlow(type) {
+  const group = new THREE.Group();
+  const halo = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: haloTexture, color: new THREE.Color(2.4, 0.22, 0.12), blending: THREE.AdditiveBlending,
+    depthWrite: false, transparent: true, fog: false,
+  }));
+  halo.scale.setScalar(HALO_SIZE[type]);
+  halo.position.x = 0.15;
+  const beam = makeBeam('#ff3a24');
+  beam.rotation.y = Math.PI;
+  beam.scale.set(0.9, 0.55, 0.55);
+  group.add(halo, beam);
+  return { group, halo, beam };
+}
 const DESPAWN_DIST = 60;
 const ENEMY_TOP = SURFACE_Y - 1.8;
 const enemyFloor = (x) => seabedAt(x) + 1.8;
@@ -165,10 +200,16 @@ export class Game {
     const type = ENEMY_TYPES[spec.type];
     const obj = new THREE.Group();
     const flip = new THREE.Group();
+    const tilt = new THREE.Group();
     const model = spawn(type.model);
     model.scale.setScalar(type.scale);
-    flip.add(model);
+    tilt.add(model);
+    flip.add(tilt);
     obj.add(flip);
+    const skulled = Math.random() < SKULL_CHANCE;
+    model.traverse((o) => {
+      if (o.name.startsWith('skull_mark_optional')) o.visible = skulled;
+    });
     const mats = ownMaterials(model).map((m) => ({ m, e: m.emissive.clone() }));
     const hpMult = 1 + 0.17 * (this.wave - 1);
     if (spec.pos) {
@@ -185,18 +226,22 @@ export class Game {
     const bossTier = Math.floor(this.wave / 5);
     const toPlayer = new THREE.Vector2().subVectors(this.player.center, obj.position).normalize();
     const e = {
-      type: spec.type, def: type, obj, flip, model, mats, flash: 0, t: rand(0, 5),
+      type: spec.type, def: type, obj, flip, tilt, model, mats, flash: 0, t: rand(0, 5), pitch: 0,
       hp: type.hp * hpMult * (spec.type === 'boss' ? 0.7 + bossTier * 0.45 : 1),
       fire: rand(1.0, 2.2), attack: 0, steer: 0, orbit: Math.random() < 0.5 ? -1 : 1,
       vel: toPlayer.multiplyScalar(type.speed), facing: 1, propeller: null, spin: rand(-1, 1),
     };
     e.maxHp = e.hp;
     e.facing = e.vel.x >= 0 ? 1 : -1;
-    if (spec.type !== 'mine') flip.rotation.y = e.facing > 0 ? ENEMY_YAW_RIGHT : ENEMY_YAW_LEFT;
+    if (spec.type !== 'mine') flip.rotation.y = (e.facing > 0 ? ENEMY_YAW.right : ENEMY_YAW.left).swim;
     model.traverse((o) => {
       if (!e.propeller && o.name.startsWith('propeller')) e.propeller = o;
       if (!e.muzzle && o.name.startsWith('muzzle')) e.muzzle = o;
     });
+    if (e.muzzle && spec.type !== 'mine') {
+      e.glow = viewportGlow(spec.type);
+      e.muzzle.add(e.glow.group);
+    }
     if (spec.type === 'boss') this.boss = e;
     this.enemies.push(e);
     return e;
@@ -204,7 +249,7 @@ export class Game {
 
   enemyHit(e, x, y, r = 0) {
     const s = e.def;
-    const a = -e.obj.rotation.z;
+    const a = -e.pitch * e.facing;
     const dx0 = x - e.obj.position.x;
     const dy0 = y - e.obj.position.y;
     const dx = (dx0 * Math.cos(a) - dy0 * Math.sin(a)) / (s.rx + r);
@@ -309,22 +354,25 @@ export class Game {
     const active = this.enemiesOnScreen() && !pl.turning;
     const fwd = pl.forward;
     const side = new THREE.Vector2(-fwd.y, fwd.x);
-    const cannonInterval = 0.2 - 0.012 * pl.levels.cannon;
+    const cannonInterval = 0.15 - 0.009 * pl.levels.cannon;
     for (const part of pl.partsOf('cannon')) {
+      // The gatling barrels spin up while there's something to shoot and wind down after.
+      part.spin = THREE.MathUtils.lerp(part.spin ?? 0, active ? 28 : 0, 1 - Math.exp(-dt * (active ? 4 : 1.5)));
+      if (part.barrels) part.barrels.rotation.x += part.spin * dt;
       part.timer -= dt;
       if (part.timer > 0) continue;
       part.timer += cannonInterval * rand(0.9, 1.1);
-      if (!active) {
-        part.timer = Math.max(part.timer, 0.1);
+      if (!active || part.spin < 14) {
+        part.timer = Math.max(part.timer, 0.05);
         continue;
       }
       part.muzzle.getWorldPosition(this.tmp);
       const spread = rand(-0.6, 0.6);
       this.bullets.push({
-        x: this.tmp.x, y: this.tmp.y, z: this.tmp.z, life: 1.1,
+        x: this.tmp.x, y: this.tmp.y, z: this.tmp.z, life: 1.1, trail: 0,
         vx: fwd.x * 26 + side.x * spread + pl.vel.x * 0.5, vy: fwd.y * 26 + side.y * spread + pl.vel.y * 0.5,
       });
-      this.effects.muzzle(this.tmp);
+      this.effects.muzzle(this.tmp, fwd);
       sfx.shoot();
     }
     for (const part of pl.partsOf('torpedo')) {
@@ -535,14 +583,22 @@ export class Game {
 
       if (e.type !== 'mine') {
         if (Math.abs(e.vel.x) > 0.4) e.facing = Math.sign(e.vel.x);
-        const wantYaw = e.facing > 0 ? ENEMY_YAW_RIGHT : ENEMY_YAW_LEFT;
-        const step = (wantYaw - e.flip.rotation.y) * (1 - Math.exp(-dt * 1.8));
-        e.flip.rotation.y += THREE.MathUtils.clamp(step, -dt * 1.8, dt * 1.8);
-        const pitch = THREE.MathUtils.clamp(Math.atan2(e.vel.y, Math.abs(e.vel.x) + 0.5), -0.6, 0.6);
-        e.obj.rotation.z = THREE.MathUtils.lerp(e.obj.rotation.z, pitch * e.facing + Math.sin(e.t * 1.6) * 0.04,
-          1 - Math.exp(-dt * 4));
+        const speedNow = e.vel.length();
+        const pose = e.facing > 0 ? ENEMY_YAW.right : ENEMY_YAW.left;
+        const wantYaw = speedNow > 1.4 ? pose.swim : pose.idle;
+        const step = (wantYaw - e.flip.rotation.y) * (1 - Math.exp(-dt * 2.2));
+        e.flip.rotation.y += THREE.MathUtils.clamp(step, -dt * 2, dt * 2);
+        const wantPitch = speedNow > 0.6 ? THREE.MathUtils.clamp(Math.atan2(e.vel.y, Math.abs(e.vel.x) + 0.05), -0.9, 0.9) : 0;
+        e.pitch = THREE.MathUtils.lerp(e.pitch, wantPitch, 1 - Math.exp(-dt * 3));
+        e.tilt.rotation.z = -e.pitch;
+        e.tilt.rotation.x = Math.sin(e.t * 1.6) * 0.04;
       }
       if (e.propeller) e.propeller.rotation.x += dt * 14;
+      if (e.glow) {
+        const dark = this.world.dark;
+        e.glow.halo.material.opacity = 0.45 + 0.25 * dark + Math.sin(e.t * 3) * 0.1;
+        e.glow.beam.material.uniforms.uStrength.value = 0.02 + 0.16 * dark;
+      }
 
       if (e.flash > 0) {
         e.flash = Math.max(0, e.flash - dt * 9);
@@ -601,6 +657,11 @@ export class Game {
       b.x += b.vx * dt;
       b.y += b.vy * dt;
       if (b.life <= 0) continue;
+      b.trail -= dt;
+      if (b.trail <= 0) {
+        b.trail = 0.035;
+        this.effects.trailBubble({ x: b.x, y: b.y, z: b.z });
+      }
       let hit = false;
       for (const e of this.enemies) {
         if (!e.dead && this.enemyHit(e, b.x, b.y, 0.1)) {
@@ -823,7 +884,8 @@ export class Game {
     let lowest = Infinity;
     for (let i = -2; i <= 2; i++) lowest = Math.min(lowest, seabedAt(this.cam.x + (i * this.halfW) / 2));
     this.camFloor = THREE.MathUtils.lerp(this.camFloor ?? lowest, lowest, 1 - Math.exp(-dt * 1.5));
-    this.cam.y = THREE.MathUtils.clamp(this.cam.y, this.camFloor + this.halfH - 3, SURFACE_Y + 1);
+    const floorLimit = Math.min(this.camFloor + this.halfH - 3, pc.y + 1.5);
+    this.cam.y = THREE.MathUtils.clamp(this.cam.y, floorLimit, SURFACE_Y + 1);
   }
 
   splashCheck() {
