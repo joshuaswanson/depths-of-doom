@@ -48,13 +48,13 @@ function tone({ type = 'sine', freq = 440, to = freq, dur = 0.15, vol = 0.3, del
   osc.stop(t + dur + 0.02);
 }
 
-function noise({ dur = 0.3, vol = 0.4, freq = 800, to = 200, q = 1, delay = 0, dry = false }) {
+function noise({ dur = 0.3, vol = 0.4, freq = 800, to = 200, q = 1, delay = 0, dry = false, type = 'lowpass' }) {
   if (!ctx || muted) return;
   const t = ctx.currentTime + delay;
   const src = ctx.createBufferSource();
   src.buffer = noiseBuffer;
   const filter = ctx.createBiquadFilter();
-  filter.type = 'lowpass';
+  filter.type = type;
   filter.Q.value = q;
   filter.frequency.setValueAtTime(freq, t);
   filter.frequency.exponentialRampToValueAtTime(Math.max(20, to), t + dur);
@@ -269,12 +269,19 @@ export const sfx = {
   denied() {
     tone({ type: 'square', freq: 180, to: 150, dur: 0.15, vol: 0.08, dry: true });
   },
+  // Hull on hull: a sharp strike, a dull thump, then a metallic ring. The partials follow a struck plate's
+  // inharmonic modes, and a detuned twin on two of them gives the ring its shimmer.
   bump(strength = 0.5) {
-    const v = 0.12 + 0.2 * strength;
-    tone({ type: 'square', freq: 190, to: 95, dur: 0.12, vol: v });
-    tone({ type: 'triangle', freq: 620, to: 540, dur: 0.35, vol: v * 0.6 });
-    tone({ type: 'sine', freq: 1240, to: 1180, dur: 0.25, vol: v * 0.3, delay: 0.01 });
-    noise({ dur: 0.12, vol: v * 0.8, freq: 3000, to: 900 });
+    const v = 0.1 + 0.18 * strength;
+    const f0 = 170 + Math.random() * 90;
+    noise({ type: 'bandpass', dur: 0.05, vol: v * 1.4, freq: 4200, to: 2600, q: 1.2 });
+    tone({ type: 'sine', freq: 95, to: 55, dur: 0.18, vol: v * 0.9 });
+    const modes = [[1, 0.9, 1], [2.76, 0.7, 0.75], [5.4, 0.45, 0.5], [8.93, 0.28, 0.32], [13.34, 0.16, 0.18]];
+    modes.forEach(([ratio, ring, amp]) => {
+      const f = f0 * ratio;
+      tone({ type: 'sine', freq: f, to: f * 0.995, dur: ring * (0.6 + strength * 0.5), vol: v * amp * 0.55 });
+      if (ratio === 2.76 || ratio === 5.4) tone({ type: 'sine', freq: f * 1.012, dur: ring * 0.8, vol: v * amp * 0.3 });
+    });
   },
   clank() {
     tone({ type: 'square', freq: 260, to: 120, dur: 0.08, vol: 0.1 });
