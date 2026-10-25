@@ -7,3 +7,4 @@ __pycache__/
 # Full-size source art and the original music renders; the game ships trimmed copies from public/.
 art/logo/
 art/music/
+art/trailer/

@@ -1,0 +1,38 @@
+{
+  "duration": 101.5,
+  "music": [
+    { "file": "sunlight_on_the_reef.m4a", "at": 0, "from": 0, "to": 20.43, "fadeIn": 0.8, "fadeOut": 0.45 },
+    { "file": "cannonball_at_the_surface.m4a", "at": 20.0, "from": 4.25, "to": 30.44, "fadeIn": 0.3, "fadeOut": 0.6 },
+    { "file": "below_the_pressure.m4a", "at": 46.19, "from": 0, "to": 15.11, "fadeIn": 0.8, "fadeOut": 1.2 },
+    { "file": "shadows_in_the_trench.m4a", "at": 61.3, "from": 30.42, "to": 70.6, "fadeIn": 0.2, "fadeOut": 3.0 }
+  ],
+  "voice": "Daniel",
+  "narration": [
+    { "at": 1.2, "text": "Deep beneath the waves..." },
+    { "at": 3.0, "text": "lies a world of sunlight, coral, and treasure." },
+    { "at": 11.0, "text": "Take the helm of your very own submarine." },
+    { "at": 20.7, "text": "But you are not alone down here." },
+    { "at": 28.9, "text": "Blast enemy subs. Grab the loot." },
+    { "at": 33.0, "text": "Bolt on bigger guns, torpedoes, and missiles." },
+    { "at": 47.3, "text": "And when the sunlight fades..." },
+    { "at": 53.6, "text": "you will find out what really lives in the deep." },
+    { "at": 74.2, "text": "Something is watching.", "gain": 0.8 },
+    { "at": 95.6, "text": "Depths of Doom. Dive in, if you dare." }
+  ],
+  "sfx": [
+    { "at": 11.6, "sound": "coin" }, { "at": 12.3, "sound": "coin" }, { "at": 13.0, "sound": "coin" },
+    { "at": 24.36, "sound": "boom" }, { "at": 25.43, "sound": "boom" }, { "at": 26.49, "sound": "boom" },
+    { "at": 29.16, "sound": "boom" }, { "at": 30.23, "sound": "boom" }, { "at": 31.83, "sound": "boom" },
+    { "at": 37.6, "sound": "splash" }, { "at": 39.3, "sound": "bigSplash" },
+    { "at": 39.27, "sound": "boom" }, { "at": 40.37, "sound": "boom" },
+    { "at": 42.51, "sound": "boom" }, { "at": 43.21, "sound": "boom" }, { "at": 43.90, "sound": "boom" },
+    { "at": 44.60, "sound": "boom" }, { "at": 45.29, "sound": "boom" }, { "at": 46.09, "sound": "boomBig" },
+    { "at": 50.2, "sound": "sonar" }, { "at": 57.0, "sound": "sonar" }, { "at": 64.0, "sound": "sonar" },
+    { "at": 69.75, "sound": "stinger" },
+    { "at": 78.64, "sound": "boomBig" }, { "at": 80.40, "sound": "boom" }, { "at": 81.29, "sound": "boom" },
+    { "at": 83.93, "sound": "boom" }, { "at": 86.58, "sound": "boom" }, { "at": 87.46, "sound": "boom" },
+    { "at": 88.35, "sound": "boom" }, { "at": 90.99, "sound": "boom" },
+    { "at": 93.64, "sound": "boomBig" }, { "at": 93.86, "sound": "boom" }, { "at": 94.08, "sound": "boomBig" },
+    { "at": 94.64, "sound": "boomBig" }
+  ]
+}
