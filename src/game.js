@@ -495,6 +495,7 @@ export class Game {
     const skulled = Math.random() < SKULL_CHANCE;
     model.traverse((o) => {
       if (o.name.startsWith('skull_mark_optional')) o.visible = skulled;
+      if (o.name.startsWith('side_detail')) o.visible = !skulled;
     });
     const mats = ownMaterials(model).map((m) => {
       addWaterline(m);

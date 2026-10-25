@@ -36,22 +36,27 @@ def porthole(part, P, body, x, theta, radius=0.17):
     porthole_at(part, P, body.frame(x, theta), radius)
 
 
-def porthole_at(part, P, m, radius=0.17):
+PORTHOLE_MATS = {"cabin": "cockpit", "dial": "dial_amber", "rim": "gunmetal", "ring": "brass", "bolt": "brass",
+                 "glass": "viewport_glass", "shine": "eye_shine"}
+
+
+def porthole_at(part, P, m, radius=0.17, mats=None):
     """A small cousin of the nose viewport: dark rim, bolted brass ring, and bulging glass over a dim cabin."""
-    part.cylinder(P["cockpit"], matrix=m @ trs((0, 0, -0.01)), radius=radius * 0.82, depth=0.04, segs=24)
-    part.sphere(P["dial_amber"], matrix=m @ trs((radius * 0.3, -radius * 0.3, 0.012), scale=radius * 0.1), segs=8,
+    M = {role: P[name] for role, name in {**PORTHOLE_MATS, **(mats or {})}.items()}
+    part.cylinder(M["cabin"], matrix=m @ trs((0, 0, -0.01)), radius=radius * 0.82, depth=0.04, segs=24)
+    part.sphere(M["dial"], matrix=m @ trs((radius * 0.3, -radius * 0.3, 0.012), scale=radius * 0.1), segs=8,
                 rings=6)
-    part.torus(P["gunmetal"], matrix=m @ trs((0, 0, 0.03)), major=radius, minor=radius * 0.26, segs=28, tube_segs=10)
-    part.torus(P["brass"], matrix=m @ trs((0, 0, 0.05)), major=radius * 0.8, minor=radius * 0.08, segs=28,
+    part.torus(M["rim"], matrix=m @ trs((0, 0, 0.03)), major=radius, minor=radius * 0.26, segs=28, tube_segs=10)
+    part.torus(M["ring"], matrix=m @ trs((0, 0, 0.05)), major=radius * 0.8, minor=radius * 0.08, segs=28,
                tube_segs=8)
     for i in range(8):
         a = 2 * math.pi * (i + 0.5) / 8
-        part.sphere(P["brass"], matrix=m @ trs((radius * math.cos(a), radius * math.sin(a), 0.06),
-                                               scale=radius * 0.1), segs=8, rings=6)
+        part.sphere(M["bolt"], matrix=m @ trs((radius * math.cos(a), radius * math.sin(a), 0.06),
+                                              scale=radius * 0.1), segs=8, rings=6)
     dome = [(radius * 0.5 * math.sqrt(max(0.0, 1 - (i / 8) ** 2)), radius * 0.8 * i / 8) for i in range(9)]
-    part.lathe(P["viewport_glass"], sorted(dome), matrix=m @ trs((0, 0, 0.04)) @ trs(rot=(0, -math.pi / 2, 0)),
+    part.lathe(M["glass"], sorted(dome), matrix=m @ trs((0, 0, 0.04)) @ trs(rot=(0, -math.pi / 2, 0)),
                segs=24, caps=False)
-    part.sphere(P["eye_shine"], matrix=m @ trs((-radius * 0.28, radius * 0.3, 0.04 + radius * 0.38),
+    part.sphere(M["shine"], matrix=m @ trs((-radius * 0.28, radius * 0.3, 0.04 + radius * 0.38),
                                                scale=(radius * 0.18, radius * 0.08, 0.008)), segs=8, rings=6)
 
 

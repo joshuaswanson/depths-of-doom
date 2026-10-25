@@ -3,7 +3,7 @@ import math
 
 from mathutils import Vector
 
-from assets_player import band, nose_viewport, open_hull, propeller, rivet_ring, viewport_x
+from assets_player import band, nose_viewport, open_hull, porthole_at, propeller, rivet_ring, viewport_x
 from body import Body
 from kit import Part, empty, frame, trs
 
@@ -19,6 +19,30 @@ def enemy_tail(part, P, body, x_join, x_end, r_join, accent="enemy_red"):
         for rot in ((math.pi / 2, 0, 0), (0, 0, 0)):
             part.extrude(P["enemy_hull"], [(x, z * sz) for x, z in fin], depth=0.1, rot=rot, bevel=0.03)
             part.extrude(P[accent], [(x, z * sz) for x, z in tip], depth=0.13, rot=rot, bevel=0.03)
+
+
+ENEMY_PORTHOLE = {"cabin": "enemy_cockpit", "dial": "enemy_light", "ring": "enemy_red", "bolt": "steel",
+                  "glass": "enemy_glass"}
+
+
+def seam(part, material, body, x0, x1, theta, radius=0.014, rivets=0, rivet_size=0.022):
+    """A raised weld seam running along the hull, optionally studded with rivets."""
+    pts = [tuple(body.point(x0 + (x1 - x0) * i / 15, theta, 0.006)) for i in range(16)]
+    part.tube(material, pts, radius=radius, segs=6)
+    for i in range(rivets):
+        x = x0 + (x1 - x0) * (i + 0.5) / rivets
+        part.sphere(material, matrix=body.frame(x, theta) @ trs((0, 0, radius * 1.4), scale=rivet_size), segs=8,
+                    rings=6)
+
+
+def bolted_plate(part, plate, bolt, body, x, theta, size):
+    """A square patch plate with a bolt in each corner."""
+    m = body.frame(x, theta)
+    part.box(plate, matrix=m @ trs((0, 0, 0.012)), size=(size, size * 0.8, 0.03), bevel=0.01)
+    for dx in (-1, 1):
+        for dy in (-1, 1):
+            part.sphere(bolt, matrix=m @ trs((dx * size * 0.38, dy * size * 0.3, 0.03), scale=size * 0.07), segs=8,
+                        rings=6)
 
 
 def red_light(part, P, matrix, radius=0.07):
@@ -95,7 +119,28 @@ def enemy_sub(P, name="enemy_sub", length=3.4, radius=0.85, tower=True, skull_ma
             part.cylinder(P["enemy_light"], loc=(tx - 0.76, y, tz + 0.25), radius=0.03, depth=0.01,
                           rot=(0, math.pi / 2, 0), segs=10)
 
+    k = radius / 0.85
+    seam(part, P["enemy_plate"], b, -h * 0.62, h * 0.7, -math.pi / 2, radius=0.016 * k, rivets=14,
+         rivet_size=0.026 * k)
+    for x in (-h * 0.32, h * 0.02, h * 0.36):
+        bolted_plate(part, P["enemy_plate"], P["steel"], b, x, -math.pi / 2, 0.3 * k)
     part.build(f"{name}_body", root)
+
+    # Portholes, plates and bolts along the flanks. The game hides them on hulls that carry a spray-painted skull,
+    # so the boss, which always does, has none.
+    if not skull_mark:
+        sides = Part()
+        for mirror in (False, True):
+            side = (lambda a: math.pi - a) if mirror else (lambda a: a)
+            for x, size in ((-h * 0.6, 0.2), (-h * 0.1, 0.2)):
+                porthole_at(sides, P, b.frame(x, side(math.radians(4))), radius=size * k, mats=ENEMY_PORTHOLE)
+            seam(sides, P["enemy_plate"], b, -h * 0.55, h * 0.4, side(math.radians(38)), radius=0.012 * k,
+                 rivets=12, rivet_size=0.022 * k)
+            seam(sides, P["enemy_plate"], b, -h * 0.55, h * 0.4, side(math.radians(-42)), radius=0.012 * k,
+                 rivets=12, rivet_size=0.022 * k)
+            for x in (-h * 0.38, h * 0.08):
+                bolted_plate(sides, P["enemy_plate"], P["steel"], b, x, side(math.radians(22)), 0.22 * k)
+        sides.build("side_detail", root)
     propeller(P, "propeller", root, (h * 1.45, 0, 0), size=0.95 * radius, hub_mat="gunmetal", blade_mat="enemy_red")
     empty("muzzle", root, (-h * 1.02, 0, -0.1 * radius))
     return root
