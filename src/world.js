@@ -38,7 +38,19 @@ function hash(n, k = 0) {
   return s - Math.floor(s);
 }
 
+const moundCache = new Map();
+
 export function moundOf(cell) {
+  let m = moundCache.get(cell);
+  if (!m) {
+    m = makeMound(cell);
+    moundCache.set(cell, m);
+    if (moundCache.size > 64) moundCache.delete(moundCache.keys().next().value);
+  }
+  return m;
+}
+
+function makeMound(cell) {
   return {
     cell,
     x: cell * MOUND_CELL + MOUND_CELL * (0.2 + 0.6 * hash(cell, 1)),
@@ -73,17 +85,21 @@ function reefGlow(x, z) {
     const dz = (z - MOUND_Z) / 16;
     g = Math.max(g, Math.exp(-dx * dx - dz * dz));
   }
-  return g * (1 - THREE.MathUtils.smoothstep(SHELF_Y - floorY(x), 2, 10));
+  return g;
 }
 
 function detailHeight(x, z) {
+  const shelf = 1 - THREE.MathUtils.smoothstep(SHELF_Y - floorY(x), 2, 10);
+  return baseDetail(x, z) + (shelf > 0 ? moundHeight(x, z) * shelf : 0);
+}
+
+function baseDetail(x, z) {
   const depth = Math.max(0, -z - 4);
   let h = 0.35 * Math.sin(x * 0.157 + z * 0.21) + 0.25 * Math.sin(x * 0.39 - z * 0.37 + 1.3)
     + 0.12 * Math.sin(x * 0.86 + z * 0.9);
   h *= 1 + depth * 0.03;
   if (z > 4) h += (z - 4) * 0.12;
-  const shelf = 1 - THREE.MathUtils.smoothstep(SHELF_Y - floorY(x), 2, 10);
-  return h + moundHeight(x, z) * shelf;
+  return h;
 }
 
 export function seabedAt(x, z = 0) {
@@ -261,20 +277,30 @@ function makeSeabedTile(material) {
   return tile;
 }
 
-function shapeTile(tile, x0) {
-  if (tile.userData.x0 === x0) return;
-  tile.userData.x0 = x0;
-  tile.position.x = x0;
+// Tiles are reshaped as they wrap ahead of the camera. The work is spread over a few frames, since the tile being
+// rebuilt is out of view; `budget` caps the vertices done per call.
+function shapeTile(tile, target, budget = Infinity) {
+  const job = tile.userData;
+  if (job.x0 !== target) {
+    job.x0 = target;
+    job.next = 0;
+  }
+  if (job.next === null) return;
   const geo = tile.geometry;
   const pos = geo.attributes.position;
   const col = geo.attributes.color;
   const c = new THREE.Color();
   const d = new THREE.Color();
   const glowAttr = geo.attributes.aReef.array;
-  for (let i = 0; i < pos.count; i++) {
+  const end = Math.min(pos.count, job.next + budget);
+  const x0 = job.x0;
+  for (let i = job.next; i < end; i++) {
     const x = geo.userData.baseX[i] + x0;
     const z = pos.getZ(i);
-    const y = seabedAt(x, z);
+    const floor = floorY(x);
+    const shelf = 1 - THREE.MathUtils.smoothstep(SHELF_Y - floor, 2, 10);
+    const raised = shelf > 0 ? moundHeight(x, z) * shelf : 0;
+    const y = floor + baseDetail(x, z) + raised;
     pos.setY(i, y);
     const n = 0.5 + 0.5 * Math.sin(x * 0.236 + z * 0.13) * Math.cos(x * 0.55 - z * 0.29);
     const m = 0.5 + 0.5 * Math.sin(x * 1.02 + z * 0.71);
@@ -282,8 +308,7 @@ function shapeTile(tile, x0) {
     c.lerp(SHALLOW_COLORS[3], Math.max(0, Math.sin(x * 0.31 - z * 0.5)) * 0.4);
     d.copy(DEEP_COLORS[0]).lerp(DEEP_COLORS[1], n).lerp(DEEP_COLORS[2], m * 0.4);
     c.lerp(d, THREE.MathUtils.smoothstep(-y, 18, 45));
-    const raised = moundHeight(x, z) * (1 - THREE.MathUtils.smoothstep(SHELF_Y - floorY(x), 2, 10));
-    const glow = reefGlow(x, z);
+    const glow = shelf > 0 ? reefGlow(x, z) * shelf : 0;
     const ripple = 0.5 + 0.5 * Math.sin(x * 0.9 + z * 0.4) * Math.sin(x * 0.37 - z * 1.1);
     c.lerp(REEF_SAND, glow * 0.75);
     c.lerp(REEF_LAGOON, glow * ripple * 0.35);
@@ -291,6 +316,10 @@ function shapeTile(tile, x0) {
     glowAttr[i] = glow;
     col.setXYZ(i, c.r, c.g, c.b);
   }
+  job.next = end;
+  if (end < pos.count) return;
+  job.next = null;
+  tile.position.x = x0;
   pos.needsUpdate = true;
   col.needsUpdate = true;
   geo.attributes.aReef.needsUpdate = true;
@@ -912,7 +941,18 @@ export class World {
     this.waterline.position.y = cy + (SURFACE_Y - cy) * parallax - 0.2 * parallax;
 
     const base = Math.floor(cx / TILE_W);
-    this.tiles.forEach((tile, i) => shapeTile(tile, (base + i - 2) * TILE_W));
+    // Keep tiles already sitting at a needed spot; only the tile that falls off one end moves to the other.
+    const wanted = [-2, -1, 0, 1, 2].map((i) => (base + i) * TILE_W);
+    const free = this.tiles.filter((tile) => !wanted.includes(tile.userData.x0));
+    for (const x of wanted) {
+      if (!this.tiles.some((tile) => tile.userData.x0 === x)) free.shift().userData.pending = x;
+    }
+    for (const tile of this.tiles) {
+      const target = tile.userData.pending ?? tile.userData.x0;
+      const near = Math.abs(target - base * TILE_W) <= TILE_W || tile.userData.x0 === undefined;
+      shapeTile(tile, target, near ? Infinity : 2500);
+      if (tile.userData.next === null) tile.userData.pending = undefined;
+    }
 
     for (const ray of this.rays) {
       ray.material.uniforms.uTime.value = t;
