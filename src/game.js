@@ -1135,9 +1135,9 @@ export class Game {
       if (b.life <= 0) continue;
       b.trail -= dt;
       if (b.trail <= 0) {
-        b.trail = 0.012;
-        const back = Math.atan2(b.vy, b.vx);
-        this.effects.trailBubble({ x: b.x - Math.cos(back) * 0.45, y: b.y - Math.sin(back) * 0.45, z: b.z });
+        b.trail = 0.01;
+        const dir = { x: Math.cos(Math.atan2(b.vy, b.vx)), y: Math.sin(Math.atan2(b.vy, b.vx)) };
+        this.effects.bubbleStreak({ x: b.x - dir.x * 0.4, y: b.y - dir.y * 0.4, z: b.z }, dir, 0.8);
       }
       let hit = false;
       for (const e of this.enemies) {
@@ -1238,8 +1238,9 @@ export class Game {
       if (mi.trail <= 0) {
         mi.trail = 0.02;
         const back = { x: p.x - Math.cos(mi.obj.rotation.z) * 0.45, y: p.y - Math.sin(mi.obj.rotation.z) * 0.45, z: p.z };
-        this.effects.smokeTrail(back, 0.8);
-        this.effects.flame(back, 0.8);
+        if (back.y > SURFACE_Y) this.effects.smokeTrail(back, 0.8);
+        else this.effects.bubbleStreak(back, { x: Math.cos(mi.obj.rotation.z), y: Math.sin(mi.obj.rotation.z) }, 1.6);
+        this.effects.flame(back, 0.6);
       }
       const hitE = this.enemies.find((e) => !e.dead && this.enemyHit(e, p.x, p.y, 0.15));
       const grounded = p.y < seabedAt(p.x);
@@ -1277,8 +1278,9 @@ export class Game {
         em.trail = 0.025;
         const a = em.obj.rotation.z;
         const back = { x: p.x - Math.cos(a) * 0.45, y: p.y - Math.sin(a) * 0.45, z: p.z };
-        this.effects.smokeTrail(back, 0.9);
-        this.effects.flame(back, 1);
+        if (back.y > SURFACE_Y) this.effects.smokeTrail(back, 0.9);
+        else this.effects.bubbleStreak(back, { x: Math.cos(a), y: Math.sin(a) }, 1.7);
+        this.effects.flame(back, 0.7);
       }
       if (pl.alive && pl.hitTest(p.x, p.y, 0.12)) {
         em.dead = true;

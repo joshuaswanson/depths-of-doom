@@ -148,7 +148,7 @@ class ParticlePool {
 export class Effects {
   constructor(scene) {
     this.bubbles = new ParticlePool(scene, {
-      max: 2200, texture: bubbleTexture, blending: THREE.NormalBlending, ceiling: SURFACE_Y - 0.15,
+      max: 4000, texture: bubbleTexture, blending: THREE.NormalBlending, ceiling: SURFACE_Y - 0.15,
     });
     this.puffs = new ParticlePool(scene, { max: 900, texture: puffTexture, blending: THREE.NormalBlending });
     this.glow = new ParticlePool(scene, { max: 700, texture: softTexture, blending: THREE.AdditiveBlending });
@@ -186,6 +186,21 @@ export class Effects {
         pos: { x: tip.x + rand(-0.1, 0.1), y: tip.y + rand(-0.1, 0.1), z: tip.z },
         vel: { x: dir.x * rand(2, 5) + rand(-0.6, 0.6), y: dir.y * rand(2, 5) + rand(-0.6, 0.6) },
         life: rand(0.5, 1.0), size: rand(0.07, 0.16), size1: 0.2, alpha: 0.9, alpha1: 0, drag: 4, rise: 2.5, wobble: 1,
+      });
+    }
+  }
+
+  // A line of fine bubbles left hanging in the water along a projectile's path, slowly loosening and rising.
+  bubbleStreak(pos, dir, scale = 1) {
+    if (pos.y > SURFACE_Y) return;
+    for (let i = 0; i < 4; i++) {
+      const back = rand(0, 0.4) * scale;
+      this.bubbles.emit({
+        pos: { x: pos.x - dir.x * back + rand(-0.03, 0.03) * scale, y: pos.y - dir.y * back + rand(-0.03, 0.03) * scale,
+          z: pos.z ?? 0 },
+        vel: { x: -dir.x * rand(0.2, 0.8) + rand(-0.1, 0.1), y: -dir.y * rand(0.2, 0.8) + rand(-0.05, 0.1) },
+        life: rand(1.1, 1.9), size: rand(0.07, 0.13) * scale, size1: rand(0.1, 0.17) * scale, alpha: 1, alpha1: 0,
+        drag: 2.5, rise: 0.9, wobble: 0.5,
       });
     }
   }
