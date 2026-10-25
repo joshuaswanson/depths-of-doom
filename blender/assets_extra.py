@@ -53,7 +53,7 @@ def wreck_sub(P):
     jagged_rim(front, P["wreck_hull"], b, brk_front, 1, rng)
     crust(front, P, b, (-4.0, -0.6), rng)
     for theta in (math.radians(12), math.radians(168)):
-        skull(front, P, b.frame(-1.6, theta, lift=0.02), size=1.6)
+        skull(front, P, b.frame(-1.6, theta, lift=0.02), size=2.3)
     tx = -1.4
     front.cylinder(P["wreck_hull"], loc=(tx, 0, b.r(tx) + 0.45), radius=0.7, depth=1.3, scale=(1.4, 0.8, 1),
                    rot=(0.12, 0.1, 0), segs=28, bevel=0.08)

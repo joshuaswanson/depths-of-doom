@@ -13,7 +13,7 @@ def skull(part, P, matrix, size=1.0):
 
     for a in (0.75, -0.75):
         part.cylinder(P["skull"], matrix=m((0, -0.08, 0.0), (0, 0, a)) @ trs(rot=(0, math.pi / 2, 0)),
-                      radius=0.045 * size, depth=0.75 * size, segs=12)
+                      radius=0.045, depth=0.75, segs=12)
         for s in (-1, 1):
             end = (s * 0.37 * math.cos(a), s * 0.37 * math.sin(a), 0.0)
             for o in (-1, 1):
@@ -21,13 +21,12 @@ def skull(part, P, matrix, size=1.0):
                 part.sphere(P["skull"], matrix=m((end[0] + off[0], end[1] + off[1], 0), scale=(0.06, 0.06, 0.06)),
                             segs=10, rings=8)
     part.sphere(P["skull"], matrix=m((0, 0.06, 0.05), scale=(0.25, 0.23, 0.12)), segs=24, rings=14)
-    part.box(P["skull"], matrix=m((0, -0.14, 0.05)), size=(0.26 * size, 0.14 * size, 0.18 * size), bevel=0.04 * size)
+    part.box(P["skull"], matrix=m((0, -0.14, 0.05)), size=(0.26, 0.14, 0.18), bevel=0.04 * size)
     for x in (-0.09, 0.09):
         part.sphere(P["black"], matrix=m((x, 0.04, 0.15), scale=(0.07, 0.075, 0.03)), segs=14, rings=8)
-    part.extrude(P["black"], [(-0.03, -0.06), (0.03, -0.06), (0, 0.0)], depth=0.05 * size,
-                 matrix=m((0, 0, 0.15)), scale=(size, size, 1))
+    part.extrude(P["black"], [(-0.03, -0.06), (0.03, -0.06), (0, 0.0)], depth=0.05, matrix=m((0, 0, 0.15)))
     for x in (-0.06, 0.0, 0.06):
-        part.box(P["black"], matrix=m((x, -0.15, 0.14)), size=(0.012 * size, 0.08 * size, 0.02 * size), bevel=0)
+        part.box(P["black"], matrix=m((x, -0.15, 0.14)), size=(0.012, 0.08, 0.02), bevel=0)
 
 
 def enemy_tail(part, P, body, x_join, x_end, r_join, accent="enemy_red"):
@@ -70,11 +69,11 @@ def enemy_sub(P, name="enemy_sub", length=3.4, radius=0.85, tower=True, skull_ma
 
     for mirror in (False, True):
         side = (lambda a: math.pi - a) if mirror else (lambda a: a)
-        hatch = b.frame(h * 0.28, side(math.radians(10)))
+        hatch = b.frame(h * 0.62, side(math.radians(8)))
         part.box(P["enemy_red"], matrix=hatch @ trs((0, 0, 0.02)), size=(0.32 * radius, 0.32 * radius, 0.08),
                  bevel=0.03)
         part.sphere(P["gunmetal"], matrix=hatch @ trs((0, 0, 0.07), scale=(0.05, 0.05, 0.03)), segs=10, rings=6)
-        for x in (-h * 0.05, h * 0.62):
+        for x in (-h * 0.5, h * 0.72):
             red_light(part, P, b.frame(x, side(math.radians(-25))), radius=0.06 * radius / 0.85)
 
     if tower:
@@ -98,8 +97,8 @@ def enemy_sub(P, name="enemy_sub", length=3.4, radius=0.85, tower=True, skull_ma
                       rot=(0, math.pi / 2, 0))
 
     marks = Part()
-    for theta in (math.radians(12), math.radians(168)):
-        skull(marks, P, b.frame(h * 0.18, theta, lift=0.02, up=(0, 0, 1)), size=radius * 0.95)
+    for theta in (math.radians(14), math.radians(166)):
+        skull(marks, P, b.frame(h * 0.04, theta, lift=0.02, up=(0, 0, 1)), size=radius * 1.7)
     marks.build("skull_mark" if skull_mark else "skull_mark_optional", root)
 
     for i in range(spikes):

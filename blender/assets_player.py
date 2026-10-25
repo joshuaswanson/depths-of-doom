@@ -138,12 +138,16 @@ def player_hull(P):
         part.torus(P["brass"], matrix=tower_window, major=0.11, minor=0.03, segs=20, tube_segs=8)
         part.cylinder(P["glass"], matrix=tower_window, radius=0.095, depth=0.05, segs=16)
 
-    scope = [(0.05, 0, 1.45), (0.05, 0, 2.0), (0.08, 0, 2.12), (0.2, 0, 2.2), (0.32, 0, 2.22)]
-    part.tube(P["yellow"], scope, radius=0.085, segs=16)
-    part.cylinder(P["yellow"], loc=(0.42, 0, 2.22), radius=0.15, depth=0.26, rot=(0, math.pi / 2, 0), bevel=0.03)
-    part.torus(P["gunmetal"], loc=(0.56, 0, 2.22), major=0.12, minor=0.035, rot=(0, math.pi / 2, 0), segs=24)
-    part.cylinder(P["glass"], loc=(0.56, 0, 2.22), radius=0.11, depth=0.03, rot=(0, math.pi / 2, 0), segs=20)
-    part.torus(P["yellow_dark"], loc=(0.05, 0, 1.75), major=0.09, minor=0.025, segs=20)
+    def grow(x, z, k=1.4):
+        """Scale a periscope point up from where the periscope meets the tower."""
+        return (0.05 + (x - 0.05) * k, 0, 1.5 + (z - 1.5) * k)
+
+    scope = [grow(0.05, 1.45), grow(0.05, 2.0), grow(0.08, 2.12), grow(0.2, 2.2), grow(0.32, 2.22)]
+    part.tube(P["yellow"], scope, radius=0.12, segs=18)
+    part.cylinder(P["yellow"], loc=grow(0.42, 2.22), radius=0.21, depth=0.36, rot=(0, math.pi / 2, 0), bevel=0.04)
+    part.torus(P["gunmetal"], loc=grow(0.56, 2.22), major=0.17, minor=0.05, rot=(0, math.pi / 2, 0), segs=28)
+    part.cylinder(P["glass"], loc=grow(0.56, 2.22), radius=0.155, depth=0.04, rot=(0, math.pi / 2, 0), segs=24)
+    part.torus(P["yellow_dark"], loc=grow(0.05, 1.75), major=0.125, minor=0.035, segs=24)
 
     part.build("hull_body", root)
     propeller(P, "propeller", root, (-2.82, 0, 0), size=1.2)
