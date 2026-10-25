@@ -9,7 +9,8 @@ const MODEL_NAMES = [
   'part_thruster', 'part_spotlight', 'junk_crate', 'junk_ammo', 'junk_toolbox', 'junk_canister', 'junk_barrel', 'junk_duck',
   'proj_torpedo', 'proj_missile', 'proj_player_missile', 'pickup_coin', 'enemy_scout', 'enemy_gunner', 'enemy_boss',
   'mine', 'ruin_pillar_a', 'ruin_pillar_b', 'ruin_arch', 'ruin_wall', 'ruin_pier', 'ruin_tower', 'anchor', 'chain',
-  'seaweed_a', 'seaweed_b', 'coral_pink', 'coral_orange', 'coral_brain', 'rock_a', 'rock_b', 'deep_jelly',
+  'coral_brain', 'rock_a', 'rock_b', 'deep_jelly', 'kelp_tall', 'kelp_short', 'coral_staghorn', 'coral_fan',
+  'coral_table', 'sponge_cluster', 'anemone_patch', 'reef_small', 'reef_large',
   'anglerfish', 'wreck_sub',
 ];
 

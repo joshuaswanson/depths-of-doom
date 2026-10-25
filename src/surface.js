@@ -13,8 +13,9 @@ const PROFILE_BY_MATERIAL = {
   rock: ['rock'],
   rust: ['rust', 'rust_patch'],
   enemy_old: ['wreck_hull', 'wreck_red'],
-  coral: ['coral_pink', 'coral_purple', 'coral_orange'],
-  weed: ['seaweed', 'seaweed_dark'],
+  coral: ['coral_pink', 'coral_purple', 'coral_orange', 'coral_yellow', 'coral_teal', 'coral_red', 'sponge_orange',
+    'sponge_purple'],
+  weed: ['kelp_stipe', 'kelp_blade', 'kelp_bladder'],
   angler: ['angler_belly', 'angler_fin', 'angler_spine'],
 };
 
@@ -227,6 +228,30 @@ function addSway(material) {
   material.needsUpdate = true;
 }
 
+// Kelp and anemone tentacles bend in the current: still at the root, swaying more with height.
+const CURRENT_MATERIALS = new Set(['kelp_stipe', 'kelp_blade', 'kelp_bladder', 'anemone_tentacle', 'anemone_tip']);
+const CURRENT_GLSL = /* glsl */ `
+  float curH = max( transformed.y, 0.0 );
+  float curSeed = modelMatrix[ 3 ].x * 0.31 + modelMatrix[ 3 ].z * 0.17;
+  float curBend = pow( curH, 1.25 );
+  transformed.x += sin( uTime * 0.9 + curSeed + curH * 0.35 ) * 0.07 * curBend;
+  transformed.z += cos( uTime * 0.7 + curSeed * 1.7 + curH * 0.3 ) * 0.04 * curBend;
+`;
+
+function addCurrent(material) {
+  const previous = material.onBeforeCompile;
+  const key = material.customProgramCacheKey?.() ?? material.name;
+  material.onBeforeCompile = (shader, renderer) => {
+    previous.call(material, shader, renderer);
+    shader.uniforms.uTime = SHADER_TIME;
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nuniform float uTime;')
+      .replace('#include <begin_vertex>', `#include <begin_vertex>\n${CURRENT_GLSL}`);
+  };
+  material.customProgramCacheKey = () => `${key}-current`;
+  material.needsUpdate = true;
+}
+
 const replaced = new Map();
 const swaying = new WeakSet();
 
@@ -249,6 +274,10 @@ export function applySurfaceDetail(root) {
     }
     if (SWAY_MATERIALS.has(name) && !swaying.has(o.material)) {
       addSway(o.material);
+      swaying.add(o.material);
+    }
+    if (CURRENT_MATERIALS.has(name) && !swaying.has(o.material)) {
+      addCurrent(o.material);
       swaying.add(o.material);
     }
   });

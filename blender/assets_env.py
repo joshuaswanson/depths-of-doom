@@ -180,57 +180,6 @@ def chain(P):
     return root
 
 
-def seaweed(P, name, seed, strands=4, height=3.5):
-    rng = random.Random(seed)
-    root = empty(name)
-    part = Part()
-    for s in range(strands):
-        h = height * rng.uniform(0.6, 1.0)
-        bx, by = rng.uniform(-0.35, 0.35), rng.uniform(-0.2, 0.2)
-        phase = rng.uniform(0, 6.28)
-        pts = [(bx + 0.18 * math.sin(phase + t * 5.0) * t, by, h * t) for t in (i / 14 for i in range(15))]
-        mat = P["seaweed"] if s % 2 == 0 else P["seaweed_dark"]
-        part.tube(mat, pts, radius=lambda t: 0.16 * (1 - t) ** 0.6 + 0.02, segs=8,
-                  matrix=trs((bx, by, 0), scale=(1, 0.35, 1)) @ trs((-bx, -by, 0)))
-    part.build(f"{name}_mesh", root)
-    return root
-
-
-def seaweed_a(P):
-    return seaweed(P, "seaweed_a", 1, strands=4, height=3.6)
-
-
-def seaweed_b(P):
-    return seaweed(P, "seaweed_b", 2, strands=6, height=2.4)
-
-
-def coral_branch(P, name="coral_branch", mat="coral_pink", seed=5):
-    rng = random.Random(seed)
-    root = empty(name)
-    part = Part()
-
-    def grow(start, direction, length, radius, depth):
-        end = start + direction * length
-        part.tube(P[mat], [start, (start + end) / 2, end], radius=lambda t: radius * (1 - 0.3 * t), segs=10)
-        part.sphere(P[mat], loc=end, scale=radius * 0.75, segs=10, rings=8)
-        if depth > 0:
-            for _ in range(3):
-                d = (direction + Vector((rng.uniform(-1.3, 1.3), rng.uniform(-0.4, 0.4), rng.uniform(0.0, 0.5))))
-                grow(end, d.normalized(), length * 0.72, radius * 0.72, depth - 1)
-
-    grow(Vector((0, 0, 0)), Vector((0, 0, 1)), 0.4, 0.11, 3)
-    part.build(f"{name}_mesh", root)
-    return root
-
-
-def coral_pink(P):
-    return coral_branch(P, "coral_pink", "coral_pink", 5)
-
-
-def coral_orange(P):
-    return coral_branch(P, "coral_orange", "coral_orange", 9)
-
-
 def coral_brain(P):
     root = empty("coral_brain")
     part = Part()
@@ -261,4 +210,4 @@ def rock_b(P):
 
 
 ENV_ASSETS = ("ruin_pillar_a", "ruin_pillar_b", "ruin_arch", "ruin_wall", "ruin_pier", "ruin_tower", "anchor",
-              "chain", "seaweed_a", "seaweed_b", "coral_pink", "coral_orange", "coral_brain", "rock_a", "rock_b")
+              "chain", "coral_brain", "rock_a", "rock_b")

@@ -28,13 +28,47 @@ export function floorY(x) {
   return SHELF_Y + (ABYSS_Y - SHELF_Y) * stepped + ledges;
 }
 
+// Reef mounds: one per stretch of shelf, placed and sized by a hash of the stretch so they never move.
+const MOUND_CELL = 24;
+const MOUND_Z = -10;
+
+function hash(n, k = 0) {
+  const s = Math.sin(n * 127.1 + k * 311.7) * 43758.5453;
+  return s - Math.floor(s);
+}
+
+export function moundOf(cell) {
+  return {
+    cell,
+    x: cell * MOUND_CELL + MOUND_CELL * (0.2 + 0.6 * hash(cell, 1)),
+    height: 3.0 + 3.5 * hash(cell, 2),
+    width: 4.5 + 3.5 * hash(cell, 3),
+    reef: hash(cell, 4) < 0.72,
+  };
+}
+
+function moundHeight(x, z) {
+  const cell = Math.floor(x / MOUND_CELL);
+  let h = 0;
+  for (let c = cell - 1; c <= cell + 1; c++) {
+    const m = moundOf(c);
+    if (!m.reef) continue;
+    const dx = (x - m.x) / m.width;
+    const dz = (z - MOUND_Z) / 6.5;
+    const ridge = 0.25 * Math.sin(x * 1.3 + c) * Math.exp(-dx * dx * 2);
+    h += (m.height + ridge) * Math.exp(-dx * dx - dz * dz);
+  }
+  return h;
+}
+
 function detailHeight(x, z) {
   const depth = Math.max(0, -z - 4);
   let h = 0.35 * Math.sin(x * 0.157 + z * 0.21) + 0.25 * Math.sin(x * 0.39 - z * 0.37 + 1.3)
     + 0.12 * Math.sin(x * 0.86 + z * 0.9);
   h *= 1 + depth * 0.03;
   if (z > 4) h += (z - 4) * 0.12;
-  return h;
+  const shelf = 1 - THREE.MathUtils.smoothstep(SHELF_Y - floorY(x), 2, 10);
+  return h + moundHeight(x, z) * shelf;
 }
 
 export function seabedAt(x, z = 0) {
@@ -53,19 +87,19 @@ const LAYERS = [
     deep: ['rock_a', 'rock_b', 'ruin_pillar_b', 'anchor', 'ruin_wall'],
   },
   {
-    z: [-16, -2], gap: [2.2, 5], scale: [0.8, 1.4],
-    props: ['seaweed_a', 'seaweed_b', 'coral_pink', 'coral_orange', 'coral_brain', 'rock_a', 'rock_b', 'ruin_pillar_b',
-      'anchor', 'seaweed_a', 'ruin_wall', 'seaweed_b'],
+    z: [-16, -2], gap: [7, 14], scale: [0.85, 1.35],
+    props: ['ruin_pillar_b', 'rock_b', 'anchor', 'rock_a', 'ruin_wall'],
     deep: ['rock_a', 'rock_b', 'coral_brain', 'anchor', 'rock_b'],
   },
   {
     z: [9, 13], gap: [5, 10], scale: [1.0, 1.5], tint: ['#0b2a3f', 0.6],
-    props: ['coral_pink', 'coral_brain', 'seaweed_b', 'coral_orange', 'coral_pink'],
+    props: ['kelp_short', 'coral_fan', 'coral_staghorn', 'sponge_cluster', 'kelp_short', 'coral_brain'],
     deep: ['rock_b', 'coral_brain'],
   },
 ];
 
 const CHAIN_Z = [-70, -26];
+const CORALS = ['coral_staghorn', 'coral_fan', 'coral_table', 'sponge_cluster', 'anemone_patch', 'coral_brain'];
 // Fixed resting places for sunken enemy subs: one on the sunlit shelf near the start, one on a trench floor.
 const WRECKS = [{ x: -48, z: -16, yaw: 0.5, roll: 0.18 }, { x: 236, z: -12, yaw: -0.4, roll: -0.12 }];
 
@@ -186,6 +220,7 @@ function makeWaterline() {
 }
 
 const SHALLOW_COLORS = ['#1d5a55', '#2c7a60', '#4a9068', '#17474a'].map((c) => new THREE.Color(c));
+const RUBBLE = new THREE.Color('#5b6e6a');
 const DEEP_COLORS = ['#1a2430', '#252f3d', '#2d3644', '#151b26'].map((c) => new THREE.Color(c));
 
 function makeSeabedTile(material) {
@@ -220,6 +255,8 @@ function shapeTile(tile, x0) {
     c.lerp(SHALLOW_COLORS[3], Math.max(0, Math.sin(x * 0.31 - z * 0.5)) * 0.4);
     d.copy(DEEP_COLORS[0]).lerp(DEEP_COLORS[1], n).lerp(DEEP_COLORS[2], m * 0.4);
     c.lerp(d, THREE.MathUtils.smoothstep(-y, 18, 45));
+    const raised = moundHeight(x, z) * (1 - THREE.MathUtils.smoothstep(SHELF_Y - floorY(x), 2, 10));
+    c.lerp(RUBBLE, THREE.MathUtils.smoothstep(raised, 0.4, 2.0) * 0.6);
     col.setXYZ(i, c.r, c.g, c.b);
   }
   pos.needsUpdate = true;
@@ -428,6 +465,7 @@ export class World {
 
     this.props = [];
     for (const layer of LAYERS) this.populate(layer);
+    this.clusters = new Map();
     this.chains = [];
     for (let x = -70; x < 70; x += rand(10, 22)) this.spawnChain(x);
     this.makeFish();
@@ -470,7 +508,6 @@ export class World {
       if (layer.tint) tint(prop.obj, layer.tint[0], layer.tint[1]);
       else if (deep) tint(prop.obj, '#1c2233', 0.45);
       prop.obj.scale.setScalar(rand(layer.scale[0], layer.scale[1]));
-      prop.obj.userData.sway = name.startsWith('seaweed') ? { phase: rand(0, 6), amp: rand(0.05, 0.12) } : null;
       prop.kind = want;
       this.scene.add(prop.obj);
     }
@@ -495,6 +532,69 @@ export class World {
   }
 
   // Chains hang from mooring buoys bobbing at the waterline.
+  // Reefs and kelp forests come in fixed clusters per stretch of seafloor, spawned as the stretch scrolls into view.
+  updateClusters(cx) {
+    const span = halfWidthAt(-16, this.aspect) + MOUND_CELL;
+    const lo = Math.floor((cx - span) / MOUND_CELL);
+    const hi = Math.floor((cx + span) / MOUND_CELL);
+    for (const [cell, objs] of this.clusters) {
+      if (cell >= lo && cell <= hi) continue;
+      for (const o of objs) this.scene.remove(o);
+      this.clusters.delete(cell);
+    }
+    for (let cell = lo; cell <= hi; cell++) {
+      if (!this.clusters.has(cell)) this.clusters.set(cell, this.buildCluster(moundOf(cell)));
+    }
+  }
+
+  buildCluster(m) {
+    let seed = m.cell * 9.13 + 1;
+    const r = () => {
+      seed += 1;
+      return hash(seed, 7);
+    };
+    const objs = [];
+    const place = (name, x, z, scale) => {
+      const obj = spawn(name);
+      obj.scale.setScalar(scale);
+      obj.position.set(x, seabedAt(x, z) - 0.2, z);
+      obj.rotation.y = r() * Math.PI * 2;
+      this.scene.add(obj);
+      objs.push(obj);
+    };
+    const deep = floorY(m.x) < SHELF_Y - 6;
+    if (deep) {
+      for (let i = 0; i < 2; i++) place(r() < 0.5 ? 'rock_a' : 'rock_b', m.x + (r() - 0.5) * 8, -6 - r() * 8, 0.8 + r() * 0.6);
+      return objs;
+    }
+    if (m.reef) {
+      place('reef_large', m.x, MOUND_Z, 1.5 + r() * 0.5);
+      for (let i = 0; i < 4; i++) {
+        place(r() < 0.5 ? 'reef_small' : 'reef_large', m.x + (r() - 0.5) * m.width * 1.4, MOUND_Z + 1 + (r() - 0.5) * 5,
+          1.1 + r() * 0.5);
+      }
+      const corals = 10 + Math.floor(r() * 6);
+      for (let i = 0; i < corals; i++) {
+        const a = r() * Math.PI * 2;
+        const d = Math.sqrt(r()) * m.width * 0.95;
+        place(CORALS[Math.floor(r() * CORALS.length)], m.x + Math.cos(a) * d, MOUND_Z + 1 + Math.sin(a) * d * 0.7,
+          1.0 + r() * 0.7);
+      }
+      for (let i = 0; i < 3; i++) {
+        const side = r() < 0.5 ? -1 : 1;
+        place(r() < 0.6 ? 'kelp_tall' : 'kelp_short', m.x + side * (m.width + r() * 3), MOUND_Z - 2 - r() * 5,
+          0.8 + r() * 0.4);
+      }
+    } else {
+      const stalks = 5 + Math.floor(r() * 4);
+      for (let i = 0; i < stalks; i++) {
+        place(r() < 0.65 ? 'kelp_tall' : 'kelp_short', m.x + (r() - 0.5) * 7, MOUND_Z + (r() - 0.5) * 8, 0.8 + r() * 0.5);
+      }
+      place(r() < 0.5 ? 'rock_a' : 'rock_b', m.x + (r() - 0.5) * 6, MOUND_Z, 0.7 + r() * 0.5);
+    }
+    return objs;
+  }
+
   spawnChain(x) {
     const group = new THREE.Group();
     const links = 7;
@@ -573,12 +673,8 @@ export class World {
       const half = prop.layer.half;
       const x = prop.obj.position.x;
       if (x < cx - half || x > cx + half) this.placeProp(prop, wrap(x, cx, half));
-      const s = prop.obj.userData.sway;
-      if (s) {
-        prop.obj.rotation.z = Math.sin(t * 1.3 + s.phase) * s.amp;
-        prop.obj.rotation.x = Math.sin(t * 0.9 + s.phase * 1.7) * s.amp * 0.6;
-      }
     }
+    this.updateClusters(cx);
 
     for (const chain of this.chains) {
       chain.rotation.z = Math.sin(t * 0.4 + chain.userData.swing) * 0.03;
