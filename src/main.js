@@ -188,7 +188,7 @@ function frame() {
   player.setDarkness(world.dark);
   if (state === 'playing' || state === 'gameover') {
     hud.update({ player, coins: game.coins, wave: game.wave, boss: game.boss, unlimited: game.unlimited });
-    hud.drawRadar(player, game.radarEnemies(), game.radarRange, game.radarSweep);
+    hud.drawRadar(player, game.radarEnemies(), game.radarRange, game.radarSweep, game.radarCoins());
   }
   composer.render();
 }

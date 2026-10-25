@@ -122,11 +122,11 @@ def angler_body_shape(p):
 
 
 def angler_jaw_shape(p):
-    x, y, z = p.x * 0.6 + 0.5, p.y * 0.68, p.z * 0.24
+    x, y, z = p.x * 0.58 + 0.38, p.y * 0.48, p.z * 0.22
     if z > 0:
         z *= 0.35
     z += 0.13 * smooth(x, 0.72, 1.12)
-    y *= 1 - 0.25 * smooth(x, 0.8, 1.1)
+    y *= 1 - 0.3 * smooth(x, 0.65, 0.96)
     out = Vector((x, y, z))
     return out + out.normalized() * 0.012 * noise.noise(out * 9.0)
 
@@ -181,18 +181,18 @@ def anglerfish(P):
             body.tube(P["angler_mouth"], gill, radius=0.016, segs=6)
         fin_fan(body, P, (0.0, 0.0), (2.0, 3.7), 0.6, 7, trs((-0.08, side * 0.6, -0.12), (side * 1.25, 0, 0.15)))
         fin_fan(body, P, (0.0, 0.0), (3.4, 4.4), 0.3, 4, trs((0.05, side * 0.32, -0.48), (side * 1.4, 0, 0)))
-    fin_fan(body, P, (0.0, 0.0), (0.3, 2.85), 0.75, 11, trs((-1.5, 0, 0.0), (math.pi / 2, 0, math.pi)))
+    fin_fan(body, P, (0.0, 0.0), (math.pi - 1.0, math.pi + 1.0), 0.7, 11, trs((-1.5, 0, 0.0), (math.pi / 2, 0, 0)))
     fin_fan(body, P, (0.0, 0.0), (1.4, 2.4), 0.45, 7, trs((-0.55, 0, 0.52), (math.pi / 2, 0, -0.2)))
     body.sphere(skin, loc=(0.42, 0, 0.68), scale=(0.1, 0.08, 0.07), segs=12, rings=8)
     body.build("angler_body", root)
 
-    jaw = empty("jaw", root, (0.22, 0, -0.27))
+    jaw = empty("jaw", root, (0.2, 0, -0.24))
     j = Part()
     sculpt(j, angler_jaw_shape, lambda c, n: mouth if n.z > 0.55 and c.x < 0.98 else skin, subdiv=4)
     for i in range(17):
         t = -1 + 2 * i / 16
         a = t * 1.1
-        base = (0.56 + 0.5 * math.cos(a), 0.6 * math.sin(a) * 0.85, 0.08 + 0.1 * smooth(math.cos(a), 0.6, 1.0))
+        base = (0.42 + 0.5 * math.cos(a), 0.42 * math.sin(a), 0.06 + 0.1 * smooth(math.cos(a), 0.6, 1.0))
         length = rng.uniform(0.22, 0.42) if i % 2 == 0 else rng.uniform(0.12, 0.2)
         fang(j, P["tooth"], base, (0.35 * math.cos(a), 0.3 * math.sin(a), 1.0), length, -0.3, rng)
     j.build("jaw_mesh", jaw)

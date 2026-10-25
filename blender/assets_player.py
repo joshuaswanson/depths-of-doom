@@ -33,11 +33,26 @@ def rivet_ring(part, material, body, x, count=22, size=0.032):
 
 
 def porthole(part, P, body, x, theta, radius=0.17):
-    m = body.frame(x, theta)
-    part.torus(P["brass"], matrix=m, major=radius, minor=radius * 0.24, segs=28, tube_segs=10)
-    part.cylinder(P["glass"], matrix=m, radius=radius * 0.85, depth=0.06, segs=24)
-    part.sphere(P["eye_shine"], matrix=m @ trs((-radius * 0.35, radius * 0.35, 0.03), scale=(0.035, 0.035, 0.01)),
-                segs=8, rings=6)
+    porthole_at(part, P, body.frame(x, theta), radius)
+
+
+def porthole_at(part, P, m, radius=0.17):
+    """A small cousin of the nose viewport: dark rim, bolted brass ring, and bulging glass over a dim cabin."""
+    part.cylinder(P["cockpit"], matrix=m @ trs((0, 0, -0.01)), radius=radius * 0.82, depth=0.04, segs=24)
+    part.sphere(P["dial_amber"], matrix=m @ trs((radius * 0.3, -radius * 0.3, 0.012), scale=radius * 0.1), segs=8,
+                rings=6)
+    part.torus(P["gunmetal"], matrix=m @ trs((0, 0, 0.03)), major=radius, minor=radius * 0.26, segs=28, tube_segs=10)
+    part.torus(P["brass"], matrix=m @ trs((0, 0, 0.05)), major=radius * 0.8, minor=radius * 0.08, segs=28,
+               tube_segs=8)
+    for i in range(8):
+        a = 2 * math.pi * (i + 0.5) / 8
+        part.sphere(P["brass"], matrix=m @ trs((radius * math.cos(a), radius * math.sin(a), 0.06),
+                                               scale=radius * 0.1), segs=8, rings=6)
+    dome = [(radius * 0.5 * math.sqrt(max(0.0, 1 - (i / 8) ** 2)), radius * 0.8 * i / 8) for i in range(9)]
+    part.lathe(P["viewport_glass"], sorted(dome), matrix=m @ trs((0, 0, 0.04)) @ trs(rot=(0, -math.pi / 2, 0)),
+               segs=24, caps=False)
+    part.sphere(P["eye_shine"], matrix=m @ trs((-radius * 0.28, radius * 0.3, 0.04 + radius * 0.38),
+                                               scale=(radius * 0.18, radius * 0.08, 0.008)), segs=8, rings=6)
 
 
 def viewport_x(body, sign=1, fraction=0.5):
@@ -134,20 +149,36 @@ def player_hull(P):
     part.sphere(P["yellow"], loc=(0.25, 0, 1.5), scale=(0.55, 0.36, 0.16), segs=32, rings=12)
     part.torus(P["yellow_dark"], loc=(0.25, 0, 1.5), major=0.42, minor=0.03, scale=(1.3, 0.85, 1), segs=40)
     for side in (-1, 1):
-        tower_window = frame(Vector((0.5, 0.31 * side, 0.98)), Vector((0.35, side, 0)))
-        part.torus(P["brass"], matrix=tower_window, major=0.11, minor=0.03, segs=20, tube_segs=8)
-        part.cylinder(P["glass"], matrix=tower_window, radius=0.095, depth=0.05, segs=16)
+        porthole_at(part, P, frame(Vector((0.25, 0.355 * side, 0.99)), Vector((0, side, 0))), radius=0.105)
 
     def grow(x, z, k=1.4):
-        """Scale a periscope point up from where the periscope meets the tower."""
-        return (0.05 + (x - 0.05) * k, 0, 1.5 + (z - 1.5) * k)
+        """Scale a periscope point up from where the periscope meets the front of the tower."""
+        return (0.5 + (x - 0.5) * k, 0, 1.5 + (z - 1.5) * k)
 
-    scope = [grow(0.05, 1.45), grow(0.05, 2.0), grow(0.08, 2.12), grow(0.2, 2.2), grow(0.32, 2.22)]
+    scope = [grow(0.5, 1.45), grow(0.5, 1.72), grow(0.53, 1.84), grow(0.65, 1.92), grow(0.77, 1.94)]
     part.tube(P["yellow"], scope, radius=0.12, segs=18)
-    part.cylinder(P["yellow"], loc=grow(0.42, 2.22), radius=0.21, depth=0.36, rot=(0, math.pi / 2, 0), bevel=0.04)
-    part.torus(P["gunmetal"], loc=grow(0.56, 2.22), major=0.17, minor=0.05, rot=(0, math.pi / 2, 0), segs=28)
-    part.cylinder(P["glass"], loc=grow(0.56, 2.22), radius=0.155, depth=0.04, rot=(0, math.pi / 2, 0), segs=24)
-    part.torus(P["yellow_dark"], loc=grow(0.05, 1.75), major=0.125, minor=0.035, segs=24)
+    part.cylinder(P["yellow"], loc=grow(0.87, 1.94), radius=0.21, depth=0.36, rot=(0, math.pi / 2, 0), bevel=0.04)
+    part.torus(P["gunmetal"], loc=grow(1.01, 1.94), major=0.17, minor=0.05, rot=(0, math.pi / 2, 0), segs=28)
+    part.cylinder(P["glass"], loc=grow(1.01, 1.94), radius=0.155, depth=0.04, rot=(0, math.pi / 2, 0), segs=24)
+    part.torus(P["yellow_dark"], loc=grow(0.5, 1.6), major=0.125, minor=0.035, segs=24)
+
+    for a in (45, 135, -45, -135, -90):
+        theta = math.radians(a)
+        seam = [b.point(x, theta, lift=0.008) for x in [-0.86 + 1.72 * i / 23 for i in range(24)]]
+        part.tube(P["yellow_dark"], seam, radius=0.013, segs=6)
+        for i in range(10):
+            x = -0.8 + 1.6 * i / 9
+            part.sphere(P["yellow_dark"], matrix=b.frame(x, theta + 0.06) @ trs(scale=(0.024, 0.024, 0.017)),
+                        segs=8, rings=6)
+    plates = [(-0.75, 38, "yellow_dark"), (0.72, -52, "steel"), (-0.25, -62, "yellow_dark"), (0.9, 46, "steel"),
+              (-0.6, 150, "yellow_dark"), (0.55, 205, "steel"), (0.1, 128, "yellow_dark"), (-0.85, 228, "steel")]
+    for x, a, color in plates:
+        f = b.frame(x, math.radians(a), lift=0.012)
+        part.box(P[color], matrix=f, size=(0.34, 0.24, 0.03), bevel=0.012)
+        for sx in (-1, 1):
+            for sy in (-1, 1):
+                part.sphere(P["brass"], matrix=f @ trs((sx * 0.13, sy * 0.085, 0.02), scale=(0.022, 0.022, 0.016)),
+                            segs=8, rings=6)
 
     part.build("hull_body", root)
     propeller(P, "propeller", root, (-2.82, 0, 0), size=1.2)

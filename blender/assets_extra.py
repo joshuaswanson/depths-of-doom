@@ -2,7 +2,9 @@
 import math
 import random
 
-from assets_enemies import skull
+from mathutils import Vector
+
+from assets_deep import sculpt as sculpt_shape, smooth
 from assets_player import propeller
 from body import Body
 from kit import Part, empty, trs
@@ -52,8 +54,6 @@ def wreck_sub(P):
                    rot=(0, math.pi / 2, 0), segs=40)
     jagged_rim(front, P["wreck_hull"], b, brk_front, 1, rng)
     crust(front, P, b, (-4.0, -0.6), rng)
-    for theta in (math.radians(12), math.radians(168)):
-        skull(front, P, b.frame(-1.6, theta, lift=0.02), size=2.3)
     tx = -1.4
     front.cylinder(P["wreck_hull"], loc=(tx, 0, b.r(tx) + 0.45), radius=0.7, depth=1.3, scale=(1.4, 0.8, 1),
                    rot=(0.12, 0.1, 0), segs=28, bevel=0.08)
@@ -93,27 +93,86 @@ def wreck_sub(P):
     return root
 
 
+def gull_body_shape(p):
+    """A plump gull: round chest, tapering rump, flattened keel so it sits on the water."""
+    x, y, z = p.x, p.y, p.z
+    taper = 1 - 0.55 * smooth(-x, 0.0, 1.0)
+    x = x * 0.36 - 0.02
+    y *= 0.17 * taper
+    z = z * 0.16 * taper
+    if z < -0.06:
+        z = -0.06 + (z + 0.06) * 0.5
+    z += 0.13 + 0.03 * smooth(x, 0.0, 0.3)
+    return Vector((x, y, z))
+
+
+def gull_head_shape(p):
+    x, y, z = p.x * 0.12, p.y * 0.098, p.z * 0.105
+    x += 0.025 * smooth(p.x, 0.2, 1.0)
+    return Vector((x + 0.27, y, z + 0.3))
+
+
+def feather(part, material, base, direction, length, width, matrix, tip=None, tip_len=0.0):
+    """A long tapered feather lying flat in the wing plane."""
+    d = Vector((direction[0], direction[1], 0)).normalized()
+    n = Vector((-d.y, d.x, 0))
+    b = Vector((base[0], base[1], 0))
+    outline = [b + n * width * 0.5, b + d * length * 0.7 + n * width * 0.45, b + d * length,
+               b + d * length * 0.7 - n * width * 0.45, b - n * width * 0.5]
+    part.extrude(material, [(v.x, v.y) for v in outline], depth=0.008, matrix=matrix)
+    if tip is not None:
+        t0 = b + d * (length - tip_len)
+        tip_outline = [t0 + n * width * 0.42, b + d * length, t0 - n * width * 0.42]
+        part.extrude(tip, [(v.x, v.y) for v in tip_outline], depth=0.012, matrix=matrix)
+
+
+def gull_wing(part, P, side):
+    """Wing spreading along +Y (left) or -Y (right): a grey arm, white trailing edge, black-tipped primaries."""
+    m = trs(scale=(1, side, 1))
+    arm = [(0.08, 0.0), (0.07, 0.18), (0.03, 0.36), (-0.06, 0.42), (-0.12, 0.3), (-0.13, 0.12), (-0.11, 0.0)]
+    part.extrude(P["gull_gray"], arm, depth=0.03, matrix=m, bevel=0.01)
+    part.extrude(P["gull_white"], [(-0.11, 0.0), (-0.13, 0.12), (-0.12, 0.3), (-0.15, 0.28), (-0.16, 0.1),
+                                   (-0.14, 0.0)], depth=0.02, matrix=m)
+    for i in range(6):
+        a = 1.15 + i * 0.16
+        base = (0.0 - i * 0.015, 0.36 + i * 0.012)
+        feather(part, P["gull_gray"], base, (math.cos(a + 0.6) * 0.3, math.sin(a + 0.6)), 0.26 - i * 0.012, 0.05, m,
+                tip=P["black"], tip_len=0.11)
+        if i < 3:
+            part.sphere(P["gull_white"], matrix=m @ trs((base[0] - 0.02 + math.cos(a + 0.6) * 0.06,
+                                                         base[1] + 0.2 - i * 0.01, 0.009), scale=(0.012, 0.012, 0.004)),
+                        segs=6, rings=4)
+
+
 def seagull(P):
     root = empty("seagull")
     body = Part()
-    body.sphere(P["gull_white"], loc=(0, 0, 0.14), scale=(0.34, 0.17, 0.16), segs=20, rings=12)
-    body.sphere(P["gull_white"], loc=(0.27, 0, 0.29), scale=(0.12, 0.1, 0.11), segs=16, rings=10)
-    body.cylinder(P["beak"], loc=(0.42, 0, 0.27), radius=0.035, radius2=0.008, depth=0.16, rot=(0, math.pi / 2, 0),
-                  segs=10)
-    body.sphere(P["red"], loc=(0.44, 0, 0.255), scale=0.012, segs=6, rings=4)
+    white, grey = P["gull_white"], P["gull_gray"]
+    sculpt_shape(body, gull_body_shape, lambda c, n: grey if n.z > 0.45 and c.x < 0.08 else white, subdiv=4)
+    sculpt_shape(body, gull_head_shape, lambda c, n: white, subdiv=4)
+    beak = [(0.36, 0.0), (0.36, 0.028), (0.42, 0.022), (0.47, 0.012), (0.49, 0.0)]
+    body.lathe(P["beak"], beak, matrix=trs((0, 0, 0.288), scale=(1, 0.75, 1)), segs=14)
+    body.tube(P["beak"], [(0.47, 0, 0.297), (0.495, 0, 0.29), (0.5, 0, 0.276)], radius=lambda t: 0.009 * (1 - t) + 0.002,
+              segs=6)
+    body.sphere(P["red"], loc=(0.455, 0, 0.276), scale=(0.012, 0.014, 0.008), segs=8, rings=6)
     for side in (-1, 1):
-        body.sphere(P["black"], loc=(0.33, side * 0.075, 0.32), scale=0.016, segs=8, rings=6)
-        body.sphere(P["beak"], loc=(-0.02, side * 0.06, 0.0), scale=(0.05, 0.03, 0.02), segs=8, rings=6)
-    tail = [(0, -0.07), (-0.2, -0.1), (-0.22, 0.1), (0, 0.07)]
-    body.extrude(P["gull_gray"], tail, depth=0.02, loc=(-0.28, 0, 0.17), rot=(0, 0.2, 0))
+        eye = trs((0.33, side * 0.068, 0.322), (0, 0, side * 0.4))
+        body.sphere(P["black"], matrix=eye @ trs(scale=0.017), segs=10, rings=8)
+        body.torus(P["beak"], matrix=eye @ trs(rot=(math.pi / 2, 0, 0)), major=0.019, minor=0.004, segs=12, tube_segs=4)
+        body.sphere(P["eye_shine"], matrix=eye @ trs((0.006, side * 0.012, 0.006), scale=0.005), segs=6, rings=4)
+        body.tube(P["gull_leg"], [(-0.02, side * 0.05, 0.03), (-0.06, side * 0.055, -0.03)], radius=0.01, segs=6)
+        foot = [(0, 0), (0.05, 0.03), (0.06, 0.0), (0.05, -0.03)]
+        body.extrude(P["gull_leg"], [(x, y) for x, y in foot], depth=0.008, loc=(-0.07, side * 0.055, -0.035),
+                     rot=(0, 0.3, 0))
+    for k in range(5):
+        a = -0.4 + k * 0.2
+        feather(body, white, (-0.25, 0.0), (-math.cos(a), math.sin(a) * 0.6), 0.15, 0.055,
+                trs((0, 0, 0.14), (0, 0.12, 0)))
     body.build("gull_body", root)
 
-    wing = [(0.1, 0.0), (0.06, 0.32), (-0.08, 0.58), (-0.2, 0.62), (-0.2, 0.3), (-0.14, 0.0)]
-    tip = [(-0.08, 0.5), (-0.2, 0.62), (-0.2, 0.46)]
     for side, name in ((1, "wing_l"), (-1, "wing_r")):
-        pivot = empty(name, root, (0.02, side * 0.12, 0.22))
+        pivot = empty(name, root, (0.04, side * 0.13, 0.24))
         w = Part()
-        w.extrude(P["gull_gray"], [(x, y * side) for x, y in wing], depth=0.02, bevel=0.006)
-        w.extrude(P["black"], [(x, y * side) for x, y in tip], depth=0.025)
+        gull_wing(w, P, side)
         w.build(f"{name}_mesh", pivot)
     return root

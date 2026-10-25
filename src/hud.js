@@ -187,7 +187,7 @@ export class Hud {
     if (boss) this.bossFill.style.width = `${Math.max(0, boss.hp / boss.maxHp) * 100}%`;
   }
 
-  drawRadar(player, enemies, range, sweep) {
+  drawRadar(player, enemies, range, sweep, coins = []) {
     const g = this.radarCtx;
     const S = this.radar.width;
     const c = S / 2;
@@ -219,6 +219,15 @@ export class Hud {
     g.lineTo(c, c + R);
     g.stroke();
     const p = player.center;
+    g.fillStyle = '#ffd23a';
+    for (const coin of coins) {
+      const dx = (coin.x - p.x) / range;
+      const dy = (coin.y - p.y) / range;
+      if (dx * dx + dy * dy > 1) continue;
+      g.beginPath();
+      g.arc(c + dx * R, c - dy * R, 5, 0, Math.PI * 2);
+      g.fill();
+    }
     for (const e of enemies) {
       const dx = (e.x - p.x) / range;
       const dy = (e.y - p.y) / range;

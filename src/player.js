@@ -21,6 +21,14 @@ const CRUISE_BUILD = 0.32;
 const CRUISE_BOOST = 0.9;
 const RIG_SCALE = 0.82;
 const REGEN_DELAY = 5;
+// Portholes that bolted-on parts must leave visible, as [x, angle around the hull, radius], plus how far toward the
+// nose viewport a part may sit.
+const KEEP_CLEAR = [[0.35, 4, 0.22], [-0.3, 4, 0.19], [0.35, 176, 0.22], [-0.3, 176, 0.19]];
+const NOSE_LIMIT = 1.35;
+const FOOTPRINT = {
+  cannon: 0.42, torpedo: 0.5, missile: 0.42, shield: 0.28, grapple: 0.2, sonar: 0.2, propulsion: 0.32,
+  spotlight: 0.28, junk: 0.3,
+};
 const REGEN_RATE = 3;
 
 function hullRadius(x) {
@@ -163,7 +171,7 @@ export class Player {
     this.scorches = [];
     this.propeller = findNode(this.hull, 'propeller');
     this.duck = spawn('junk_duck');
-    this.duck.position.set(0.5, 1.58, 0.05);
+    this.duck.position.set(-0.05, 1.58, 0.05);
     this.duck.scale.setScalar(1.3);
     this.duck.visible = false;
     this.hull.add(this.duck);
@@ -274,7 +282,24 @@ export class Player {
     };
   }
 
+  // Slide a mount around the hull until its footprint leaves every porthole uncovered.
+  clearSocket(cat, x, angle) {
+    const r = FOOTPRINT[cat] ?? 0.3;
+    const sx = Math.min(x, NOSE_LIMIT);
+    const blocked = (a) => KEEP_CLEAR.some(([kx, ka, kr]) => {
+      const da = THREE.MathUtils.degToRad(((a - ka + 540) % 360) - 180);
+      return (sx - kx) ** 2 + (da * hullRadius(sx)) ** 2 < (r + kr) ** 2;
+    });
+    for (let step = 0; step <= 15; step++) {
+      for (const dir of [1, -1]) {
+        if (!blocked(angle + dir * step * 6)) return [sx, angle + dir * step * 6];
+      }
+    }
+    return [sx, angle];
+  }
+
   addPart(cat, model, x, angle, animate) {
+    [x, angle] = this.clearSocket(cat, x, angle);
     const pivot = new THREE.Group();
     const obj = spawn(model);
     pivot.add(obj);
@@ -471,7 +496,9 @@ export class Player {
     }
     p.y += this.vel.y * dt;
     const floor = bounds.bottom(p.x) + e.hy;
+    this.onFloor = p.y <= floor + 0.05;
     if (p.y < floor) {
+      this.impact = Math.max(this.impact ?? 0, -this.vel.y);
       p.y = floor;
       this.vel.y *= -0.2;
     }

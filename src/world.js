@@ -60,7 +60,7 @@ const LAYERS = [
     deep: ['rock_a', 'rock_b', 'coral_brain', 'anchor', 'rock_b'],
   },
   {
-    z: [9, 13], gap: [5, 10], scale: [1.0, 1.5], tint: ['#0b2a3f', 0.6], raise: 1.6,
+    z: [9, 13], gap: [5, 10], scale: [1.0, 1.5], tint: ['#0b2a3f', 0.6],
     props: ['coral_pink', 'coral_brain', 'seaweed_b', 'coral_orange', 'coral_pink'],
     deep: ['rock_b', 'coral_brain'],
   },
@@ -381,7 +381,7 @@ function makeAngler() {
   findNode(fish, 'lure_tip').add(halo);
   fish.userData = {
     halo, jaw: findNode(fish, 'jaw'), lure: findNode(fish, 'lure'), phase: rand(0, 6), dir: Math.random() < 0.5 ? -1 : 1,
-    speed: rand(0.6, 1.4), yaw: 0,
+    speed: rand(0.5, 0.9), yaw: 0,
   };
   return fish;
 }
@@ -446,7 +446,7 @@ export class World {
     });
     this.gulls = Array.from({ length: GULLS }, () => {
       const gull = spawn('seagull');
-      gull.scale.setScalar(1.6);
+      gull.scale.setScalar(2.0);
       gull.userData = {
         wings: [findNode(gull, 'wing_l'), findNode(gull, 'wing_r')], state: 'float', phase: rand(0, 6),
         vel: new THREE.Vector2(), dir: 1, timer: 0,
@@ -520,7 +520,13 @@ export class World {
       this.scene.add(prop.obj);
     }
     const z = rand(layer.z[0], layer.z[1]);
-    prop.obj.position.set(x, seabedAt(x, z) - 0.15 + (layer.raise ?? 0), z);
+    // Seat the prop at the lowest ground under its footprint so slopes never leave it hanging.
+    const half = 1.2 * prop.obj.scale.x;
+    let ground = Infinity;
+    for (let i = -2; i <= 2; i++) {
+      for (const dz of [-half, 0, half]) ground = Math.min(ground, seabedAt(x + (i * half) / 2, z + dz));
+    }
+    prop.obj.position.set(x, ground - 0.25, z);
     prop.obj.rotation.y = rand(-0.5, 0.5);
   }
 
@@ -648,19 +654,22 @@ export class World {
     }
     for (const a of this.anglers) {
       const u = a.userData;
+      const ahead = floorY(a.position.x + u.dir * 6);
+      if (ahead > ANGLER_FLOOR) u.dir *= -1;
       a.position.x += u.dir * u.speed * dt;
-      a.position.y += Math.sin(t * 0.6 + u.phase) * dt * 0.4;
-      if (Math.random() < dt * 0.05) u.dir *= -1;
-      u.yaw += ((u.dir > 0 ? 0 : -Math.PI) - u.yaw) * (1 - Math.exp(-dt * 1.2));
-      a.rotation.y = u.yaw;
-      a.rotation.z = Math.sin(t * 0.8 + u.phase) * 0.08;
-      u.jaw.rotation.z = -Math.max(0, Math.sin(t * 0.9 + u.phase)) * 0.45;
-      u.lure.rotation.z = Math.sin(t * 2.1 + u.phase) * 0.12;
-      u.halo.material.opacity = 0.6 + Math.sin(t * 3.3 + u.phase) * 0.25;
-      a.position.x = wrap(a.position.x, cx, 50);
       const floor = floorY(a.position.x);
-      if (a.position.y < floor + ANGLER_BAND[0] || a.position.y > floor + ANGLER_BAND[1]) {
-        a.position.y = floor + rand(ANGLER_BAND[0] + 1, ANGLER_BAND[1] - 1);
+      const cruise = floor + (ANGLER_BAND[0] + ANGLER_BAND[1]) / 2 + Math.sin(t * 0.25 + u.phase) * 3;
+      a.position.y += (cruise - a.position.y) * (1 - Math.exp(-dt * 0.4));
+      u.yaw += ((u.dir > 0 ? 0 : -Math.PI) - u.yaw) * (1 - Math.exp(-dt * 0.7));
+      a.rotation.y = u.yaw + Math.sin(t * 1.4 + u.phase) * 0.06;
+      a.rotation.z = Math.sin(t * 0.5 + u.phase) * 0.05;
+      u.jaw.rotation.z = -Math.max(0, Math.sin(t * 0.6 + u.phase)) * 0.28;
+      u.lure.rotation.z = Math.sin(t * 1.3 + u.phase) * 0.08;
+      u.halo.material.opacity = 0.6 + Math.sin(t * 2.4 + u.phase) * 0.2;
+      const wrapped = wrap(a.position.x, cx, 50);
+      if (Math.abs(wrapped - a.position.x) > 1) {
+        a.position.x = wrapped;
+        a.position.y = floorY(wrapped) + ANGLER_BAND[1] - 2;
       }
       a.visible = floor < ANGLER_FLOOR && this.dark > 0.5;
     }

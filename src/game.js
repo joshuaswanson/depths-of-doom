@@ -14,8 +14,59 @@ const ENEMY_YAW = {
   left: { swim: 0, idle: 0.75 },
   right: { swim: Math.PI, idle: Math.PI - 0.75 },
 };
-const SKULL_CHANCE = 0.4;
+const SKULL_CHANCE = 1 / 3;
 const HALO_SIZE = { scout: 1.3, gunner: 1.6, boss: 2.6 };
+const BAR_WIDTH = { scout: 1.4, gunner: 1.9, boss: 3.4 };
+const BAR_HEIGHT = 0.26;
+const BAR_LOW = new THREE.Color('#ff3b30');
+const BAR_MID = new THREE.Color('#ffc93a');
+const BAR_HIGH = new THREE.Color('#5dff6a');
+
+// A capsule health bar with a dark rim, glossy fill, quarter ticks, and a pale trail showing recent damage.
+function healthBar(type) {
+  const width = BAR_WIDTH[type];
+  const mat = new THREE.ShaderMaterial({
+    transparent: true,
+    depthTest: false,
+    uniforms: {
+      uFrac: { value: 1 }, uLag: { value: 1 }, uColor: { value: BAR_HIGH.clone() },
+      uSize: { value: new THREE.Vector2(width, BAR_HEIGHT) },
+    },
+    vertexShader: /* glsl */ `
+      varying vec2 vUv;
+      void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 ); }`,
+    fragmentShader: /* glsl */ `
+      uniform float uFrac, uLag;
+      uniform vec3 uColor;
+      uniform vec2 uSize;
+      varying vec2 vUv;
+      float capsule( vec2 p, vec2 extent ) {
+        vec2 q = abs( p ) - extent + extent.y;
+        return length( max( q, 0.0 ) ) + min( max( q.x, q.y ), 0.0 ) - extent.y;
+      }
+      void main() {
+        vec2 p = ( vUv - 0.5 ) * uSize;
+        float outer = capsule( p, uSize * 0.5 );
+        float inner = capsule( p, uSize * 0.5 - 0.045 );
+        float aa = fwidth( outer ) * 1.2;
+        float alpha = 1.0 - smoothstep( -aa, aa, outer );
+        vec3 col = mix( vec3( 0.17, 0.27, 0.4 ), vec3( 0.03, 0.06, 0.1 ), smoothstep( -0.025, -0.01, outer ) );
+        float inside = 1.0 - smoothstep( -aa, aa, inner );
+        float x = vUv.x;
+        vec3 track = vec3( 0.04, 0.07, 0.12 );
+        vec3 fill = mix( uColor * 0.7, uColor * 1.15, vUv.y );
+        fill += vec3( 0.35 ) * smoothstep( 0.62, 0.8, vUv.y ) * ( 1.0 - smoothstep( 0.8, 0.95, vUv.y ) );
+        float tick = step( 0.985, fract( x * 4.0 ) ) * step( x, 0.99 );
+        vec3 bar = x < uFrac ? fill * ( 1.0 - tick * 0.35 ) : ( x < uLag ? vec3( 0.95, 0.9, 0.8 ) : track );
+        col = mix( col, bar, inside );
+        gl_FragColor = vec4( col, alpha * 0.96 );
+      }`,
+  });
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(width, BAR_HEIGHT), mat);
+  mesh.renderOrder = 20;
+  mesh.visible = false;
+  return { group: mesh, mat, lag: 1 };
+}
 
 const haloTexture = (() => {
   const canvas = document.createElement('canvas');
@@ -50,6 +101,9 @@ const ENEMY_TOP = SURFACE_Y - 1.8;
 const enemyFloor = (x) => seabedAt(x) + 1.8;
 const DAMAGE = { missile: 12, ram: 15, mine: 22 };
 const GRAVITY = 20;
+const LOOSE_COIN_MAX = 10;
+const MINE_LANE = 2.6;
+const LOOSE_COIN_RANGE = 70;
 
 const ENEMY_TYPES = {
   scout: { model: 'enemy_scout', hp: 5, scale: 0.85, rx: 1.25, ry: 0.62, coins: 3, boom: 0.9, speed: 4.2 },
@@ -150,6 +204,7 @@ export class Game {
     this.queue = [];
     this.spawnTimer = 0;
     this.waveBreak = 2.0;
+    this.looseCoinTimer = 1;
     this.boss = null;
     this.over = false;
     this.overTimer = 0;
@@ -274,7 +329,8 @@ export class Game {
       const y = THREE.MathUtils.clamp(pc.y + rand(-4, 4), floor + 3, ENEMY_TOP);
       if (y - floor < 70) {
         anchor = { x, y: floor };
-        obj.position.set(x, y, obj.position.z);
+        // Moored mines hang a little behind or in front of the sub's lane so their chains never cut through it.
+        obj.position.set(x, y, (Math.random() < 0.7 ? -1 : 1) * MINE_LANE);
       }
     }
     this.scene.add(obj);
@@ -296,6 +352,11 @@ export class Game {
     if (e.muzzle && spec.type !== 'mine') {
       e.glow = viewportGlow(spec.type);
       e.muzzle.add(e.glow.group);
+    }
+    if (BAR_WIDTH[spec.type]) {
+      e.bar = healthBar(spec.type);
+      e.bar.group.position.y = type.ry * type.scale * 1.6 + 0.9;
+      obj.add(e.bar.group);
     }
     if (spec.type === 'boss') this.boss = e;
     this.enemies.push(e);
@@ -343,6 +404,30 @@ export class Game {
     }
     this.dropCoins(p, e.def.coins + (e.type === 'boss' ? this.wave * 6 : 0));
     this.scene.remove(e.obj);
+  }
+
+  // Loose treasure sprinkled through the sea, so there is always a little to spend between and during waves.
+  scatterCoins(dt) {
+    this.looseCoinTimer -= dt;
+    if (this.looseCoinTimer > 0) return;
+    this.looseCoinTimer = rand(2.5, 5);
+    const pc = this.player.center;
+    const nearby = this.coinsList.filter((c) => c.loose).length;
+    if (nearby >= LOOSE_COIN_MAX) return;
+    const angle = rand(0, Math.PI * 2);
+    const dist = Math.hypot(this.halfW, this.halfH) + rand(2, 14);
+    const x = pc.x + Math.cos(angle) * dist;
+    const y = THREE.MathUtils.clamp(pc.y + Math.sin(angle) * dist * 0.5, seabedAt(x) + 1.5, SURFACE_Y - 1.2);
+    const big = Math.random() < 0.15;
+    const count = big ? 1 : 1 + Math.floor(Math.random() * 3);
+    for (let i = 0; i < count; i++) {
+      const obj = spawn('pickup_coin');
+      obj.scale.setScalar(big ? 0.8 : 0.55);
+      obj.position.set(x + i * 0.9, y + Math.sin(i * 1.7) * 0.5, 0.3);
+      this.scene.add(obj);
+      this.coinsList.push({ obj, value: big ? 5 : 1, vx: 0, vy: 0, t: rand(0, 6), spin: rand(1.5, 2.5), loose: true,
+        homeY: obj.position.y });
+    }
   }
 
   dropCoins(pos, value) {
@@ -659,6 +744,16 @@ export class Game {
         e.tilt.rotation.x = Math.sin(e.t * 1.6) * 0.04;
       }
       if (e.propeller) e.propeller.rotation.x += dt * 14;
+      if (e.bar) {
+        const frac = Math.max(0, e.hp / e.maxHp);
+        e.bar.lag = Math.max(frac, e.bar.lag - dt * 0.6);
+        e.bar.group.visible = frac < 0.999;
+        const u = e.bar.mat.uniforms;
+        u.uFrac.value = frac;
+        u.uLag.value = e.bar.lag;
+        if (frac > 0.5) u.uColor.value.copy(BAR_MID).lerp(BAR_HIGH, (frac - 0.5) * 2);
+        else u.uColor.value.copy(BAR_LOW).lerp(BAR_MID, frac * 2);
+      }
       if (e.glow) {
         const dark = this.world.dark;
         e.glow.halo.material.opacity = 0.45 + 0.25 * dark + Math.sin(e.t * 3) * 0.1;
@@ -890,6 +985,9 @@ export class Game {
         c.vy += (dy / d) * pull * dt;
         c.vx *= Math.exp(-dt * 2);
         c.vy *= Math.exp(-dt * 2);
+      } else if (c.loose) {
+        c.vx *= Math.exp(-dt * 2.5);
+        c.vy = (c.homeY + Math.sin(c.t * 1.4) * 0.25 - p.y) * 2;
       } else {
         c.vx *= Math.exp(-dt * 2.5);
         c.vy = c.vy * Math.exp(-dt * 2.5) + Math.sin(c.t * 2) * dt * 0.6;
@@ -897,7 +995,7 @@ export class Game {
       p.x += c.vx * dt;
       p.y = THREE.MathUtils.clamp(p.y + c.vy * dt, seabedAt(p.x) + 0.5, SURFACE_Y - 0.4);
       c.obj.rotation.y += c.spin * dt;
-      if (c.t > 11) c.obj.visible = Math.floor(c.t * 10) % 2 === 0;
+      if (!c.loose && c.t > 11) c.obj.visible = Math.floor(c.t * 10) % 2 === 0;
       if (pl.alive && pl.hitTest(p.x, p.y, 0.3)) {
         c.dead = true;
         this.coins += c.value;
@@ -906,7 +1004,7 @@ export class Game {
         this.hud.pulseCoins();
         sfx.coin();
       }
-      if (c.t > 14) c.dead = true;
+      if (c.loose ? d > LOOSE_COIN_RANGE : c.t > 14) c.dead = true;
       if (c.dead) this.scene.remove(c.obj);
     }
     this.coinsList = this.coinsList.filter((c) => !c.dead);
@@ -971,6 +1069,7 @@ export class Game {
     this.updateGrapple(dt);
     this.updateEnemies(dt);
     this.updateProjectiles(dt);
+    this.scatterCoins(dt);
     this.updateCoins(dt);
     this.updateWaves(dt);
     this.updateCamera(dt);
@@ -992,8 +1091,27 @@ export class Game {
     }
 
     this.emitDamageSmoke();
+    this.kickUpSand(dt);
     this.radarSweep = (this.radarSweep + dt * 2.2) % (Math.PI * 2);
     if (this.over) this.overTimer -= dt;
+  }
+
+  // Slamming into the seabed throws up a cloud of sand; skimming along it trails dust.
+  kickUpSand(dt) {
+    const pl = this.player;
+    const impact = pl.impact ?? 0;
+    pl.impact = 0;
+    const pos = pl.group.position;
+    const ground = { x: pos.x, y: seabedAt(pos.x) + 0.5, z: 1.2 };
+    const silt = ground.y < -30;
+    if (impact > 1.5) {
+      const strength = THREE.MathUtils.clamp(impact / 8, 0.35, 1.6);
+      this.effects.sandPoof(ground, strength, silt, pl.extents.hx);
+      this.effects.shake = Math.min(1.2, this.effects.shake + strength * 0.35);
+      sfx.thud(strength);
+    } else if (pl.onFloor && Math.abs(pl.vel.x) > 2 && Math.random() < dt * 14) {
+      this.effects.sandPoof({ x: pos.x - Math.sign(pl.vel.x) * pl.extents.hx * 0.5, y: ground.y, z: 0.4 }, 0.15, silt, 0.5);
+    }
   }
 
   // The worse the hull, the more it smokes, sparks, and leaks.
@@ -1009,6 +1127,10 @@ export class Game {
       if (s === pl.hull) this.tmp.y += pl.extents.hy * 0.6;
       this.effects.damageSmoke(this.tmp, damage);
     }
+  }
+
+  radarCoins() {
+    return this.coinsList.filter((c) => c.loose).map((c) => ({ x: c.obj.position.x, y: c.obj.position.y }));
   }
 
   radarEnemies() {

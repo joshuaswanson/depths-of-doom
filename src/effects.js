@@ -256,6 +256,30 @@ export class Effects {
     }
   }
 
+  sandPoof(pos, strength, silt, spread) {
+    const color = silt ? '#5a5f66' : '#d2bf92';
+    const color1 = silt ? '#2c3038' : '#8f7d5a';
+    for (let i = 0; i < Math.round(26 * strength) + 2; i++) {
+      const dir = Math.random() < 0.5 ? -1 : 1;
+      const s = rand(1.5, 6) * strength;
+      this.puffs.emit({
+        pos: { x: pos.x + rand(-spread, spread), y: pos.y + rand(0, 0.3), z: pos.z + rand(-0.6, 0.6) },
+        vel: { x: dir * s, y: rand(0.4, 2.2) * strength }, life: rand(1.4, 2.6), size: rand(0.5, 0.9) * (0.6 + strength),
+        size1: rand(2.0, 3.4) * (0.5 + strength), color, color1, alpha: 0.8, alpha1: 0, drag: 2.4, rise: 0.35,
+      });
+    }
+    for (let i = 0; i < Math.round(14 * strength); i++) {
+      const a = rand(0.3, Math.PI - 0.3);
+      const s = rand(3, 8) * strength;
+      this.puffs.emit({
+        pos: { x: pos.x + rand(-spread, spread) * 0.6, y: pos.y, z: pos.z },
+        vel: { x: Math.cos(a) * s, y: Math.sin(a) * s }, life: rand(0.5, 0.9), size: rand(0.08, 0.16), size1: 0.06,
+        color: silt ? '#3a3e46' : '#6b5a3c', alpha: 1, alpha1: 0.6, drag: 0.6, rise: -14,
+      });
+    }
+    for (let i = 0; i < 8 * strength; i++) this.bubble({ x: pos.x + rand(-spread, spread), y: pos.y + 0.3, z: pos.z });
+  }
+
   debris(pos) {
     for (let i = 0; i < 8; i++) {
       const a = Math.random() * Math.PI * 2;

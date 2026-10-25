@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { applySurfaceDetail } from './surface.js';
+import { addSkullDecals } from './decals.js';
 
 const MODEL_NAMES = [
   'player_hull', 'part_cannon', 'part_torpedo', 'part_missile', 'part_shield', 'part_grapple', 'part_sonar',
@@ -25,6 +26,7 @@ export async function loadModels(onProgress) {
     models[name] = gltf.scene;
     onProgress?.(++done / MODEL_NAMES.length);
   }));
+  addSkullDecals(models);
 }
 
 // Compile every model's shaders up front so the first enemy or upgrade of each kind doesn't stall a frame.
