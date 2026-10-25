@@ -26,7 +26,7 @@ WATER.surface.value = SURFACE_Y;
 const canvas = document.getElementById('game');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
 const MAX_PIXEL_RATIO = Math.min(window.devicePixelRatio, 1.5);
-const MIN_PIXEL_RATIO = 0.75;
+const MIN_PIXEL_RATIO = Math.min(1, MAX_PIXEL_RATIO);
 let pixelRatio = MAX_PIXEL_RATIO;
 renderer.setPixelRatio(pixelRatio);
 renderer.toneMapping = THREE.NeutralToneMapping;
@@ -128,21 +128,25 @@ function resize() {
 window.addEventListener('resize', resize);
 
 // Trade sharpness for frame rate: drop the render resolution when frames run long, raise it again with headroom.
-const fpsWindow = { time: 0, frames: 0, good: 0, locked: false };
+const fpsWindow = { time: 0, frames: 0, good: 0, bad: 0, locked: false };
+// Only a slowdown lasting two straight seconds lowers the resolution, so a passing hitch never blurs the picture;
+// two smooth seconds raise it again.
 function adaptResolution(dt) {
-  if (fpsWindow.locked || document.hidden || dt > 0.5) return;
+  if (fpsWindow.locked || document.hidden || dt > 0.25) return;
   fpsWindow.time += dt;
   fpsWindow.frames++;
-  if (fpsWindow.time < 0.5) return;
+  if (fpsWindow.time < 1) return;
   const fps = fpsWindow.frames / fpsWindow.time;
   fpsWindow.time = 0;
   fpsWindow.frames = 0;
+  fpsWindow.bad = fps < 48 ? fpsWindow.bad + 1 : 0;
+  fpsWindow.good = fps > 56 ? fpsWindow.good + 1 : 0;
   let next = pixelRatio;
-  if (fps < 52) {
-    next = Math.max(MIN_PIXEL_RATIO, pixelRatio - (fps < 40 ? 0.25 : 0.1));
-    fpsWindow.good = 0;
-  } else if (fps > 58 && ++fpsWindow.good >= 6) {
-    next = Math.min(MAX_PIXEL_RATIO, pixelRatio + 0.1);
+  if (fpsWindow.bad >= 2) {
+    next = Math.max(MIN_PIXEL_RATIO, pixelRatio - 0.1);
+    fpsWindow.bad = 0;
+  } else if (fpsWindow.good >= 2) {
+    next = Math.min(MAX_PIXEL_RATIO, pixelRatio + 0.15);
     fpsWindow.good = 0;
   }
   if (next !== pixelRatio) {
