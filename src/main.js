@@ -214,7 +214,7 @@ function frame() {
   const shake = state === 'paused' ? 0 : effects.shake;
   camera.position.x = game.cam.x + (Math.random() - 0.5) * shake * 0.5;
   camera.position.y = game.cam.y + (Math.random() - 0.5) * shake * 0.5;
-  if (state !== 'paused') world.update(dt, camera);
+  if (state !== 'paused') world.update(dt, camera, player.alive ? player.group.position : null);
   lightForDepth(world.dark);
   player.setDarkness(world.dark);
   if (state === 'playing' || state === 'gameover') {

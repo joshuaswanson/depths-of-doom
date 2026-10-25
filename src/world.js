@@ -404,15 +404,63 @@ function jellyMaterial(base, color, uniforms, wave, ribbon = false) {
 function makeJelly(uniforms) {
   const jelly = spawn('deep_jelly');
   const color = new THREE.Color(pick(JELLY_COLORS));
+  const glows = [];
   jelly.traverse((o) => {
     if (!o.isMesh) return;
     const ribbon = o.name.startsWith('jelly_arms');
     const wave = ribbon || o.name.startsWith('jelly_tentacles');
     o.material = jellyMaterial(o.material, color, uniforms, wave, ribbon);
+    glows.push({ m: o.material, base: o.material.emissiveIntensity, color: o.material.color.clone() });
   });
   jelly.scale.setScalar(rand(1.0, 2.0));
-  jelly.userData = { bell: findNode(jelly, 'jelly_bell'), phase: rand(0, 6), drift: rand(0.2, 0.5) };
+  jelly.userData = {
+    bell: findNode(jelly, 'jelly_bell'), phase: rand(0, 6), drift: rand(0.2, 0.5), glows, glow: 0,
+    state: 'dormant', timer: 0, lit: false, awake: 0,
+  };
+  setJellyGlow(jelly, 0);
   return jelly;
+}
+
+const JELLY_DIM = 0.03;
+const JELLY_WAKE_RADIUS = 9;
+
+function setJellyGlow(jelly, g) {
+  for (const { m, base, color } of jelly.userData.glows) {
+    m.emissiveIntensity = base * (JELLY_DIM + g * (1 - JELLY_DIM));
+    m.color.copy(color).multiplyScalar(0.25 + 0.75 * g);
+  }
+}
+
+// Jellies sit dark until the sub swims by, then glow in slow, steady on-off spells on their own timing.
+function updateJellyGlow(jelly, dt, sub) {
+  const u = jelly.userData;
+  const near = sub && jelly.position.distanceTo(sub) < JELLY_WAKE_RADIUS * jelly.scale.x * 0.7 + 4;
+  if (u.state === 'dormant') {
+    if (near) {
+      u.state = 'waking';
+      u.timer = rand(0.2, 1.4);
+    }
+  } else {
+    u.timer -= dt;
+    if (u.state === 'awake') u.awake -= dt;
+    if (u.timer <= 0) {
+      if (u.state === 'waking') {
+        u.state = 'awake';
+        u.awake = rand(9, 16);
+        u.lit = true;
+        u.timer = rand(1.8, 3.2);
+      } else if (u.awake <= 0 && !u.lit) {
+        u.state = near ? 'waking' : 'dormant';
+        u.timer = rand(1.5, 3);
+      } else {
+        u.lit = !u.lit;
+        u.timer = u.lit ? rand(1.8, 3.2) : rand(1.2, 2.6);
+      }
+    }
+  }
+  const target = u.state === 'awake' && u.lit ? 1 : 0;
+  u.glow += THREE.MathUtils.clamp(target - u.glow, -dt * 1.4, dt * 1.4);
+  setJellyGlow(jelly, u.glow * u.glow * (3 - 2 * u.glow));
 }
 
 function makeAngler() {
@@ -679,7 +727,7 @@ export class World {
     }
   }
 
-  update(dt, camera) {
+  update(dt, camera, sub = null) {
     this.time += dt;
     const cx = camera.position.x;
     const cy = camera.position.y;
@@ -742,8 +790,14 @@ export class World {
       if (j.position.y > u.band[1] + 2 || j.position.y < Math.max(floor, u.band[0] - 2)) {
         j.position.y = Math.max(floor + 2, rand(u.band[0], u.band[1] - 4));
       }
-      j.position.x = wrap(j.position.x, cx, 40);
+      const wrapped = wrap(j.position.x, cx, 40);
+      if (Math.abs(wrapped - j.position.x) > 1) {
+        u.state = 'dormant';
+        u.glow = 0;
+      }
+      j.position.x = wrapped;
       j.visible = floorY(j.position.x) < -JELLY_CEILING - 10 && this.dark > 0.45;
+      if (j.visible) updateJellyGlow(j, dt, sub);
     }
     for (const a of this.anglers) {
       const u = a.userData;
