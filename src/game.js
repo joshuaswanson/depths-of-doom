@@ -510,6 +510,7 @@ export class Game {
     // A calm stretch before the first wave, so the dive opens with the sunlit music and time to look around.
     this.waveBreak = FIRST_WAVE_DELAY;
     this.combatHold = 0;
+    this.combatOn = false;
     this.looseCoinTimer = 1;
     this.boss = null;
     this.over = false;
@@ -1991,15 +1992,17 @@ export class Game {
     if (big !== null) sfx.blip(big);
   }
 
-  // Combat music runs while a wave is under way and lingers a moment after its last sub is sunk; the break between
-  // waves gets the calm track.
+  // Combat music starts once an enemy sub comes into view, carries on until the wave is over, and lingers a moment
+  // after its last sub is sunk; the break between waves gets the calm track.
   get inCombat() {
     return this.combatHold > 0;
   }
 
   updateCombatHold(dt) {
-    const engaged = this.queue.length > 0 || this.enemies.some((e) => e.type !== 'mine');
-    this.combatHold = engaged ? COMBAT_HOLD : Math.max(0, (this.combatHold ?? 0) - dt);
+    const subs = this.enemies.filter((e) => e.type !== 'mine');
+    if (!this.queue.length && !subs.length) this.combatOn = false;
+    if (subs.some((e) => this.onScreen(e.obj.position.x, e.obj.position.y))) this.combatOn = true;
+    this.combatHold = this.combatOn ? COMBAT_HOLD : Math.max(0, (this.combatHold ?? 0) - dt);
   }
 
   get radarRange() {
