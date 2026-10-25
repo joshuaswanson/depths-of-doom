@@ -69,6 +69,8 @@ function noise({ dur = 0.3, vol = 0.4, freq = 800, to = 200, q = 1, delay = 0, d
 // Looping water beds. At the surface: a rumble, a rush that grows with speed, and waves washing. Below it: a deep,
 // soft pressure rumble that sinks lower with depth, trains of bubbles, and the odd groan from the hull far down.
 let amb = null;
+// Low enough to sound submerged, high enough that explosions and gunfire keep their punch.
+const UNDERWATER_CUTOFF = 2600;
 const lerp = (a, b, t) => a + (b - a) * t;
 
 function waterBed(type, freq, q) {
@@ -140,7 +142,7 @@ export function setAmbience(dt, { active = false, surface = 0, speed = 0, underw
   amb.drift.filter.frequency.setTargetAtTime(260 + 300 * speed, now, 0.3);
   amb.hum.gain.gain.setTargetAtTime(below * depth * 0.05, now, 1);
   amb.hum.osc.frequency.setTargetAtTime(44 + 6 * tide, now, 1);
-  sfxBus.frequency.setTargetAtTime(lerp(18000, 1100, underwater), now, 0.08);
+  sfxBus.frequency.setTargetAtTime(lerp(18000, UNDERWATER_CUTOFF, underwater), now, 0.08);
   if (active && Math.random() < dt * surface * (0.35 + speed * 3)) {
     const f = 500 + Math.random() * 900;
     tone({ type: 'sine', freq: f, to: f * (1.6 + Math.random() * 0.6), dur: 0.05 + Math.random() * 0.04,
