@@ -187,24 +187,23 @@ export class Player {
 
     this.lamp = new THREE.Group();
     this.rig.add(this.lamp);
-    this.headlight = new THREE.SpotLight('#ffe2a8', 0, 34, 0.42, 0.65, 1.1);
-    this.headlight.target.position.set(10, -1.5, 0);
+    // One light stands in for the headlight and every bolted-on searchlight, so each lit surface only evaluates a
+    // single spotlight no matter how many lamps the sub carries.
+    this.headlight = new THREE.SpotLight('#fff1c9', 0, 34, 0.42, 0.6, 1.1);
+    this.headlight.target.position.set(10, -1.0, 0);
     this.lamp.add(this.headlight, this.headlight.target);
     this.beam = makeBeam();
     this.beam.rotation.z = -0.12;
     this.lamp.add(this.beam);
-    // A fixed pool of searchlights keeps the scene's light count constant, so buying one never recompiles shaders.
     this.spots = Array.from({ length: MAX_SPOTLIGHTS }, () => {
-      const light = new THREE.SpotLight('#fff1c9', 0, 60, 0.5, 0.55, 1.2);
-      light.target.position.set(10, 0, 0);
       const beam = makeBeam();
       beam.scale.set(1.7, 1.55, 1.55);
       beam.userData.light = true;
       const holder = new THREE.Group();
-      holder.add(light, light.target, beam);
+      holder.add(beam);
       holder.visible = false;
       this.rig.add(holder);
-      return { holder, light, beam };
+      return { holder, beam };
     });
     this.glow = new THREE.PointLight('#9fdfff', 0, 12, 1.4);
     this.glow.position.set(0, 1.5, 3);
@@ -489,18 +488,17 @@ export class Player {
   }
 
   setDarkness(dark) {
-    this.headlight.intensity = 9 * dark;
+    const lamps = this.levels.spotlight;
+    const power = 1 + 0.35 * lamps;
+    const light = this.headlight;
+    light.intensity = lamps ? (10 + 190 * dark) * power * (0.7 + 0.3 * lamps) : 9 * dark;
+    light.distance = lamps ? 50 + 10 * lamps : 34;
+    light.angle = lamps ? 0.42 + 0.06 * lamps : 0.42;
     this.beam.material.uniforms.uStrength.value = 0.035 * dark;
     this.beam.visible = dark > 0.02;
-    const lamps = this.levels.spotlight;
     this.glow.intensity = (2.5 + 9 * lamps) * dark;
     this.glow.distance = 12 + 4 * lamps;
-    const power = 1 + 0.35 * lamps;
-    for (const spot of this.spots) {
-      spot.light.intensity = spot.holder.visible ? (10 + 190 * dark) * power : 0;
-      spot.light.distance = 50 + 10 * lamps;
-      spot.beam.material.uniforms.uStrength.value = 0.01 + 0.032 * dark;
-    }
+    for (const spot of this.spots) spot.beam.material.uniforms.uStrength.value = 0.01 + 0.032 * dark;
   }
 
   get spotRange() {

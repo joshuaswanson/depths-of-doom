@@ -51,7 +51,7 @@ float dNoise( vec3 x ) {
 float dFbm( vec3 p ) {
   float v = 0.0;
   float a = 0.5;
-  for ( int i = 0; i < 4; i++ ) {
+  for ( int i = 0; i < 3; i++ ) {
     v += a * dNoise( p );
     p = p * 2.03 + vec3( 1.7, 9.2, 3.1 );
     a *= 0.5;
@@ -73,25 +73,41 @@ function f(v) {
   return v.toFixed(3);
 }
 
-function detailChunk(p, kind) {
-  return /* glsl */ `
-  vec3 dp = vDetailPos * ${f(p.scale)};
-  float dMottle = dFbm( dp );
-  float dLow = dFbm( dp * 0.35 + 4.0 );
-  float dScratchMask = smoothstep( 0.5, 0.68, dFbm( dp * 0.7 + 11.0 ) );
-  float dScratch = ( 1.0 - smoothstep( 0.0, 0.035, abs( dNoise( dp * vec3( 9.0, 1.3, 9.0 ) ) - 0.5 ) ) ) * dScratchMask;
-  dScratch += ( 1.0 - smoothstep( 0.0, 0.03, abs( dNoise( dp.zyx * vec3( 1.1, 8.0, 12.0 ) + 3.0 ) - 0.5 ) ) ) * dScratchMask * 0.6;
-  float dCrackN = abs( dFbm( dp * 1.3 + 7.0 ) - 0.5 );
-  float dCrack = 1.0 - smoothstep( 0.0, 0.035, dCrackN );
-  float dRust = smoothstep( 0.55, 0.75, dFbm( dp * 0.9 + 21.0 ) ) * ${f(p.rust)};
-  ${kind === 'wood' ? 'float dGrain = 0.5 + 0.5 * sin( dp.x * 26.0 + dFbm( dp * vec3( 0.5, 3.0, 3.0 ) ) * 9.0 );' : 'float dGrain = 0.0;'}
-  ${kind === 'weed' ? 'float dVein = 1.0 - smoothstep( 0.0, 0.12, abs( fract( dp.y * 1.5 + dFbm( dp ) ) - 0.5 ) );' : 'float dVein = 0.0;'}
-  ${kind === 'coral' ? 'float dPore = smoothstep( 0.62, 0.72, dNoise( dp * 1.8 ) );' : 'float dPore = 0.0;'}
-  `;
+// Builds the detail shader for one material profile, emitting only the terms whose weights are non-zero.
+function detailShader(p, kind) {
+  const has = { scratch: p.scratch > 0, crack: p.crack > 0, rust: p.rust > 0, grime: p.grime > 0 };
+  const decl = [`vec3 dp = vDetailPos * ${f(p.scale)};`, 'float dMottle = dFbm( dp );'];
+  decl.push(has.grime || kind === 'stone' || kind === 'rock' ? 'float dLow = dFbm( dp * 0.35 + 4.0 );' : 'float dLow = 0.0;');
+  if (has.scratch) {
+    decl.push(`float dScratchMask = smoothstep( 0.5, 0.68, dNoise( dp * 0.7 + 11.0 ) );
+      float dScratch = ( 1.0 - smoothstep( 0.0, 0.035, abs( dNoise( dp * vec3( 9.0, 1.3, 9.0 ) ) - 0.5 ) ) ) * dScratchMask;`);
+  } else decl.push('float dScratch = 0.0;');
+  decl.push(has.crack ? 'float dCrack = 1.0 - smoothstep( 0.0, 0.035, abs( dFbm( dp * 1.3 + 7.0 ) - 0.5 ) );' : 'float dCrack = 0.0;');
+  decl.push(has.rust ? `float dRust = smoothstep( 0.55, 0.75, dNoise( dp * 0.9 + 21.0 ) ) * ${f(p.rust)};` : 'float dRust = 0.0;');
+  decl.push(kind === 'wood' ? 'float dGrain = 0.5 + 0.5 * sin( dp.x * 26.0 + dNoise( dp * vec3( 0.5, 3.0, 3.0 ) ) * 9.0 );' : 'float dGrain = 0.0;');
+  decl.push(kind === 'weed' ? 'float dVein = 1.0 - smoothstep( 0.0, 0.12, abs( fract( dp.y * 1.5 + dMottle ) - 0.5 ) );' : 'float dVein = 0.0;');
+  decl.push(kind === 'coral' ? 'float dPore = smoothstep( 0.62, 0.72, dNoise( dp * 1.8 ) );' : 'float dPore = 0.0;');
+
+  const color = [`diffuseColor.rgb *= 1.0 + ( dMottle - 0.5 ) * 2.0 * ${f(p.mottle)};`];
+  if (has.grime) {
+    color.push(`vec3 dWorldN = inverseTransformDirection( normalize( vNormal ), viewMatrix );
+      diffuseColor.rgb *= 1.0 - ${f(p.grime)} * ( smoothstep( 0.45, 0.8, dLow ) * 0.6 + smoothstep( 0.1, -0.9, dWorldN.y ) * 0.7 );`);
+  }
+  if (has.rust) color.push('diffuseColor.rgb = mix( diffuseColor.rgb, diffuseColor.rgb * vec3( 1.25, 0.75, 0.5 ) + vec3( 0.06, 0.02, 0.0 ), dRust );');
+  if (has.scratch) color.push(`diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.78, 0.8, 0.82 ) * ( 0.6 + 0.4 * dMottle ), dScratch * ${f(p.scratch)} );`);
+  if (has.crack) color.push(`diffuseColor.rgb *= 1.0 - dCrack * ${f(p.crack)} * 0.7;`);
+  if (kind === 'wood' || kind === 'coral') color.push('diffuseColor.rgb *= 1.0 - dGrain * 0.28 - dPore * 0.35;');
+  if (kind === 'weed') color.push('diffuseColor.rgb *= 1.0 + dVein * 0.18;');
+  if (kind === 'stone' || kind === 'rock') {
+    color.push(`vec3 dUpN = inverseTransformDirection( normalize( vNormal ), viewMatrix );
+      diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.18, 0.36, 0.12 ), smoothstep( 0.55, 0.9, dUpN.y ) * smoothstep( 0.45, 0.62, dLow ) * 0.85 );`);
+  }
+  return { decl: decl.join('\n'), color: color.join('\n') };
 }
 
 function patch(material, profileName) {
   const p = PROFILES[profileName];
+  const code = detailShader(p, profileName);
   material.customProgramCacheKey = () => `detail-${profileName}`;
   material.onBeforeCompile = (shader) => {
     shader.vertexShader = shader.vertexShader
@@ -99,35 +115,13 @@ function patch(material, profileName) {
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvDetailPos = transformed;');
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>\nvarying vec3 vDetailPos;\n${NOISE_GLSL}`)
-      .replace('#include <color_fragment>', /* glsl */ `#include <color_fragment>
-        ${detailChunk(p, profileName)}
-        vec3 dWorldN = inverseTransformDirection( normalize( vNormal ), viewMatrix );
-        float dDown = smoothstep( 0.1, -0.9, dWorldN.y );
-        diffuseColor.rgb *= 1.0 + ( dMottle - 0.5 ) * 2.0 * ${f(p.mottle)};
-        diffuseColor.rgb *= 1.0 - ${f(p.grime)} * ( smoothstep( 0.45, 0.8, dLow ) * 0.6 + dDown * 0.7 );
-        diffuseColor.rgb = mix( diffuseColor.rgb, diffuseColor.rgb * vec3( 1.25, 0.75, 0.5 ) + vec3( 0.06, 0.02, 0.0 ), dRust );
-        diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.78, 0.8, 0.82 ) * ( 0.6 + 0.4 * dMottle ), dScratch * ${f(p.scratch)} );
-        diffuseColor.rgb *= 1.0 - dCrack * ${f(p.crack)} * 0.7;
-        diffuseColor.rgb *= 1.0 - dGrain * 0.28 - dPore * 0.35;
-        diffuseColor.rgb *= 1.0 + dVein * 0.18;
-        ${profileName === 'stone' || profileName === 'rock'
-          ? 'diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.18, 0.36, 0.12 ), smoothstep( 0.55, 0.9, dWorldN.y ) * smoothstep( 0.45, 0.62, dLow ) * 0.85 );'
-          : ''}
-      `)
+      .replace('#include <color_fragment>', `#include <color_fragment>\n${code.decl}\n${code.color}`)
       .replace('#include <roughnessmap_fragment>', /* glsl */ `#include <roughnessmap_fragment>
-        roughnessFactor = clamp( roughnessFactor + ( dMottle - 0.5 ) * ${f(p.rough * 2)} + dScratch * ${f(p.scratch * 0.3)} + dRust * 0.4, 0.04, 1.0 );
-      `)
-      .replace('#include <emissivemap_fragment>', /* glsl */ `#include <emissivemap_fragment>
-        ${profileName === 'angler'
-          ? 'totalEmissiveRadiance += vec3( 0.25, 0.45, 0.6 ) * pow( 1.0 - saturate( dot( normal, normalize( vViewPosition ) ) ), 2.5 ) * 0.35;'
-          : ''}
-      `)
+        roughnessFactor = clamp( roughnessFactor + ( dMottle - 0.5 ) * ${f(p.rough * 2)} + dScratch * ${f(p.scratch * 0.3)} + dRust * 0.4, 0.04, 1.0 );`)
       .replace('#include <normal_fragment_maps>', /* glsl */ `#include <normal_fragment_maps>
-        float dHeight = dMottle * 0.35 - dScratch * 0.5 - dCrack * 0.9 * ${f(p.crack)} + dGrain * 0.5 - dPore * 0.8
-          + dNoise( dp * 4.0 ) * 0.25 + dRust * dNoise( dp * 6.0 ) * 0.6;
-        vec2 dHdxy = vec2( dFdx( dHeight ), dFdy( dHeight ) ) * ${f(p.bump * 0.12)};
-        normal = dPerturb( - vViewPosition, normal, dHdxy, faceDirection );
-      `);
+        float dHeight = dMottle * 0.35 - dScratch * 0.5 - dCrack * ${f(p.crack * 0.9)} + dGrain * 0.5 - dPore * 0.8
+          + dRust * dMottle * 0.6;
+        normal = dPerturb( - vViewPosition, normal, vec2( dFdx( dHeight ), dFdy( dHeight ) ) * ${f(p.bump * 0.12)}, faceDirection );`);
   };
   material.needsUpdate = true;
 }

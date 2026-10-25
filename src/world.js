@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { findNode, spawn, tint } from './assets.js';
+import { findNode, plainMaterials, spawn, tint } from './assets.js';
 import { NOISE_GLSL } from './surface.js';
 import {
   ABYSS_Y, CAMERA_Z, SHELF_Y, SURFACE_Y, TAN_HALF_FOV, WATER_GRADIENT_GLSL, darkness, depthShift,
@@ -43,7 +43,7 @@ export function seabedAt(x, z = 0) {
 
 const LAYERS = [
   {
-    z: [-100, -70], gap: [12, 24], scale: [2.4, 3.6],
+    z: [-100, -70], gap: [12, 24], scale: [2.4, 3.6], plain: true,
     props: ['ruin_tower', 'ruin_pillar_a', 'ruin_arch', 'ruin_tower', 'ruin_pier'],
     deep: ['ruin_tower', 'rock_a', 'ruin_pillar_b'],
   },
@@ -97,7 +97,7 @@ function makeBackdrop() {
 
 function makeRays() {
   const rays = [];
-  for (let i = 0; i < 12; i++) {
+  for (let i = 0; i < 8; i++) {
     const mat = new THREE.ShaderMaterial({
       transparent: true,
       depthWrite: false,
@@ -189,7 +189,7 @@ const SHALLOW_COLORS = ['#1d5a55', '#2c7a60', '#4a9068', '#17474a'].map((c) => n
 const DEEP_COLORS = ['#1a2430', '#252f3d', '#2d3644', '#151b26'].map((c) => new THREE.Color(c));
 
 function makeSeabedTile(material) {
-  const geo = new THREE.PlaneGeometry(TILE_W, TILE_D, 120, 130);
+  const geo = new THREE.PlaneGeometry(TILE_W, TILE_D, 80, 90);
   geo.rotateX(-Math.PI / 2);
   geo.translate(0, 0, TILE_Z0 - TILE_D / 2);
   geo.userData.baseX = Float32Array.from({ length: geo.attributes.position.count }, (_, i) => geo.attributes.position.getX(i));
@@ -243,29 +243,29 @@ function makeSeabedMaterial(uniforms) {
         float caustic( vec2 p ) {
           vec2 i = p;
           float c = 1.0;
-          for ( int n = 0; n < 4; n++ ) {
+          for ( int n = 0; n < 3; n++ ) {
             float t = uTime * ( 1.0 - ( 3.5 / float( n + 1 ) ) ) * 0.6;
             i = p + vec2( cos( t - i.x ) + sin( t + i.y ), sin( t - i.y ) + cos( t + i.x ) );
             c += 1.0 / length( vec2( p.x / ( sin( i.x + t ) / 0.005 ), p.y / ( cos( i.y + t ) / 0.005 ) ) );
           }
-          c /= 4.0;
+          c /= 3.0;
           c = 1.17 - pow( c, 1.4 );
           return pow( abs( c ), 8.0 );
         }`)
       .replace('#include <color_fragment>', /* glsl */ `#include <color_fragment>
         vec3 sp = vec3( vSeaWorld.x, vSeaWorld.y * 0.5, vSeaWorld.z );
-        float sRipple = 0.5 + 0.5 * sin( sp.x * 2.6 + sp.z * 0.8 + dFbm( sp * 0.6 ) * 6.0 );
+        float sRipple = 0.5 + 0.5 * sin( sp.x * 2.6 + sp.z * 0.8 + dNoise( sp * 0.6 ) * 4.0 );
         float sPebble = smoothstep( 0.68, 0.74, dNoise( sp * 3.5 ) );
-        float sPatch = dFbm( sp * 0.15 );
+        float sPatch = dNoise( sp * 0.15 );
         float sShallow = smoothstep( -30.0, -12.0, vSeaWorld.y );
-        float sGrass = smoothstep( 0.55, 0.75, dFbm( sp * 0.35 + 5.0 ) ) * sShallow;
+        float sGrass = smoothstep( 0.55, 0.78, dNoise( sp * 0.35 + 5.0 ) ) * sShallow;
         float sSteep = 1.0 - smoothstep( 0.55, 0.85, inverseTransformDirection( normalize( vNormal ), viewMatrix ).y );
         diffuseColor.rgb *= 0.85 + sRipple * 0.12 * ( 1.0 - sSteep ) + ( sPatch - 0.5 ) * 0.4;
         diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.12, 0.28, 0.11 ), sGrass * 0.5 );
         diffuseColor.rgb = mix( diffuseColor.rgb, diffuseColor.rgb * 0.55, sPebble * 0.6 );
-        diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.2, 0.22, 0.26 ) * ( 0.7 + dFbm( sp * 1.5 ) * 0.6 ), sSteep * 0.8 );`)
+        diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.2, 0.22, 0.26 ) * ( 0.7 + sPatch * 0.6 ), sSteep * 0.8 );`)
       .replace('#include <normal_fragment_maps>', /* glsl */ `#include <normal_fragment_maps>
-        float sHeight = sRipple * 0.4 * ( 1.0 - sSteep ) + sPebble * 0.8 + dNoise( sp * 7.0 ) * 0.25 + dFbm( sp * 2.0 ) * sSteep * 1.2;
+        float sHeight = sRipple * 0.4 * ( 1.0 - sSteep ) + sPebble * 0.8 + dNoise( sp * 7.0 ) * 0.25 + sPatch * sSteep * 1.2;
         normal = dPerturb( - vViewPosition, normal, vec2( dFdx( sHeight ), dFdy( sHeight ) ) * 0.25, faceDirection );`)
       .replace('#include <emissivemap_fragment>', /* glsl */ `#include <emissivemap_fragment>
         float fadeC = smoothstep( -70.0, -5.0, vSeaWorld.z ) * smoothstep( -28.0, -8.0, vSeaWorld.y );
@@ -466,6 +466,7 @@ export class World {
       if (prop.obj) this.scene.remove(prop.obj);
       const name = pick(deep ? layer.deep : layer.props);
       prop.obj = spawn(name);
+      if (layer.plain) plainMaterials(prop.obj);
       if (layer.tint) tint(prop.obj, layer.tint[0], layer.tint[1]);
       else if (deep) tint(prop.obj, '#1c2233', 0.45);
       prop.obj.scale.setScalar(rand(layer.scale[0], layer.scale[1]));

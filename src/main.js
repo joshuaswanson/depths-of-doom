@@ -61,6 +61,9 @@ function lightForDepth(dark) {
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
 const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.35, 0.4, 1.4);
+// The glow is soft enough to compute at a quarter of the screen's resolution.
+const bloomSetSize = bloom.setSize.bind(bloom);
+bloom.setSize = (w, h) => bloomSetSize(Math.max(1, w / 2), Math.max(1, h / 2));
 composer.addPass(bloom);
 composer.addPass(new OutputPass());
 
