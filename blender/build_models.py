@@ -1,0 +1,119 @@
+"""Build every game model and export it as GLB.
+
+    blender --background --python blender/build_models.py -- [--only name,name] [--preview DIR] [--no-export]
+"""
+import argparse
+import math
+import os
+import sys
+
+import bpy
+from mathutils import Vector
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from kit import descendants, export_glb  # noqa: E402
+from palette import palette  # noqa: E402
+import assets_player  # noqa: E402
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+MODEL_DIR = os.path.join(ROOT, "public", "models")
+
+ASSETS = {
+    "player_hull": assets_player.player_hull,
+}
+
+
+def parse_args():
+    argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--only", default="")
+    ap.add_argument("--preview", default="")
+    ap.add_argument("--no-export", action="store_true")
+    ap.add_argument("--blend", default="")
+    return ap.parse_args(argv)
+
+
+def world_bounds(root):
+    bpy.context.view_layer.update()
+    pts = [o.matrix_world @ Vector(c) for o in descendants(root) if o.type == "MESH" for c in o.bound_box]
+    lo = Vector((min(p.x for p in pts), min(p.y for p in pts), min(p.z for p in pts)))
+    hi = Vector((max(p.x for p in pts), max(p.y for p in pts), max(p.z for p in pts)))
+    return lo, hi
+
+
+def setup_preview_scene():
+    scene = bpy.context.scene
+    for engine in ("BLENDER_EEVEE", "BLENDER_EEVEE_NEXT"):
+        try:
+            scene.render.engine = engine
+            break
+        except TypeError:
+            continue
+    scene.render.resolution_x = 900
+    scene.render.resolution_y = 600
+    scene.render.film_transparent = False
+    scene.view_settings.view_transform = "Standard"
+    world = bpy.data.worlds.new("preview_world")
+    world.use_nodes = True
+    world.node_tree.nodes["Background"].inputs["Color"].default_value = (0.02, 0.12, 0.22, 1)
+    world.node_tree.nodes["Background"].inputs["Strength"].default_value = 1.0
+    scene.world = world
+
+    sun = bpy.data.objects.new("preview_sun", bpy.data.lights.new("preview_sun", "SUN"))
+    sun.data.energy = 3.5
+    sun.rotation_euler = (math.radians(40), math.radians(-20), math.radians(-30))
+    fill = bpy.data.objects.new("preview_fill", bpy.data.lights.new("preview_fill", "SUN"))
+    fill.data.energy = 1.2
+    fill.data.color = (0.5, 0.8, 1.0)
+    fill.rotation_euler = (math.radians(-60), math.radians(30), math.radians(140))
+    cam = bpy.data.objects.new("preview_cam", bpy.data.cameras.new("preview_cam"))
+    cam.data.lens = 50
+    for obj in (sun, fill, cam):
+        scene.collection.objects.link(obj)
+    scene.camera = cam
+    return cam
+
+
+def render_preview(root, cam, path, yaw=25, pitch=12):
+    lo, hi = world_bounds(root)
+    center = (lo + hi) / 2
+    size = (hi - lo).length
+    y, p = math.radians(yaw), math.radians(pitch)
+    direction = Vector((math.sin(y) * math.cos(p), -math.cos(y) * math.cos(p), math.sin(p)))
+    cam.location = center + direction * size * 1.55
+    cam.rotation_euler = (-direction).to_track_quat("-Z", "Y").to_euler()
+    hidden = [o for o in bpy.context.scene.objects if o.type in {"MESH", "EMPTY"} and o not in descendants(root)]
+    for o in hidden:
+        o.hide_render = True
+    bpy.context.scene.render.filepath = path
+    bpy.ops.render.render(write_still=True)
+    for o in hidden:
+        o.hide_render = False
+
+
+def main():
+    args = parse_args()
+    bpy.ops.wm.read_factory_settings(use_empty=True)
+    P = palette()
+    names = [n for n in args.only.split(",") if n] or list(ASSETS)
+    os.makedirs(MODEL_DIR, exist_ok=True)
+    cam = setup_preview_scene() if args.preview else None
+    if args.preview:
+        os.makedirs(args.preview, exist_ok=True)
+    offset = 0.0
+    for name in names:
+        root = ASSETS[name](P)
+        if not args.no_export:
+            export_glb(root, os.path.join(MODEL_DIR, f"{name}.glb"))
+        if cam:
+            render_preview(root, cam, os.path.join(args.preview, f"{name}.png"))
+        lo, hi = world_bounds(root)
+        root.location.x = offset - lo.x
+        offset += (hi.x - lo.x) + 1.0
+        print(f"built {name}")
+    if args.blend:
+        bpy.ops.wm.save_as_mainfile(filepath=args.blend)
+
+
+main()
