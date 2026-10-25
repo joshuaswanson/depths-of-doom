@@ -388,7 +388,7 @@ function makeAngler() {
     map: softDot(), color: new THREE.Color(0.9, 2.4, 2.6), blending: THREE.AdditiveBlending, depthWrite: false,
     transparent: true, fog: false, opacity: 0.8,
   }));
-  halo.scale.setScalar(0.9);
+  halo.scale.setScalar(0.55);
   findNode(fish, 'lure_tip').add(halo);
   fish.userData = {
     halo, jaw: findNode(fish, 'jaw'), lure: findNode(fish, 'lure'), phase: rand(0, 6), dir: Math.random() < 0.5 ? -1 : 1,

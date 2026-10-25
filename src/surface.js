@@ -155,8 +155,8 @@ export const SHADER_TIME = { value: 0 };
 // Anglerfish skin: wet and warty, mottled indigo fading to a pale belly, with photophores pulsing along the flanks.
 function anglerSkin() {
   const m = new THREE.MeshPhysicalMaterial({
-    color: '#ffffff', roughness: 0.42, clearcoat: 0.7, clearcoatRoughness: 0.3, vertexColors: true,
-    sheen: 0.5, sheenColor: new THREE.Color('#6a5cff'), sheenRoughness: 0.5,
+    color: '#ffffff', roughness: 0.38, clearcoat: 0.55, clearcoatRoughness: 0.22, vertexColors: true,
+    sheen: 0.12, sheenColor: new THREE.Color('#4a3fb0'), sheenRoughness: 0.6,
   });
   m.onBeforeCompile = (shader) => {
     shader.uniforms.uTime = SHADER_TIME;
@@ -171,8 +171,8 @@ function anglerSkin() {
         float aSpots = smoothstep( 0.6, 0.7, dNoise( ap * 2.3 + 4.0 ) );
         float aWart = pow( dNoise( ap * 5.0 ), 4.0 );
         float aBelly = smoothstep( 0.05, -0.42, vDetailPos.y );
-        vec3 aCol = mix( vec3( 0.07, 0.055, 0.17 ), vec3( 0.2, 0.15, 0.36 ), aMottle * 0.9 );
-        aCol = mix( aCol, vec3( 0.36, 0.3, 0.5 ), aBelly * 0.75 );
+        vec3 aCol = mix( vec3( 0.045, 0.035, 0.11 ), vec3( 0.14, 0.1, 0.26 ), aMottle * 0.9 );
+        aCol = mix( aCol, vec3( 0.26, 0.21, 0.36 ), aBelly * 0.7 );
         aCol *= 1.0 - aSpots * 0.55;
         aCol += vec3( 0.12, 0.1, 0.2 ) * aWart;
         diffuseColor.rgb *= aCol;`)
@@ -188,7 +188,7 @@ function anglerSkin() {
           * step( 0.55, dHash( cell + 11.0 ) );
         float pulse = 0.55 + 0.45 * sin( uTime * 2.2 + dHash( cell ) * 6.28 );
         totalEmissiveRadiance += vec3( 0.35, 1.0, 1.0 ) * dot2 * flank * pulse * 2.2;
-        totalEmissiveRadiance += vec3( 0.2, 0.15, 0.6 ) * pow( 1.0 - saturate( dot( normal, normalize( vViewPosition ) ) ), 3.0 ) * 0.35;`);
+        totalEmissiveRadiance += vec3( 0.2, 0.15, 0.6 ) * pow( 1.0 - saturate( dot( normal, normalize( vViewPosition ) ) ), 3.0 ) * 0.1;`);
   };
   m.customProgramCacheKey = () => 'angler-skin';
   return m;

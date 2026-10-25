@@ -203,6 +203,11 @@ def anglerfish(P):
     fin_fan(body, P, (0.0, 0.0), (math.pi - 1.0, math.pi + 1.0), 0.7, 11, trs((-1.5, 0, 0.0), (math.pi / 2, 0, 0)))
     fin_fan(body, P, (0.0, 0.0), (1.4, 2.4), 0.45, 7, trs((-0.55, 0, 0.52), (math.pi / 2, 0, -0.2)))
     body.sphere(skin, loc=(0.42, 0, 0.68), scale=(0.1, 0.08, 0.07), segs=12, rings=8)
+    for k in range(9):
+        x = 0.2 - k * 0.16
+        top, n = on_surface(angler_body_shape, (x, 0.0, 1.0))
+        body.cylinder(skin, matrix=frame(top, n) @ trs((0, 0, 0.03)), radius=0.03 - k * 0.002, radius2=0.0,
+                      depth=0.09 - k * 0.006, segs=8)
     body.build("angler_body", root)
 
     jaw = empty("jaw", root, (0.2, 0, -0.24))
@@ -214,6 +219,14 @@ def anglerfish(P):
         base = (0.42 + 0.5 * math.cos(a), 0.42 * math.sin(a), 0.06 + 0.1 * smooth(math.cos(a), 0.6, 1.0))
         length = rng.uniform(0.22, 0.42) if i % 2 == 0 else rng.uniform(0.12, 0.2)
         fang(j, P["tooth"], base, (0.35 * math.cos(a), 0.3 * math.sin(a), 1.0), length, -0.3, rng)
+    for k in range(7):
+        a = -0.9 + k * 0.3
+        root_pt = Vector((0.5 + 0.38 * math.cos(a), 0.36 * math.sin(a), -0.2))
+        length = rng.uniform(0.25, 0.5)
+        pts = [root_pt + Vector((0.03 * math.sin(t * 6 + k), 0.02 * math.cos(t * 5 + k), -t * length)) for t in
+               (0, 0.33, 0.66, 1.0)]
+        j.tube(P["angler_fin"], pts, radius=lambda t: 0.012 * (1 - 0.7 * t), segs=5)
+        j.sphere(P["angler_spot"], loc=pts[-1], scale=0.022, segs=8, rings=6)
     j.build("jaw_mesh", jaw)
 
     lure = empty("lure", root, (0.42, 0, 0.72))
