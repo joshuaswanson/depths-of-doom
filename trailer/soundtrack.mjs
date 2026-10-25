@@ -2,7 +2,7 @@
 //
 //   node trailer/soundtrack.mjs [--frames /tmp/trailer/frames] [--out art/trailer/depths-of-doom-trailer.mp4]
 //
-// Narration comes from the macOS `say` voices; sound effects are rendered offline from the game's own src/audio.js.
+// Narration comes from the Kokoro voice model (trailer/narrate.py); sound effects are rendered offline from the game's own src/audio.js.
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -20,14 +20,15 @@ const run = (cmd, list) => execFileSync(cmd, list, { stdio: ['ignore', 'ignore',
 for (const dir of ['vo', 'sfx']) fs.mkdirSync(path.join(work, dir), { recursive: true });
 fs.mkdirSync(path.dirname(out), { recursive: true });
 
-// Narration: a slightly lowered voice with a touch of room, normalised to a steady level.
+// Narration from the Kokoro neural voice, given a little warmth and room and normalised to a steady level.
+execFileSync('uv', ['run', '--quiet', '--python', '3.12', '--with', 'kokoro', '--with', 'soundfile', '--with',
+  'misaki[en]', path.join(root, 'trailer/narrate.py'), path.join(work, 'vo')], { stdio: ['ignore', 'inherit', 'ignore'] });
 const voice = timeline.narration.map((line, i) => {
-  const aiff = path.join(work, 'vo', `n${i}.aiff`);
-  const wav = path.join(work, 'vo', `n${i}.wav`);
-  run('say', ['-v', timeline.voice, '-r', '158', '-o', aiff, line.text]);
-  run('ffmpeg', ['-v', 'error', '-y', '-i', aiff, '-af',
-    'asetrate=22050*0.93,aresample=44100,atempo=1.075,highpass=f=70,'
-    + 'acompressor=threshold=-18dB:ratio=3:attack=5:release=120,aecho=0.8:0.6:35|70:0.18|0.1,loudnorm=I=-16:TP=-1.5',
+  const raw = path.join(work, 'vo', `n${i}.wav`);
+  const wav = path.join(work, 'vo', `n${i}-mix.wav`);
+  run('ffmpeg', ['-v', 'error', '-y', '-i', raw, '-af',
+    'aresample=44100,highpass=f=60,equalizer=f=180:t=q:w=1:g=2,'
+    + 'acompressor=threshold=-20dB:ratio=2.5:attack=8:release=150,aecho=0.85:0.5:28:0.08,loudnorm=I=-16:TP=-1.5',
     '-ar', '44100', '-ac', '2', wav]);
   return { ...line, wav };
 });
@@ -152,8 +153,14 @@ run('ffmpeg', ['-v', 'error', '-y', ...inputs, '-filter_complex', chains.join(';
 console.log('soundtrack', soundtrack);
 
 if (fs.existsSync(frames) && fs.readdirSync(frames).some((f) => f.endsWith('.jpg'))) {
-  run('ffmpeg', ['-v', 'error', '-y', '-framerate', '30', '-pattern_type', 'glob', '-i', path.join(frames, '*.jpg'),
-    '-i', soundtrack, '-c:v', 'libx264', '-preset', 'slow', '-crf', '17', '-pix_fmt', 'yuv420p', '-c:a', 'aac',
+  // Finishing: 60 fps frames blended in pairs into 30 fps motion blur, a contrast and colour grade, a vignette,
+  // light film grain, and 2.39:1 letterbox bars.
+  const bar = Math.round((1080 - 1920 / 2.39) / 2);
+  const finish = ['tmix=frames=2', 'fps=30', 'eq=contrast=1.06:saturation=1.12:gamma=0.98',
+    'vignette=angle=0.5', 'noise=alls=5:allf=t', `drawbox=y=0:w=iw:h=${bar}:color=black:t=fill`,
+    `drawbox=y=ih-${bar}:w=iw:h=${bar}:color=black:t=fill`].join(',');
+  run('ffmpeg', ['-v', 'error', '-y', '-framerate', '60', '-pattern_type', 'glob', '-i', path.join(frames, '*.jpg'),
+    '-i', soundtrack, '-vf', finish, '-c:v', 'libx264', '-preset', 'slow', '-crf', '17', '-pix_fmt', 'yuv420p', '-c:a', 'aac',
     '-b:a', '192k', '-movflags', '+faststart', '-shortest', out]);
   console.log('trailer', out);
 }
