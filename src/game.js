@@ -90,6 +90,22 @@ function sinkChain(c, dt) {
   }
 }
 
+// Every coin in play is drawn from one instanced mesh per part of the coin model.
+function coinInstances() {
+  const model = spawn('pickup_coin');
+  model.updateMatrixWorld(true);
+  const parts = [];
+  model.traverse((o) => {
+    if (!o.isMesh) return;
+    const mesh = new THREE.InstancedMesh(o.geometry, o.material, MAX_COINS);
+    mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    mesh.frustumCulled = false;
+    mesh.count = 0;
+    parts.push({ mesh, local: o.matrixWorld.clone() });
+  });
+  return parts;
+}
+
 function onShelf(x) {
   return floorY(x) > SHELF_Y - 3;
 }
@@ -390,6 +406,8 @@ export class Game {
     });
     const link = new THREE.TorusGeometry(0.16, 0.055, 6, 14);
     link.scale(1, 1.5, 1);
+    this.coinMeshes = coinInstances();
+    for (const { mesh } of this.coinMeshes) this.scene.add(mesh);
     this.chainMesh = new THREE.InstancedMesh(link, rust, 6000);
     this.chainMesh.frustumCulled = false;
     this.chainMesh.count = 0;
@@ -853,10 +871,9 @@ export class Game {
     const big = Math.random() < 0.15;
     const count = big ? 1 : 1 + Math.floor(Math.random() * 3);
     for (let i = 0; i < count; i++) {
-      const obj = spawn('pickup_coin');
+      const obj = new THREE.Object3D();
       obj.scale.setScalar(big ? 0.8 : 0.55);
       obj.position.set(x + i * 0.9, y + Math.sin(i * 1.7) * 0.5, 0.3);
-      this.scene.add(obj);
       this.coinsList.push({ obj, value: big ? 5 : 1, vx: 0, vy: 0, t: rand(0, 6), spin: rand(1.5, 2.5), loose: true,
         homeY: obj.position.y });
     }
@@ -867,11 +884,10 @@ export class Game {
     const base = Math.floor(value / n);
     let extra = value - base * n;
     for (let i = 0; i < n; i++) {
-      const obj = spawn('pickup_coin');
+      const obj = new THREE.Object3D();
       const v = base + (extra-- > 0 ? 1 : 0);
       obj.scale.setScalar(v > 3 ? 0.75 : 0.55);
       obj.position.set(pos.x, Math.min(pos.y, SURFACE_Y - 0.5), 0.3);
-      this.scene.add(obj);
       const a = rand(0, Math.PI * 2);
       const s = rand(1.5, 4.5);
       this.coinsList.push({ obj, value: v, vx: Math.cos(a) * s, vy: Math.sin(a) * s + 1.5, t: 0, spin: rand(2, 4) });
@@ -1611,9 +1627,24 @@ export class Game {
         sfx.coin();
       }
       if (c.loose ? d > LOOSE_COIN_RANGE : c.t > 14) c.dead = true;
-      if (c.dead) this.scene.remove(c.obj);
     }
     this.coinsList = this.coinsList.filter((c) => !c.dead);
+    this.drawCoins();
+  }
+
+  drawCoins() {
+    const m = new THREE.Matrix4();
+    let n = 0;
+    for (const c of this.coinsList) {
+      if (!c.obj.visible || n >= MAX_COINS) continue;
+      c.obj.updateMatrix();
+      for (const { mesh, local } of this.coinMeshes) mesh.setMatrixAt(n, m.multiplyMatrices(c.obj.matrix, local));
+      n++;
+    }
+    for (const { mesh } of this.coinMeshes) {
+      mesh.count = n;
+      mesh.instanceMatrix.needsUpdate = true;
+    }
   }
 
   updateWaves(dt) {
