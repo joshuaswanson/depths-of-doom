@@ -35,7 +35,7 @@ export class Hud {
     this.lagFrac = 1;
     this.coinBox = el('div', 'coins', `<img src="${ICON('coin')}" alt=""><span>0</span>`);
     this.coinText = this.coinBox.querySelector('span');
-    topLeft.append(this.coinBox);
+
 
     this.waveTag = el('div', 'wave-tag');
     topLeft.append(this.waveTag);
@@ -56,6 +56,7 @@ export class Hud {
     this.bossFill = this.bossBar.querySelector('.boss-fill');
 
     this.bar = el('div', 'upgrade-bar');
+    this.bar.append(this.coinBox);
     this.slots = UPGRADES.map((def) => {
       const slot = el('button', 'slot', `
         <span class="bolt tl"></span><span class="bolt tr"></span><span class="bolt bl"></span><span class="bolt br"></span>
@@ -198,29 +199,59 @@ export class Hud {
     if (boss) this.bossFill.style.width = `${Math.max(0, boss.hp / boss.maxHp) * 100}%`;
   }
 
+  // A green phosphor sonar scope: bezel, range rings, bearing ticks, and a sweep that lights blips as it passes,
+  // leaving them to fade until the next pass.
   drawRadar(player, enemies, range, sweep, coins = []) {
     const g = this.radarCtx;
     const S = this.radar.width;
     const c = S / 2;
-    const R = c - 10;
+    const R = c - 26;
+    const TAU = Math.PI * 2;
     g.clearRect(0, 0, S, S);
+
+    const bezel = g.createRadialGradient(c, c * 0.8, R * 0.6, c, c, c);
+    bezel.addColorStop(0, '#6c7884');
+    bezel.addColorStop(0.75, '#3c4651');
+    bezel.addColorStop(1, '#1a2027');
+    g.fillStyle = bezel;
+    g.beginPath();
+    g.arc(c, c, c - 2, 0, TAU);
+    g.fill();
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * TAU + TAU / 16;
+      const x = c + Math.cos(a) * (c - 13);
+      const y = c + Math.sin(a) * (c - 13);
+      const bolt = g.createRadialGradient(x - 2, y - 2, 1, x, y, 6);
+      bolt.addColorStop(0, '#eef2f6');
+      bolt.addColorStop(1, '#4a535d');
+      g.fillStyle = bolt;
+      g.beginPath();
+      g.arc(x, y, 5.5, 0, TAU);
+      g.fill();
+    }
+
     g.save();
     g.beginPath();
-    g.arc(c, c, R, 0, Math.PI * 2);
-    g.fillStyle = 'rgba(6, 30, 52, 0.72)';
-    g.fill();
+    g.arc(c, c, R, 0, TAU);
     g.clip();
-    const grad = g.createConicGradient(sweep, c, c);
-    grad.addColorStop(0, 'rgba(80, 230, 255, 0.35)');
-    grad.addColorStop(0.12, 'rgba(80, 230, 255, 0)');
-    grad.addColorStop(1, 'rgba(80, 230, 255, 0)');
-    g.fillStyle = grad;
+    const screen = g.createRadialGradient(c, c, 0, c, c, R);
+    screen.addColorStop(0, '#0b2a1a');
+    screen.addColorStop(1, '#03110a');
+    g.fillStyle = screen;
     g.fillRect(0, 0, S, S);
-    g.strokeStyle = 'rgba(110, 220, 255, 0.35)';
-    g.lineWidth = 2;
-    for (const f of [0.33, 0.66]) {
+
+    const trail = g.createConicGradient(sweep - 1.2, c, c);
+    trail.addColorStop(0, 'rgba(70, 255, 140, 0)');
+    trail.addColorStop(1.2 / TAU, 'rgba(70, 255, 140, 0.32)');
+    trail.addColorStop(1.2 / TAU + 0.001, 'rgba(70, 255, 140, 0)');
+    g.fillStyle = trail;
+    g.fillRect(0, 0, S, S);
+
+    g.strokeStyle = 'rgba(90, 255, 150, 0.28)';
+    g.lineWidth = 1.5;
+    for (const f of [0.25, 0.5, 0.75]) {
       g.beginPath();
-      g.arc(c, c, R * f, 0, Math.PI * 2);
+      g.arc(c, c, R * f, 0, TAU);
       g.stroke();
     }
     g.beginPath();
@@ -229,48 +260,68 @@ export class Hud {
     g.moveTo(c, c - R);
     g.lineTo(c, c + R);
     g.stroke();
-    const p = player.center;
-    g.fillStyle = '#ffd23a';
-    for (const coin of coins) {
-      const dx = (coin.x - p.x) / range;
-      const dy = (coin.y - p.y) / range;
-      if (dx * dx + dy * dy > 1) continue;
+    for (let i = 0; i < 36; i++) {
+      const a = (i / 36) * TAU;
+      const inner = R * (i % 3 === 0 ? 0.9 : 0.95);
       g.beginPath();
-      g.arc(c + dx * R, c - dy * R, 5, 0, Math.PI * 2);
-      g.fill();
-    }
-    for (const e of enemies) {
-      const dx = (e.x - p.x) / range;
-      const dy = (e.y - p.y) / range;
-      if (dx * dx + dy * dy > 1) continue;
-      g.beginPath();
-      g.arc(c + dx * R, c - dy * R, e.type === 'boss' ? 13 : e.type === 'mine' ? 6 : 9, 0, Math.PI * 2);
-      g.fillStyle = e.type === 'mine' ? '#ff9a3a' : '#ff3b3b';
-      g.shadowColor = '#ff3b3b';
-      g.shadowBlur = 12;
-      g.fill();
-    }
-    g.shadowBlur = 0;
-    g.fillStyle = '#ffd23a';
-    g.beginPath();
-    g.moveTo(c + 16, c);
-    g.lineTo(c - 10, c - 11);
-    g.lineTo(c - 4, c);
-    g.lineTo(c - 10, c + 11);
-    g.closePath();
-    g.fill();
-    g.restore();
-    g.beginPath();
-    g.arc(c, c, R, 0, Math.PI * 2);
-    g.strokeStyle = 'rgba(120, 220, 255, 0.85)';
-    g.lineWidth = 5;
-    g.stroke();
-    for (let i = 0; i < 4; i++) {
-      const a = (i * Math.PI) / 2;
-      g.beginPath();
-      g.moveTo(c + Math.cos(a) * (R - 4), c + Math.sin(a) * (R - 4));
-      g.lineTo(c + Math.cos(a) * (R + 8), c + Math.sin(a) * (R + 8));
+      g.moveTo(c + Math.cos(a) * inner, c + Math.sin(a) * inner);
+      g.lineTo(c + Math.cos(a) * R, c + Math.sin(a) * R);
       g.stroke();
     }
+
+    g.strokeStyle = 'rgba(160, 255, 190, 0.9)';
+    g.lineWidth = 2.5;
+    g.beginPath();
+    g.moveTo(c, c);
+    g.lineTo(c + Math.cos(sweep) * R, c + Math.sin(sweep) * R);
+    g.stroke();
+
+    const p = player.center;
+    const blip = (x, y, size, color) => {
+      const dx = (x - p.x) / range;
+      const dy = (y - p.y) / range;
+      if (dx * dx + dy * dy > 1) return;
+      const bx = c + dx * R;
+      const by = c - dy * R;
+      const since = (((sweep - Math.atan2(by - c, bx - c)) % TAU) + TAU) % TAU;
+      const glow = Math.max(0.15, 1 - since / TAU);
+      g.globalAlpha = glow;
+      g.shadowColor = color;
+      g.shadowBlur = 14 * glow;
+      g.fillStyle = color;
+      g.beginPath();
+      g.arc(bx, by, size, 0, TAU);
+      g.fill();
+    };
+    for (const coin of coins) blip(coin.x, coin.y, 4, '#ffe05a');
+    for (const e of enemies) blip(e.x, e.y, e.type === 'boss' ? 12 : e.type === 'mine' ? 5 : 8, e.type === 'mine' ? '#ffb347' : '#ff4a3a');
+    g.globalAlpha = 1;
+    g.shadowBlur = 0;
+
+    g.fillStyle = '#b6ffcf';
+    g.beginPath();
+    const f = player.facing >= 0 ? 1 : -1;
+    g.moveTo(c + 13 * f, c);
+    g.lineTo(c - 8 * f, c - 8);
+    g.lineTo(c - 4 * f, c);
+    g.lineTo(c - 8 * f, c + 8);
+    g.closePath();
+    g.fill();
+
+    const glass = g.createLinearGradient(c - R, c - R, c, c);
+    glass.addColorStop(0, 'rgba(255, 255, 255, 0.16)');
+    glass.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    g.fillStyle = glass;
+    g.beginPath();
+    g.ellipse(c - R * 0.25, c - R * 0.35, R * 0.75, R * 0.45, -0.6, 0, TAU);
+    g.fill();
+    g.restore();
+
+    g.strokeStyle = '#c9973f';
+    g.lineWidth = 6;
+    g.beginPath();
+    g.arc(c, c, R + 2, 0, TAU);
+    g.stroke();
   }
+
 }

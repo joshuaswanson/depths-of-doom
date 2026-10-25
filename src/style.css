@@ -99,6 +99,24 @@ html, body {
   text-shadow: 0 2px 0 rgba(0, 0, 0, 0.35);
 }
 .coins img { width: 2.6vw; min-width: 26px; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5)); }
+/* The coin counter sits as a brass gauge at the left end of the store console. */
+.upgrade-bar .coins {
+  align-self: center;
+  flex-direction: column;
+  gap: 0.25vw;
+  min-width: 6.4vw;
+  padding: 0.6vw 0.8vw;
+  margin-right: 0.4vw;
+  font-size: 1.9vw;
+  font-weight: 700;
+  color: #ffe08a;
+  background: radial-gradient(circle at 50% 30%, #2a3540, #12181e 75%);
+  border: 0.3vw solid #c9973f;
+  border-radius: 1vw;
+  box-shadow: inset 0 0 0.8vw rgba(0, 0, 0, 0.8), 0 0 0 0.12vw #5a3d12;
+  text-shadow: 0 0 0.5vw rgba(255, 200, 70, 0.6);
+}
+.upgrade-bar .coins img { width: 2.4vw; }
 .coins.pulse { animation: pulse 0.25s; }
 
 .wave-tag {
@@ -137,7 +155,7 @@ html, body {
   right: 1.4vw;
   width: 10.5vw;
   min-width: 110px;
-  filter: drop-shadow(0 0 10px rgba(80, 200, 255, 0.35));
+  filter: drop-shadow(0 0.4vw 0.8vw rgba(0, 0, 0, 0.55));
 }
 
 .boss-bar {
@@ -222,23 +240,13 @@ html, body {
   gap: 0.55vw;
   padding: 0.9vw 1.6vw 0.8vw;
   pointer-events: auto;
-  background:
-    radial-gradient(circle at 0.9vw 0.9vw, #c9d2dc 0.22vw, #3f4954 0.26vw, transparent 0.32vw) 0 0 / 3.2vw 100% repeat-x,
-    linear-gradient(#5b6774, #3c4651 45%, #2c343d);
+  background: linear-gradient(#5b6774, #3c4651 45%, #2c343d);
   border: 0.22vw solid #1a2027;
   border-radius: 1.6vw 1.6vw 1vw 1vw;
   box-shadow:
     inset 0 0.18vw 0 rgba(255, 255, 255, 0.25),
     inset 0 -0.3vw 0 rgba(0, 0, 0, 0.35),
     0 0.5vw 1.4vw rgba(0, 0, 0, 0.5);
-}
-.upgrade-bar::before {
-  content: '';
-  position: absolute;
-  inset: 0.45vw 0.9vw auto;
-  height: 0.12vw;
-  background: rgba(0, 0, 0, 0.35);
-  box-shadow: 0 0.12vw 0 rgba(255, 255, 255, 0.15);
 }
 
 .slot {
