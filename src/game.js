@@ -173,10 +173,10 @@ const PANEL_SHARE = 0.17;
 const LOOSE_COIN_RANGE = 70;
 
 const ENEMY_TYPES = {
-  scout: { model: 'enemy_scout', hp: 5, scale: 0.85, rx: 1.25, ry: 0.62, coins: 3, boom: 0.9, speed: 4.2 },
-  gunner: { model: 'enemy_gunner', hp: 16, scale: 0.95, rx: 1.75, ry: 0.9, coins: 8, boom: 1.2, speed: 3.2 },
-  boss: { model: 'enemy_boss', hp: 170, scale: 0.95, rx: 2.9, ry: 1.45, coins: 70, boom: 2.4, speed: 2.4 },
-  mine: { model: 'mine', hp: 3, scale: 1.05, rx: 0.62, ry: 0.62, coins: 1, boom: 1.0, speed: 1.0 },
+  scout: { model: 'enemy_scout', hp: 5, scale: 0.85, rx: 1.25, ry: 0.62, coins: 12, boom: 0.9, speed: 4.2 },
+  gunner: { model: 'enemy_gunner', hp: 16, scale: 0.95, rx: 1.75, ry: 0.9, coins: 30, boom: 1.2, speed: 3.2 },
+  boss: { model: 'enemy_boss', hp: 170, scale: 0.95, rx: 2.9, ry: 1.45, coins: 220, boom: 2.4, speed: 2.4 },
+  mine: { model: 'mine', hp: 3, scale: 1.05, rx: 0.62, ry: 0.62, coins: 3, boom: 1.0, speed: 1.0 },
 };
 
 // The angle equal to `target` (mod 2π) that is closest to `from`, so settling never spins the long way round.
@@ -751,7 +751,7 @@ export class Game {
   }
 
   dropCoins(pos, value) {
-    const n = Math.min(value, 14);
+    const n = Math.min(value, 18);
     const base = Math.floor(value / n);
     let extra = value - base * n;
     for (let i = 0; i < n; i++) {
