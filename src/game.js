@@ -1775,13 +1775,14 @@ export class Game {
     const pc = pl.center;
     const tx = pc.x + Math.cos(pl.yaw) * 2.5 + pl.vel.x * 0.3;
     // The store panel covers the bottom of the screen, so frame the sub in the open water above it.
-    const ty = pc.y + pl.vel.y * 0.2 - this.halfH * PANEL_SHARE;
+    const share = this.panelShare ?? PANEL_SHARE;
+    const ty = pc.y + pl.vel.y * 0.2 - this.halfH * share;
     this.cam.x = THREE.MathUtils.lerp(this.cam.x, tx, 1 - Math.exp(-dt * 2.2));
     this.cam.y = THREE.MathUtils.lerp(this.cam.y, ty, 1 - Math.exp(-dt * 2.2));
     let lowest = Infinity;
     for (let i = -2; i <= 2; i++) lowest = Math.min(lowest, seabedAt(this.cam.x + (i * this.halfW) / 2));
     this.camFloor = THREE.MathUtils.lerp(this.camFloor ?? lowest, lowest, 1 - Math.exp(-dt * 1.5));
-    const floorLimit = Math.min(this.camFloor + this.halfH - 3, pc.y + 1.5 - this.halfH * PANEL_SHARE);
+    const floorLimit = Math.min(this.camFloor + this.halfH - 3, pc.y + 1.5 - this.halfH * share);
     this.cam.y = THREE.MathUtils.clamp(this.cam.y, floorLimit, SURFACE_Y + 1);
   }
 

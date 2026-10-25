@@ -1209,7 +1209,7 @@ export class World {
     const bu = this.backdrop.material.uniforms;
     bu.uShift.value = shift;
     bu.uDark.value = this.dark;
-    bu.uLine.value = 0.5 + 0.5 * (SURFACE_Y - cy) / (CAMERA_Z * TAN_HALF_FOV);
+    bu.uLine.value = 0.5 + 0.5 * (SURFACE_Y - cy) / (camera.position.z * TAN_HALF_FOV);
     this.scene.fog.color.setRGB(shift, this.dark, 0);
     // The play area sits about 20 units from the camera; fog starts behind it so darkness in the depths comes from
     // missing light, and whatever a lamp hits still shows.
@@ -1219,7 +1219,7 @@ export class World {
     this.surface.position.x = cx;
     this.waterline.material.uniforms.uTime.value = t;
     this.waterline.position.x = cx;
-    const parallax = (CAMERA_Z - WATERLINE_Z) / CAMERA_Z;
+    const parallax = (camera.position.z - WATERLINE_Z) / camera.position.z;
     this.waterline.scale.setScalar(parallax);
     this.waterline.position.y = cy + (SURFACE_Y - cy) * parallax - 0.2 * parallax;
 

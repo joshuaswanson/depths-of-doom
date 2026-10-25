@@ -192,7 +192,14 @@ async function boot() {
   if (new URLSearchParams(location.search).has('autostart')) startGame();
   window.__game = game;
   window.__debug = { scene, world, bloom, renderer, composer, effects, player, get pixelRatio() { return pixelRatio; },
-    lockResolution(r) { fpsWindow.locked = true; pixelRatio = r; renderer.setPixelRatio(r); resize(); } };
+    lockResolution(r) { fpsWindow.locked = true; pixelRatio = r; renderer.setPixelRatio(r); resize(); },
+    manual(on) { renderer.setAnimationLoop(on ? null : frame); },
+    step(dt) { tick(dt); },
+    set input(v) { scriptedInput = v; },
+    set cinematic(v) { cinematic = v; },
+    set cameraRig(fn) { cameraRig = fn; },
+    camera,
+    start: startGame, hud };
   renderer.setAnimationLoop(frame);
 }
 
@@ -215,10 +222,18 @@ function frame() {
   timer.update();
   const rawDt = timer.getDelta();
   adaptResolution(rawDt);
-  const dt = Math.min(rawDt, 1 / 20);
+  tick(Math.min(rawDt, 1 / 20));
+}
+
+// Scripted input and fixed-step frames let the trailer capture drive the game frame by frame.
+let scriptedInput = null;
+let cinematic = false;
+let cameraRig = null;
+
+function tick(dt) {
   SHADER_TIME.value += dt;
   if (state === 'playing') {
-    game.update(dt, readInput());
+    game.update(dt, scriptedInput ?? readInput());
     if (game.over && game.overTimer <= 0) {
       state = 'gameover';
       hud.showGameOver({ wave: game.wave, kills: game.kills, coins: game.coinsTotal, parts: game.partCount });
@@ -230,10 +245,18 @@ function frame() {
     if (state === 'gameover') game.update(dt, { x: 0, y: 0 });
   }
   if (state !== 'paused') effects.update(dt, 0);
-  game.status.group.visible = (state === 'playing' || state === 'paused') && player.alive;
+  game.status.group.visible = !cinematic && (state === 'playing' || state === 'paused') && player.alive;
   const shake = state === 'paused' ? 0 : effects.shake;
   camera.position.x = game.cam.x + (Math.random() - 0.5) * shake * 0.5;
   camera.position.y = game.cam.y + (Math.random() - 0.5) * shake * 0.5;
+  if (cameraRig) {
+    cameraRig(camera, shake);
+  } else if (camera.position.z !== CAMERA_Z || camera.fov !== CAMERA_FOV || camera.quaternion.w !== 1) {
+    camera.position.z = CAMERA_Z;
+    camera.quaternion.identity();
+    camera.fov = CAMERA_FOV;
+    camera.updateProjectionMatrix();
+  }
   if (state !== 'paused') world.update(dt, camera, player.alive ? player.group.position : null, player.alive ? player : null);
   setAmbience(dt, state === 'playing' && {
     active: true,
