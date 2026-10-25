@@ -399,6 +399,7 @@ function makeFishGeometry() {
 // Anglerfish prowl just above the floor of the deepest trenches.
 const ANGLER_FLOOR = -170;
 const ANGLER_BAND = [4, 16];
+const ANGLER_SPACING = 18;
 
 function makeAngler() {
   const fish = spawn('anglerfish');
@@ -412,26 +413,48 @@ function makeAngler() {
   halo.scale.setScalar(1.1);
   esca.add(halo);
   fish.userData = {
-    halo, esca, escaBase: esca.material.emissiveIntensity, glow: 0, litFor: 0, phase: rand(0, 6),
+    halo, esca, escaBase: esca.material.emissiveIntensity, glow: 0, flash: 0, untilFlash: rand(2, 12), phase: rand(0, 6),
     vel: new THREE.Vector2(rand(-0.5, 0.5), 0), target: null, retarget: 0, yaw: 0, facing: 1,
   };
   return fish;
 }
 
 // Anglerfish wander between waypoints near the trench floor and light their lure when the sub comes close.
-function updateAngler(a, dt, t, cx, sub) {
+// Each lure flash lasts about two seconds: a quick swell, a hold, and a fade back to darkness.
+const FLASH_TIME = 2.2;
+const FLASH_GAP = [7, 15];
+
+function flashLevel(f) {
+  if (f <= 0 || f >= FLASH_TIME) return 0;
+  return Math.min(1, f / 0.35, (FLASH_TIME - f) / 0.6);
+}
+
+function updateAngler(a, dt, t, cx, sub, world) {
   const u = a.userData;
   const p = a.position;
   u.retarget -= dt;
   if (!u.target || u.retarget <= 0 || Math.hypot(u.target.x - p.x, u.target.y - p.y) < 1.5) {
     let x = p.x + rand(-14, 14);
     if (floorY(x) > ANGLER_FLOOR) x = p.x - (x - p.x);
+    // Anglers are loners: steer the next waypoint away from any neighbour that is too close.
+    for (const other of world.anglers) {
+      if (other !== a && Math.abs(other.position.x - x) < ANGLER_SPACING) {
+        x += Math.sign(x - other.position.x || 1) * ANGLER_SPACING;
+      }
+    }
+    if (floorY(x) > ANGLER_FLOOR) x = p.x;
     u.target = new THREE.Vector2(x, floorY(x) + rand(ANGLER_BAND[0], ANGLER_BAND[1]));
     u.retarget = rand(5, 11);
   }
   const want = new THREE.Vector2(u.target.x - p.x, u.target.y - p.y);
   const speed = 0.9;
   if (want.lengthSq() > 0.01) want.setLength(speed);
+  for (const other of world.anglers) {
+    if (other === a) continue;
+    const dx = p.x - other.position.x;
+    const gap = Math.abs(dx);
+    if (gap < ANGLER_SPACING) want.x += Math.sign(dx || 1) * (1 - gap / ANGLER_SPACING) * 1.4;
+  }
   u.vel.lerp(want, 1 - Math.exp(-dt * 0.5));
   p.x += u.vel.x * dt;
   p.y = Math.max(floorY(p.x) + ANGLER_BAND[0] - 1, p.y + u.vel.y * dt + Math.sin(t * 0.6 + u.phase) * 0.08 * dt);
@@ -439,13 +462,28 @@ function updateAngler(a, dt, t, cx, sub) {
   u.yaw += ((u.facing > 0 ? 0 : -Math.PI) - u.yaw) * (1 - Math.exp(-dt * 0.8));
   a.rotation.y = u.yaw;
   a.rotation.z = THREE.MathUtils.clamp(Math.atan2(u.vel.y, Math.abs(u.vel.x) + 0.3), -0.35, 0.35) * u.facing * 0.8;
-  const near = sub && a.position.distanceTo(sub) < 11 * a.scale.x;
-  if (near) u.litFor = rand(6, 10) > u.litFor ? Math.max(u.litFor, 6) : u.litFor;
-  u.litFor = Math.max(0, u.litFor - dt);
-  u.glow += THREE.MathUtils.clamp((u.litFor > 0 ? 1 : 0) - u.glow, -dt * 0.6, dt * 1.2);
-  const flicker = 0.92 + 0.08 * Math.sin(t * 2.4 + u.phase);
-  u.esca.material.emissiveIntensity = u.escaBase * (0.04 + 0.96 * u.glow) * flicker;
-  u.halo.material.opacity = 0.75 * u.glow * flicker;
+  // Mostly dark: now and then the lure flares for a couple of seconds, lighting the fish up before it vanishes again.
+  const near = sub && a.position.distanceTo(sub) < 12 * a.scale.x;
+  u.untilFlash -= dt * (near ? 3 : 1);
+  if (u.flash > 0) u.flash += dt;
+  else if (u.untilFlash <= 0 && !world.anglerLight.userData.owner) {
+    u.flash = 0.001;
+    world.anglerLight.userData.owner = a;
+  }
+  if (u.flash >= FLASH_TIME) {
+    u.flash = 0;
+    u.untilFlash = rand(FLASH_GAP[0], FLASH_GAP[1]);
+    if (world.anglerLight.userData.owner === a) world.anglerLight.userData.owner = null;
+  }
+  u.glow = flashLevel(u.flash);
+  const flicker = 0.9 + 0.1 * Math.sin(t * 9 + u.phase);
+  u.esca.material.emissiveIntensity = u.escaBase * (0.03 + 0.97 * u.glow) * flicker;
+  u.halo.material.opacity = 0.85 * u.glow * flicker;
+  if (world.anglerLight.userData.owner === a) {
+    u.esca.getWorldPosition(world.anglerLight.position);
+    world.anglerLight.position.z += 1.2;
+    world.anglerLight.intensity = 55 * u.glow * flicker * a.scale.x;
+  }
 }
 
 // Jellies gather in one glowing layer in the dark trenches, with a few stragglers drifting deeper.
@@ -631,9 +669,13 @@ export class World {
     for (let x = -70; x < 70; x += rand(10, 22)) this.spawnChain(x);
     this.makeFish();
 
-    this.anglers = Array.from({ length: 3 }, () => {
+    // One shared light for whichever anglerfish is flashing, so lures can reveal their owner without adding a light per fish.
+    this.anglerLight = new THREE.PointLight('#9ff8ea', 0, 9, 1.6);
+    this.anglerLight.userData.owner = null;
+    scene.add(this.anglerLight);
+    this.anglers = Array.from({ length: 3 }, (_, i) => {
       const a = makeAngler();
-      a.position.set(rand(-45, 45), -200, rand(-20, -4));
+      a.position.set(-36 + i * 36 + rand(-5, 5), -200, rand(-20, -4));
       a.position.y = floorY(a.position.x) + rand(ANGLER_BAND[0], ANGLER_BAND[1]);
       scene.add(a);
       return a;
@@ -881,6 +923,7 @@ export class World {
       j.visible = floorY(j.position.x) < -JELLY_CEILING - 10 && this.dark > 0.45;
       if (j.visible) updateJellyGlow(j, dt, sub);
     }
+    if (!this.anglerLight.userData.owner) this.anglerLight.intensity = 0;
     for (const a of this.anglers) {
       const wrapped = wrap(a.position.x, cx, 50);
       if (Math.abs(wrapped - a.position.x) > 1) {
@@ -890,7 +933,11 @@ export class World {
       }
       const floor = floorY(a.position.x);
       a.visible = floor < ANGLER_FLOOR && this.dark > 0.5;
-      if (a.visible) updateAngler(a, dt, t, cx, sub);
+      if (a.visible) updateAngler(a, dt, t, cx, sub, this);
+      else if (this.anglerLight.userData.owner === a) {
+        this.anglerLight.userData.owner = null;
+        a.userData.flash = 0;
+      }
     }
     const m = new THREE.Matrix4();
     const q = new THREE.Quaternion();

@@ -127,6 +127,11 @@ const ENEMY_MASS = { scout: 0.9, gunner: 1.6, boss: 6 };
 const ENEMY_SIZE = { scout: 1, gunner: 2, boss: 5 };
 const BUMP_BOUNCE = 0.6;
 const STUN_TIME = [1.2, 3.0];
+// Wrecks settle a little behind the play plane so they rest in view on the seafloor.
+const WRECK_Z = -5;
+// Half-angle of an enemy viewport's red beam, and how far it reaches.
+const BEAM_ANGLE = 0.38;
+const BEAM_REACH = 15;
 
 const starTexture = (() => {
   const canvas = document.createElement('canvas');
@@ -234,6 +239,7 @@ export class Game {
     this.status = playerStatus(this.scene);
     this.makeMineChains();
     this.brokenChains = [];
+    this.wrecks = [];
     this.tmp = new THREE.Vector3();
     this.radarSweep = 0;
     this.reset();
@@ -350,6 +356,8 @@ export class Game {
     }
     this.bullets.length = 0;
     this.brokenChains = [];
+    for (const w of this.wrecks ?? []) this.scene.remove(w.e.obj);
+    this.wrecks = [];
     this.player.reset();
     this.player.group.position.set(0, 2, 0);
     this.cam.set(0, 2);
@@ -471,7 +479,7 @@ export class Game {
     });
     const mats = ownMaterials(model).map((m) => {
       addWaterline(m);
-      return { m, e: m.emissive.clone() };
+      return { m, e: m.emissive.clone(), c: m.color.clone() };
     });
     const hpMult = 1 + 0.17 * (this.wave - 1);
     if (spec.pos) {
@@ -600,7 +608,66 @@ export class Game {
       if (this.player.alive && this.player.hitTest(p.x, p.y, 1.4)) this.hurtPlayer(DAMAGE.mine, p);
     }
     this.dropCoins(p, e.def.coins + (e.type === 'boss' ? this.wave * 6 : 0));
-    this.scene.remove(e.obj);
+    if (e.type === 'mine') this.scene.remove(e.obj);
+    else this.sinkWreck(e);
+  }
+
+  // A destroyed sub keeps its hull: it goes dark, tumbles to the seabed while leaking bubbles and smoke, loses its
+  // colour, and lies there until it drops out of view.
+  sinkWreck(e) {
+    for (const part of [e.stars, e.bar?.group, e.glow?.group]) if (part) part.visible = false;
+    e.obj.traverse((o) => {
+      if (o.name.startsWith('muzzle')) o.visible = false;
+    });
+    this.wrecks.push({
+      e, t: 0, vy: 1.5, vx: e.vel.x * 0.3, settled: false,
+      roll: (Math.random() < 0.5 ? -1 : 1) * (0.25 + Math.random() * 0.35), pitch: (Math.random() - 0.5) * 0.6,
+      leak: 0,
+    });
+  }
+
+  updateWrecks(dt) {
+    const grey = new THREE.Color();
+    for (const w of this.wrecks) {
+      const { e } = w;
+      const p = e.obj.position;
+      w.t += dt;
+      const rest = seabedAt(p.x, p.z) + e.def.ry * e.def.scale * 0.55;
+      if (!w.settled) {
+        w.vy = Math.max(-3.2, w.vy - dt * 4);
+        w.vx *= Math.exp(-dt * 1.2);
+        p.x += w.vx * dt;
+        p.y += w.vy * dt;
+        p.z += (WRECK_Z - p.z) * (1 - Math.exp(-dt * 0.8));
+        if (p.y <= rest) {
+          p.y = rest;
+          w.settled = true;
+          this.effects.sandPoof({ x: p.x, y: seabedAt(p.x) + 0.5, z: 1.2 }, 0.9, p.y < -30, e.def.rx);
+          sfx.thud(0.8);
+        }
+        w.leak -= dt;
+        if (w.leak <= 0) {
+          w.leak = 0.06;
+          this.effects.bubble({ x: p.x, y: p.y + 0.3, z: p.z }, { spread: e.def.rx * 0.5 });
+          if (w.t < 2.5) this.effects.damageSmoke({ x: p.x, y: p.y + 0.2, z: p.z + 0.5 }, 0.9);
+        }
+      }
+      const k = 1 - Math.exp(-dt * (w.settled ? 3 : 1.2));
+      e.obj.rotation.z += (w.roll - e.obj.rotation.z) * k;
+      e.tilt.rotation.x += (w.pitch - e.tilt.rotation.x) * k;
+      if (e.propeller) e.propeller.rotation.x += dt * Math.max(0, 6 - w.t * 3);
+      const fade = Math.min(1, w.t / 3);
+      for (const { m, c } of e.mats) {
+        const l = c.r * 0.3 + c.g * 0.59 + c.b * 0.11;
+        grey.setRGB(l * 0.55 + 0.04, l * 0.5 + 0.035, l * 0.45 + 0.03);
+        m.color.copy(c).lerp(grey, fade);
+        m.emissive.setRGB(0, 0, 0);
+      }
+      const away = Math.abs(p.x - this.cam.x) > this.halfW + e.def.rx * 2 + 2 || Math.abs(p.y - this.cam.y) > this.halfH + 14;
+      if (w.settled && away) w.gone = true;
+    }
+    for (const w of this.wrecks) if (w.gone) this.scene.remove(w.e.obj);
+    this.wrecks = this.wrecks.filter((w) => !w.gone);
   }
 
   // Loose treasure sprinkled through the sea, so there is always a little to spend between and during waves.
@@ -1420,6 +1487,7 @@ export class Game {
     }
 
     this.emitDamageSmoke();
+    this.updateWrecks(dt);
     this.castEnemyGlow(dt);
     this.updateWetness(dt);
     this.updateStatus(dt);
@@ -1453,9 +1521,13 @@ export class Game {
       if (e.dead || !e.glow) continue;
       const p = e.obj.position;
       const d = Math.hypot(p.x - pc.x, p.y - pc.y);
-      if (d > 14) continue;
-      const facing = (pc.x - p.x) * e.facing > 0 ? 1 : 0.45;
-      const w = (1 - d / 14) * facing * (e.type === 'boss' ? 1.6 : 1);
+      if (d > BEAM_REACH) continue;
+      const fx = Math.cos(e.pitch) * e.facing;
+      const fy = Math.sin(e.pitch);
+      const along = ((pc.x - p.x) * fx + (pc.y - p.y) * fy) / Math.max(d, 1e-3);
+      const off = Math.acos(THREE.MathUtils.clamp(along, -1, 1));
+      const inBeam = 1 - THREE.MathUtils.smoothstep(off, BEAM_ANGLE * 0.6, BEAM_ANGLE * 1.25);
+      const w = (1 - d / BEAM_REACH) * inBeam * (e.type === 'boss' ? 1.6 : 1);
       if (w > bestW) {
         bestW = w;
         best = p;
