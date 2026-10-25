@@ -271,6 +271,35 @@ export class Effects {
     }
   }
 
+  // A crash of water: a tall crown of spray, a wide sheet thrown sideways, a churn of foam on the surface, and a
+  // plume of bubbles driven down under it.
+  bigSplash(pos, scale, width) {
+    const z = pos.z ?? 0.5;
+    for (let i = 0; i < 46 * scale; i++) {
+      const a = rand(0.15, Math.PI - 0.15);
+      const tall = Math.pow(Math.sin(a), 3);
+      const s = rand(3, 9) * scale * (0.5 + tall);
+      this.puffs.emit({ pos: { x: pos.x + rand(-width, width), y: pos.y, z },
+        vel: { x: Math.cos(a) * s * 0.75, y: Math.sin(a) * s }, life: rand(0.7, 1.3), size: rand(0.3, 0.75) * scale,
+        size1: rand(0.12, 0.35), color: '#ffffff', color1: '#c9f2ff', alpha: 1, alpha1: 0, rise: -15, drag: 0.4 });
+    }
+    for (let i = 0; i < 24 * scale; i++) {
+      const dir = Math.random() < 0.5 ? -1 : 1;
+      this.puffs.emit({ pos: { x: pos.x + rand(-width, width) * 0.5, y: pos.y + rand(0, 0.2), z },
+        vel: { x: dir * rand(3, 8) * scale, y: rand(0.5, 2.5) }, life: rand(0.5, 0.9), size: rand(0.25, 0.5) * scale,
+        size1: 0.1, color: '#f2fdff', alpha: 0.9, alpha1: 0, rise: -10, drag: 1.2 });
+    }
+    for (let i = 0; i < 12 * scale; i++) {
+      this.puffs.emit({ pos: { x: pos.x + rand(-width * 1.4, width * 1.4), y: pos.y + rand(-0.05, 0.1), z: z + 0.3 },
+        vel: { x: rand(-1.2, 1.2), y: rand(0, 0.3) }, life: rand(1.0, 1.8), size: rand(0.3, 0.55) * scale,
+        size1: rand(0.6, 0.9) * scale, color: '#ffffff', color1: '#dff7ff', alpha: 0.5, alpha1: 0, drag: 2.5 });
+    }
+    for (let i = 0; i < 40 * scale; i++) {
+      this.bubble({ x: pos.x + rand(-width, width), y: pos.y - rand(0.2, 2.8) * scale * 0.6, z },
+        { spread: 0.4, size: [0.1, 0.32], vel: { x: rand(-1.5, 1.5), y: -rand(0.5, 3) } });
+    }
+  }
+
   sandPoof(pos, strength, silt, spread) {
     const color = silt ? '#5a5f66' : '#d2bf92';
     const color1 = silt ? '#2c3038' : '#8f7d5a';

@@ -117,6 +117,18 @@ export const sfx = {
     noise({ dur: 0.5, vol: 0.25 * strength, freq: 500, to: 60 });
     tone({ type: 'sine', freq: 90, to: 40, dur: 0.35, vol: 0.3 * Math.min(1, strength) });
   },
+  bigSplash(scale = 2) {
+    const v = Math.min(1, scale / 3);
+    noise({ dur: 1.1, vol: 0.55 * v + 0.15, freq: 2200, to: 250, q: 0.6 });
+    noise({ dur: 0.5, vol: 0.35 * v, freq: 5000, to: 1800, q: 0.8, delay: 0.05 });
+    tone({ type: 'sine', freq: 140, to: 50, dur: 0.5, vol: 0.3 * v });
+  },
+  gull() {
+    [0, 0.2, 0.36].forEach((d) => {
+      tone({ type: 'sawtooth', freq: 1800, to: 1050, dur: 0.17, vol: 0.045, delay: d });
+      tone({ type: 'square', freq: 2300, to: 1450, dur: 0.12, vol: 0.018, delay: d });
+    });
+  },
   sonar() {
     tone({ type: 'sine', freq: 1500, to: 1400, dur: 0.6, vol: 0.06 });
   },

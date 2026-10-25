@@ -1515,8 +1515,16 @@ export class Game {
     const pc = this.player.center;
     const above = this.player.group.position.y > SURFACE_Y;
     if (above !== this.wasAbove && this.player.alive) {
-      this.effects.splash({ x: pc.x, y: SURFACE_Y, z: 0.5 }, 1.2);
-      sfx.splash();
+      const hit = Math.abs(this.player.vel.y);
+      if (!above && hit > 4) {
+        // Falling back in from a jump: the harder the landing, the bigger the crash of water.
+        const scale = THREE.MathUtils.clamp(0.9 + hit / 10, 1.1, 1.9);
+        this.effects.bigSplash({ x: pc.x, y: SURFACE_Y, z: 0.5 }, scale, this.player.extents.hx);
+        sfx.bigSplash(scale);
+      } else {
+        this.effects.splash({ x: pc.x, y: SURFACE_Y, z: 0.5 }, 1.2);
+        sfx.splash();
+      }
     }
     this.wasAbove = above;
   }
