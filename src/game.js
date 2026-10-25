@@ -266,9 +266,10 @@ export class Game {
     if (spec.type === 'mine') obj.position.z = rand(-0.5, 0.5);
     let anchor = null;
     if (spec.type === 'mine' && !spec.pos) {
-      // Wave mines are moored to the seabed near the player instead of drifting in from afar.
+      // Wave mines are moored to the seabed just out of view, mostly ahead of the sub, so they scroll into sight.
       const pc = this.player.center;
-      const x = pc.x + rand(-1, 1) * rand(7, this.halfW + 6);
+      const side = Math.random() < 0.7 ? this.player.facing : -this.player.facing;
+      const x = this.cam.x + side * (this.halfW + rand(3, 14));
       const floor = seabedAt(x);
       const y = THREE.MathUtils.clamp(pc.y + rand(-4, 4), floor + 3, ENEMY_TOP);
       if (y - floor < 70) {

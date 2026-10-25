@@ -8,39 +8,54 @@ from kit import Part, empty, points_on_arc, trs
 ALONG_X = (0, math.pi / 2, 0)
 
 
-def torpedo_shape(part, P, loc=(0, 0, 0), length=1.0, radius=0.16):
-    x, y, z = loc
-    h = length / 2
-    body = [(x - h, 0.0), (x - h, radius * 0.55), (x - h * 0.8, radius * 0.95), (x + h * 0.55, radius),
-            (x + h * 0.62, radius * 0.97)]
-    m = trs((0, y, z))
-    part.lathe(P["green"], [(px, pr) for px, pr in body] + [(x + h * 0.62, 0.0)], matrix=m, segs=24)
-    tip = [(x + h * 0.6, radius * 0.97), (x + h * 0.8, radius * 0.85), (x + h * 0.95, radius * 0.5), (x + h, 0.0)]
-    part.lathe(P["torpedo_tip"], [(x + h * 0.6, 0.0)] + tip, matrix=m, segs=24)
-    part.lathe(P["green_dark"], [(x + h * 0.25, radius * 0.9), (x + h * 0.25, radius * 1.04),
-                                 (x + h * 0.35, radius * 1.04), (x + h * 0.35, radius * 0.9)],
-               matrix=m, segs=24, loop=True)
-    for i in range(4):
-        a = math.pi / 4 + i * math.pi / 2
-        fin = [(x - h, 0), (x - h * 0.6, 0), (x - h * 0.85, radius * 1.7), (x - h * 1.02, radius * 1.7)]
-        part.extrude(P["steel_dark"], fin, depth=0.03, matrix=m @ trs(rot=(a, 0, 0)) @ trs(rot=(math.pi / 2, 0, 0)))
+def dome(x0, radius, length, sign=1, steps=7):
+    """(h, r) points of a rounded nose cap starting at x0 and bulging `length` along `sign`."""
+    return [(x0 + sign * length * math.sin(math.pi / 2 * k / steps), radius * math.cos(math.pi / 2 * k / steps))
+            for k in range(steps + 1)]
 
 
-def missile_shape(part, P, loc=(0, 0, 0), length=0.9, radius=0.11, body="missile_body", nose="enemy_red"):
+def chunky_fins(part, material, x0, x1, reach, m, count=4, start=math.pi / 4, thick=0.05):
+    for i in range(count):
+        a = start + i * 2 * math.pi / count
+        fin = [(x1, 0), (x0, 0), (x0 + (x1 - x0) * 0.15, reach * 0.9), (x0 + (x1 - x0) * 0.55, reach)]
+        part.extrude(material, fin, depth=thick, matrix=m @ trs(rot=(a, 0, 0)) @ trs(rot=(math.pi / 2, 0, 0)),
+                     bevel=thick * 0.4)
+
+
+def torpedo_shape(part, P, loc=(0, 0, 0), length=0.9, radius=0.22):
+    """A chubby cartoon torpedo: a fat green capsule with a glowing dome nose and oversized fins."""
     x, y, z = loc
     h = length / 2
+    r = radius
     m = trs((0, y, z))
-    part.lathe(P[body], [(x - h, 0.0), (x - h, radius * 0.8), (x - h * 0.9, radius), (x + h * 0.45, radius),
-                         (x + h * 0.45, 0.0)], matrix=m, segs=20)
-    part.lathe(P[nose], [(x + h * 0.44, 0.0), (x + h * 0.44, radius), (x + h * 0.7, radius * 0.8),
-                         (x + h * 0.92, radius * 0.4), (x + h, 0.0)], matrix=m, segs=20)
-    part.lathe(P["white"], [(x - h * 0.1, radius * 0.9), (x - h * 0.1, radius * 1.03), (x + h * 0.08, radius * 1.03),
-                            (x + h * 0.08, radius * 0.9)], matrix=m, segs=20, loop=True)
-    for i in range(4):
-        a = i * math.pi / 2
-        fin = [(x - h, 0), (x - h * 0.45, 0), (x - h * 0.8, radius * 2.0), (x - h * 1.05, radius * 2.0)]
-        part.extrude(P[nose], fin, depth=0.035, matrix=m @ trs(rot=(a, 0, 0)) @ trs(rot=(math.pi / 2, 0, 0)),
-                     bevel=0.01)
+    body = [(x - h, 0.0), (x - h, r * 0.5), (x - h * 0.82, r * 0.86), (x - h * 0.55, r), (x + h * 0.3, r)]
+    part.lathe(P["green"], body + [(x + h * 0.3, 0.0)], matrix=m, segs=28)
+    part.lathe(P["torpedo_tip"], [(x + h * 0.28, 0.0)] + dome(x + h * 0.28, r * 0.98, r * 1.05), matrix=m, segs=28)
+    for bx, mat in ((x - h * 0.2, "green_dark"), (x + h * 0.05, "white"), (x + h * 0.22, "green_dark")):
+        part.lathe(P[mat], [(bx - 0.025, r * 0.9), (bx - 0.025, r * 1.04), (bx + 0.025, r * 1.04),
+                            (bx + 0.025, r * 0.9)], matrix=m, segs=28, loop=True)
+    chunky_fins(part, P["steel_dark"], x - h * 1.02, x - h * 0.45, r * 2.1, m, thick=r * 0.22)
+    part.cylinder(P["steel"], loc=(x - h - 0.04, y, z), radius=r * 0.18, depth=0.08, rot=ALONG_X, segs=12)
+    for i in range(3):
+        a = 2 * math.pi * i / 3
+        blade = trs((x - h - 0.09, y, z)) @ trs(rot=(a, 0, 0)) @ trs((0, 0, r * 0.45), (0, 0, 0.5), (0.03, r * 0.35, r * 0.5))
+        part.sphere(P["steel"], matrix=blade, segs=10, rings=6)
+
+
+def missile_shape(part, P, loc=(0, 0, 0), length=0.75, radius=0.17, body="missile_body", nose="enemy_red"):
+    """A stubby cartoon rocket: fat body, big round nose, oversized fins, and an exhaust bell."""
+    x, y, z = loc
+    h = length / 2
+    r = radius
+    m = trs((0, y, z))
+    part.lathe(P[body], [(x - h, 0.0), (x - h, r * 0.7), (x - h * 0.85, r), (x + h * 0.3, r), (x + h * 0.3, 0.0)],
+               matrix=m, segs=24)
+    part.lathe(P[nose], [(x + h * 0.28, 0.0)] + dome(x + h * 0.28, r * 0.99, r * 1.35), matrix=m, segs=24)
+    part.lathe(P["white"], [(x - h * 0.05, r * 0.9), (x - h * 0.05, r * 1.04), (x + h * 0.12, r * 1.04),
+                            (x + h * 0.12, r * 0.9)], matrix=m, segs=24, loop=True)
+    part.cylinder(P["gunmetal"], loc=(x - h - 0.05, y, z), radius=r * 0.5, radius2=r * 0.72, depth=0.1,
+                  rot=(0, -math.pi / 2, 0), segs=16)
+    chunky_fins(part, P[nose], x - h * 1.05, x - h * 0.35, r * 2.6, m, start=0, thick=r * 0.25)
 
 
 def mount_plate(part, P, size=(0.36, 0.3, 0.1), mat="steel_dark"):
@@ -52,77 +67,73 @@ def mount_plate(part, P, size=(0.36, 0.3, 0.1), mat="steel_dark"):
 
 
 def part_cannon(P):
-    """A cartoon gatling: a fat drum body, a huge ammo drum, and stubby barrels that flare like trumpets."""
+    """A cartoon gatling: a fat drum body and a wide ring of stubby barrels that flare like trumpets."""
     root = empty("part_cannon")
+    axis = 0.5
     part = Part()
-    mount_plate(part, P, size=(0.42, 0.34, 0.1))
-    part.box(P["steel_dark"], loc=(0, 0, 0.2), size=(0.26, 0.2, 0.2), bevel=0.04)
-    part.sphere(P["blue"], loc=(-0.02, 0, 0.42), scale=(0.4, 0.3, 0.3), segs=28, rings=16)
-    part.cylinder(P["yellow"], loc=(0.2, 0, 0.42), radius=0.3, depth=0.1, rot=ALONG_X, bevel=0.03, segs=32)
-    part.cylinder(P["yellow"], loc=(-0.24, 0, 0.42), radius=0.26, depth=0.06, rot=ALONG_X, segs=32)
-    for i in range(8):
-        a = 2 * math.pi * i / 8
-        part.sphere(P["steel"], loc=(0.26, 0.29 * math.cos(a), 0.42 + 0.29 * math.sin(a)), scale=0.025, segs=8, rings=6)
-    part.cylinder(P["yellow"], loc=(-0.1, -0.36, 0.42), radius=0.24, depth=0.16, rot=(math.pi / 2, 0, 0), bevel=0.04,
-                  segs=28)
-    part.cylinder(P["red"], loc=(-0.1, -0.45, 0.42), radius=0.14, depth=0.03, rot=(math.pi / 2, 0, 0), segs=24)
-    for k in range(6):
-        a = math.pi / 2 + k * 0.32
-        part.box(P["brass"], loc=(-0.1 + 0.27 * math.cos(a) * 0.3, -0.3, 0.42 - 0.15 - k * 0.045),
-                 size=(0.07, 0.05, 0.035), rot=(0, 0, 0), bevel=0.01)
-    part.tube(P["steel_dark"], [(-0.3, 0.12, 0.62), (-0.28, 0.12, 0.8), (0.0, 0.12, 0.82), (0.05, 0.12, 0.66)],
-              radius=0.035, segs=10)
+    mount_plate(part, P, size=(0.46, 0.38, 0.1))
+    part.box(P["steel_dark"], loc=(0, 0, 0.2), size=(0.28, 0.22, 0.2), bevel=0.04)
+    part.sphere(P["blue"], loc=(-0.04, 0, axis), scale=(0.42, 0.4, 0.4), segs=32, rings=16)
+    part.cylinder(P["yellow"], loc=(0.22, 0, axis), radius=0.4, depth=0.12, rot=ALONG_X, bevel=0.035, segs=36)
+    part.cylinder(P["yellow"], loc=(-0.28, 0, axis), radius=0.34, depth=0.07, rot=ALONG_X, segs=36)
+    for i in range(10):
+        a = 2 * math.pi * i / 10
+        part.sphere(P["steel"], loc=(0.29, 0.38 * math.cos(a), axis + 0.38 * math.sin(a)), scale=0.03, segs=8, rings=6)
+    part.tube(P["steel_dark"], [(-0.32, 0.0, 0.82), (-0.3, 0.0, 1.0), (0.02, 0.0, 1.02), (0.07, 0.0, 0.86)],
+              radius=0.04, segs=10)
     part.build("cannon_body", root)
 
     barrels = Part()
     for i in range(6):
         a = 2 * math.pi * i / 6
-        y, z = 0.13 * math.cos(a), 0.13 * math.sin(a)
-        barrels.cylinder(P["steel"], loc=(0.52, y, z), radius=0.06, depth=0.5, rot=ALONG_X, segs=14)
-        barrels.cylinder(P["steel"], loc=(0.8, y, z), radius=0.06, radius2=0.1, depth=0.1, rot=ALONG_X, segs=14)
-        barrels.cylinder(P["black"], loc=(0.851, y, z), radius=0.06, depth=0.01, rot=ALONG_X, segs=12)
-    barrels.cylinder(P["steel_dark"], loc=(0.5, 0, 0), radius=0.06, depth=0.55, rot=ALONG_X, segs=12)
-    barrels.cylinder(P["red"], loc=(0.82, 0, 0), radius=0.045, depth=0.08, rot=ALONG_X, segs=12)
-    for x, color in ((0.4, "steel_dark"), (0.68, "yellow")):
-        barrels.torus(P[color], loc=(x, 0, 0), major=0.2, minor=0.04, rot=ALONG_X, segs=28)
+        y, z = 0.2 * math.cos(a), 0.2 * math.sin(a)
+        barrels.cylinder(P["steel"], loc=(0.56, y, z), radius=0.085, depth=0.52, rot=ALONG_X, segs=16)
+        barrels.cylinder(P["steel"], loc=(0.86, y, z), radius=0.085, radius2=0.13, depth=0.11, rot=ALONG_X, segs=16)
+        barrels.cylinder(P["black"], loc=(0.916, y, z), radius=0.085, depth=0.01, rot=ALONG_X, segs=14)
+    barrels.cylinder(P["steel_dark"], loc=(0.54, 0, 0), radius=0.1, depth=0.58, rot=ALONG_X, segs=14)
+    barrels.cylinder(P["red"], loc=(0.88, 0, 0), radius=0.07, depth=0.09, rot=ALONG_X, segs=14)
+    for x, color in ((0.42, "steel_dark"), (0.72, "yellow")):
+        barrels.torus(P[color], loc=(x, 0, 0), major=0.3, minor=0.05, rot=ALONG_X, segs=32)
     for i in range(3):
         a = 2 * math.pi * i / 3
-        barrels.box(P["yellow"], loc=(0.68, 0.23 * math.cos(a), 0.23 * math.sin(a)), size=(0.07, 0.07, 0.07),
-                    bevel=0.015)
-    barrels.build("cannon_barrels", root, location=(0, 0, 0.42))
-    empty("muzzle", root, (0.88, 0, 0.42))
+        barrels.box(P["yellow"], loc=(0.72, 0.34 * math.cos(a), 0.34 * math.sin(a)), size=(0.09, 0.09, 0.09),
+                    bevel=0.02)
+    barrels.build("cannon_barrels", root, location=(0, 0, axis))
+    empty("muzzle", root, (0.95, 0, axis))
     return root
 
 
 def part_torpedo(P):
     root = empty("part_torpedo")
     part = Part()
-    part.box(P["steel_dark"], loc=(0, 0, 0.05), size=(0.85, 0.62, 0.1), bevel=0.03)
-    for y in (-0.17, 0.17):
-        torpedo_shape(part, P, loc=(0.05, y, 0.26), length=1.05, radius=0.15)
-    for x in (-0.15, 0.3):
-        part.box(P["steel"], loc=(x, 0, 0.2), size=(0.07, 0.68, 0.06), bevel=0.015)
-        for y in (-0.17, 0.17):
-            part.torus(P["steel"], loc=(x, y, 0.26), major=0.158, minor=0.022, rot=ALONG_X, segs=24, tube_segs=8)
+    part.box(P["steel_dark"], loc=(0, 0, 0.05), size=(0.9, 0.78, 0.1), bevel=0.04)
+    for y in (-0.22, 0.22):
+        torpedo_shape(part, P, loc=(0.02, y, 0.32), length=0.95, radius=0.2)
+    for x in (-0.18, 0.2):
+        part.box(P["yellow_dark"], loc=(x, 0, 0.2), size=(0.09, 0.84, 0.07), bevel=0.02)
+        for y in (-0.22, 0.22):
+            part.torus(P["yellow_dark"], loc=(x, y, 0.32), major=0.208, minor=0.03, rot=ALONG_X, segs=28, tube_segs=8)
     part.build("torpedo_rack", root)
-    empty("muzzle", root, (0.6, 0, 0.26))
+    empty("muzzle", root, (0.62, 0, 0.32))
     return root
 
 
 def part_missile(P):
     root = empty("part_missile")
     part = Part()
-    mount_plate(part, P, size=(0.5, 0.42, 0.08))
-    part.box(P["blue"], loc=(0, 0, 0.3), size=(0.75, 0.56, 0.42), bevel=0.06, segs=3)
-    part.box(P["blue_dark"], loc=(0.385, 0, 0.3), size=(0.04, 0.5, 0.36), bevel=0.015)
-    part.box(P["yellow"], loc=(-0.05, 0, 0.3), size=(0.12, 0.575, 0.435), bevel=0.03)
-    for y in (-0.13, 0.13):
-        for z in (0.2, 0.4):
-            part.cylinder(P["black"], loc=(0.4, y, z), radius=0.085, depth=0.03, rot=ALONG_X, segs=16)
-            part.lathe(P["red"], [(0.38, 0.0), (0.38, 0.07), (0.45, 0.065), (0.52, 0.035), (0.56, 0.0)],
-                       matrix=trs((0, y, z)), segs=16)
+    mount_plate(part, P, size=(0.5, 0.44, 0.08))
+    part.box(P["steel_dark"], loc=(0, 0, 0.16), size=(0.22, 0.2, 0.14), bevel=0.03)
+    part.lathe(P["blue"], [(-0.38, 0.0)] + dome(-0.24, 0.34, 0.14, sign=-1)[::-1] + [(0.3, 0.34), (0.3, 0.0)],
+               matrix=trs((0, 0, 0.48)), segs=32)
+    part.lathe(P["yellow"], [(-0.06, 0.32), (-0.06, 0.355), (0.06, 0.355), (0.06, 0.32)], matrix=trs((0, 0, 0.48)),
+               segs=32, loop=True)
+    for i in range(3):
+        a = math.pi / 2 + 2 * math.pi * i / 3
+        y, zz = 0.17 * math.cos(a), 0.48 + 0.17 * math.sin(a)
+        part.cylinder(P["black"], loc=(0.305, y, zz), radius=0.11, depth=0.02, rot=ALONG_X, segs=18)
+        part.lathe(P["red"], [(0.28, 0.0)] + dome(0.28, 0.095, 0.16), matrix=trs((0, y, zz)), segs=18)
     part.build("missile_pod", root)
-    empty("muzzle", root, (0.6, 0, 0.3))
+    empty("muzzle", root, (0.5, 0, 0.48))
     return root
 
 
