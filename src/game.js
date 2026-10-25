@@ -1369,7 +1369,7 @@ export class Game {
         t.vel.y -= GRAVITY * dt;
         if (Math.random() < 0.5) this.effects.smokeTrail(p, 0.5);
       } else {
-        // Torpedoes run dead straight along their launch line, picking up speed; they hit hard but can miss.
+        // Torpedoes run straight along their launch line, picking up speed; they hit hard but can miss.
         const speed = Math.min(18, t.vel.length() + dt * 16);
         t.vel.setLength(speed);
         t.trail -= dt;

@@ -1,10 +1,10 @@
 export const UPGRADES = [
   { id: 'hull', name: 'Hull', icon: 'hull', start: 1, max: 6, base: 70, growth: 1.7,
     blurb: 'Bigger hull with more health and more room to mount upgrades. Heavier, so a bit slower.' },
-  { id: 'cannon', name: 'Cannon', icon: 'cannon', start: 1, max: 6, base: 35, growth: 1.6,
+  { id: 'cannon', name: 'Machine Gun', icon: 'cannon', start: 1, max: 6, base: 35, growth: 1.6,
     blurb: 'Adds a machine gun that fires straight ahead on its own, and makes all your guns fire faster.' },
   { id: 'torpedo', name: 'Torpedos', icon: 'torpedo', start: 0, max: 5, base: 55, growth: 1.65,
-    blurb: 'Adds a torpedo rack. Torpedoes shoot dead straight ahead and hit hard with a splash.' },
+    blurb: 'Adds a torpedo rack. Torpedoes travel straight forward and hit hard with a splash.' },
   { id: 'missile', name: 'Missiles', icon: 'missile', start: 0, max: 5, base: 120, growth: 1.7,
     blurb: 'Fire and forget. Missiles chase down the nearest enemy, but do less damage.' },
   { id: 'shield', name: 'Shield', icon: 'shield', start: 0, max: 5, base: 60, growth: 1.7,
