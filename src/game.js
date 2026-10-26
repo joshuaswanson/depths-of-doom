@@ -37,7 +37,7 @@ const WAVE_BREAK = 25;
 // slung underneath fore or aft, or on a flank behind the portholes. A skull is painted on both flanks, so
 // skulled subs never get a flank spot. One spot is picked at random per sub. The drum is drawn at the player's size.
 const POD_MOUNTS = {
-  scout: { spots: [{ x: -0.72, y: 0.4 }, { x: -0.5, y: -0.4, under: true },
+  scout: { spots: [{ x: -0.84, y: 0.36 }, { x: -0.5, y: -0.4, under: true },
     { x: 0.42, y: -0.38, under: true }, { x: 0.45, z: 0.42, flank: true }] },
   gunner: { spots: [{ x: -1.05, y: 0.56 }, { x: -0.75, y: -0.56, under: true },
     { x: 0.55, y: -0.54, under: true }, { x: 0.66, z: 0.57, flank: true }] },
