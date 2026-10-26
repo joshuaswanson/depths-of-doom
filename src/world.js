@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { animationsOf, findNode, plainMaterials, spawn, spawnSkinned, tint } from './assets.js';
 import { sfx } from './audio.js';
-import { CURRENT_MATERIALS, NOISE_GLSL, WHALE_BEND, addTailBeat } from './surface.js';
+import { CURRENT_MATERIALS, NOISE_GLSL, WHALE_BEND, addTailBeat, addWaterline } from './surface.js';
 import {
   ABYSS_Y, CAMERA_Z, SHELF_Y, SURFACE_Y, TAN_HALF_FOV, WATER_GRADIENT_GLSL, darkness, depthShift,
 } from './water.js';
@@ -911,7 +911,7 @@ function updateSpermWhale(whale, dt, cx, cy, busy) {
 // A pod of dolphins sometimes races past just under the surface while the sub is up there, gone once off screen.
 // They porpoise in long arcs with their noses following the curve, and now and then one leaps clear of the water.
 const POD_SIZE = 5;
-const DOLPHIN_LENGTH = 3.2;
+const DOLPHIN_LENGTH = 4.6;
 const POD_GAP = [25, 45];
 const DOLPHIN_SPEED = 8.5;
 const LEAP_GRAVITY = 15;
@@ -927,6 +927,7 @@ function makeDolphins(scene) {
   pod[0].traverse((o) => {
     if (o.isMesh && !o.material.userData.tail) {
       addTailBeat(o.material, { rate: 7, amount: 0.05 });
+      addWaterline(o.material, { ripple: 0.85 });
       o.material.userData.tail = true;
     }
   });
@@ -943,7 +944,7 @@ function updateDolphins(world, dt, t, cx, cy, halfW, sub) {
     dolphins.active = true;
     dolphins.dir = Math.random() < 0.5 ? -1 : 1;
     dolphins.members = dolphins.pod.map((d, i) => ({
-      d, x: cx - dolphins.dir * (halfW + 6 + i * 2.6 + rand(0, 1.5)), base: SURFACE_Y - rand(2.4, 3.4), z: rand(-12, -5),
+      d, x: cx - dolphins.dir * (halfW + 8 + i * 3.6 + rand(0, 2)), base: SURFACE_Y - rand(3, 4.2), z: rand(-13, -6),
       phase: rand(0, Math.PI * 2), rate: rand(1.5, 1.9), amp: rand(0.9, 1.3), leap: null, nextLeap: rand(1.5, 5),
     }));
   }
@@ -961,8 +962,9 @@ function updateDolphins(world, dt, t, cx, cy, halfW, sub) {
       vy = m.leap.vy;
       if (wasAbove !== y > SURFACE_Y) world.effects?.splash({ x: m.x, y: SURFACE_Y, z: m.z }, 0.7);
       if (vy < 0 && y < m.base) {
+        // Pick the swim arc back up exactly where it lands, heading down, so it carries on without a jump.
         m.leap = null;
-        m.phase = -Math.PI / 2 - t * m.rate;
+        m.phase = Math.PI - Math.asin(THREE.MathUtils.clamp((y - m.base) / m.amp, -1, 1)) - t * m.rate;
         m.nextLeap = rand(3, 7);
       }
     } else {
