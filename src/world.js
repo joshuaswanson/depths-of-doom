@@ -721,16 +721,17 @@ function settleAnchor(obj) {
   }
 }
 
-// A humpback roams the open water above the trenches, a huge hazy shape far behind the action. It swims behind every
-// layer of scenery (the far ruins end about 106 units back, and its flippers reach a quarter of its length to either
-// side), so nothing ever cuts through it. When the floor ahead starts rising toward a shelf it swings round in a wide,
-// banking half-circle, and if it drifts near the shallows it fades away into the water.
-const WHALE_LENGTH = 85;
-const WHALE_Z = { near: -132, centre: -150 };
-const WHALE_SPEED = 4.2;
-const WHALE_TURN_RADIUS = 26;
+// A humpback roams the open water above the trenches, a huge hazy shape behind the action. Over a trench the buoy
+// chains are gone and the scenery sits far down on the floor, so it can swim close enough for its parallax to read
+// right; it stays behind the sunbeams (which end 45 units back, and its flippers reach a quarter of its length to
+// either side). When the floor ahead starts rising toward a shelf it swings round in a wide, banking half-circle, and
+// if it drifts near the shallows it fades away into the water.
+const WHALE_LENGTH = 52;
+const WHALE_Z = { near: -64, centre: -82 };
+const WHALE_SPEED = 2.9;
+const WHALE_TURN_RADIUS = 18;
 const WHALE_GAP = [35, 60];
-const WHALE_ROAM = 55;
+const WHALE_ROAM = 45;
 // How much of the water's haze it takes on: a soft veil in open water, all of it near the shallows.
 const WHALE_HAZE = 0.68;
 const deepBelow = (x) => SHELF_Y - floorY(x);
@@ -786,8 +787,8 @@ function updateWhale(whale, dt, t, cx, cy) {
     u.fade = 0;
     u.heading = start.dir > 0 ? 0 : Math.PI;
     u.turn = 0;
-    // At this size it stands about 20 units tall; keep all of it below the surface.
-    u.baseY = rand(-26, 8);
+    // It stands about 12 units tall: keep it below the surface and well above anything on the trench floor.
+    u.baseY = rand(-14, 6);
     whale.position.set(start.x, u.baseY, WHALE_Z.near - 3);
   }
   const p = whale.position;
