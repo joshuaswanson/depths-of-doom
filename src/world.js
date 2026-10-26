@@ -906,8 +906,10 @@ const SPERM_Z = [-38, -32];
 const SPERM_GAP = [45, 75];
 // The spine from the chest back to the flukes, and how far each joint bends in a stroke (radians).
 const SPERM_TAIL = ['Bone03_03', 'Bone04_04', 'Bone05_05', 'Bone06_06', 'Bone07_07', 'Bone08_08', 'Bone09_09'];
-const SPERM_BEND = [0.03, 0.05, 0.07, 0.1, 0.14, 0.18, 0.22];
-const SPERM_STROKE = 1.7;
+const SPERM_BEND = [0.05, 0.08, 0.11, 0.15, 0.2, 0.26, 0.32];
+const SPERM_STROKE = 2.3;
+// The model rests with its tail drooping; this lifts each joint so the stroke centres on a straight body.
+const SPERM_LIFT = -0.045;
 
 function makeSpermWhale() {
   const holder = new THREE.Group();
@@ -930,7 +932,7 @@ function makeSpermWhale() {
 function strokeSpermWhale(u, time) {
   u.spine.forEach((j, i) => {
     // A wave travelling from the chest to the flukes, the joints toward the tail bending the most.
-    const angle = Math.sin(time * SPERM_STROKE - i * 0.55) * j.bend;
+    const angle = Math.sin(time * SPERM_STROKE - i * 0.55) * j.bend + SPERM_LIFT;
     j.bone.quaternion.copy(u.swing.setFromAxisAngle(j.axis, angle)).multiply(j.rest);
   });
 }
