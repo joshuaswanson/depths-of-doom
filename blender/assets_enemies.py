@@ -7,6 +7,33 @@ from assets_player import band, nose_viewport, open_hull, porthole_at, propeller
 from body import Body
 from kit import Part, empty, frame, trs
 
+class SharkBody(Body):
+    """A predatory hull: deepest just behind the nose (at -X), then a long, tapering run back to a pointed tail."""
+
+    def __init__(self, length, radius, nose_share=0.36, p_nose=2.6, p_tail=1.65):
+        self.length = length
+        self.nose_half = length * nose_share
+        self.tail_half = length - self.nose_half
+        super().__init__(length, radius, p_front=p_tail, p_back=p_nose, x0=-length / 2 + self.nose_half)
+
+    def r(self, x):
+        half = self.tail_half if x > self.x0 else self.nose_half
+        t = (x - self.x0) / half
+        if abs(t) >= 1:
+            return 0.0
+        p = self.p_front if t > 0 else self.p_back
+        return self.radius * (1 - abs(t) ** p) ** (1 / p)
+
+    def profile(self, samples=48):
+        pts = []
+        for i in range(samples + 1):
+            s = -1 + 2 * i / samples
+            t = math.copysign(abs(s) ** 0.8, s)
+            half = self.tail_half if t > 0 else self.nose_half
+            pts.append((self.x0 + t * half, self.r(self.x0 + t * half)))
+        return pts
+
+
 def enemy_tail(part, P, body, x_join, x_end, r_join, accent="enemy_red"):
     part.lathe(P["enemy_plate"], [(x_end + 0.04, 0.0), (x_end, r_join * 0.38), (x_join - 0.2, r_join * 0.8),
                                   (x_join, r_join)], segs=36)
@@ -54,7 +81,7 @@ def red_light(part, P, matrix, radius=0.07):
 def enemy_sub(P, name="enemy_sub", length=3.4, radius=0.85, tower=True, skull_mark=False, scope=1.0,
               spikes=0, turret=False):
     root = empty(name)
-    b = Body(length=length, radius=radius, p_front=2.2, p_back=2.7)
+    b = SharkBody(length=length, radius=radius * 1.08)
     h = length / 2
     part = Part()
     nose_x = viewport_x(b, sign=-1)

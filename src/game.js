@@ -33,8 +33,8 @@ const DEEP_COMBAT_LEAD = 4;
 // Breathing room between waves, long enough for the calm music to come back.
 const WAVE_BREAK = 25;
 // Where each enemy hull carries its missile drum, in model space (the nose points to -X).
-const POD_MOUNT = { scout: { x: -0.45, y: 0.55, scale: 0.8 }, gunner: { x: -0.6, y: 0.74, scale: 0.95 },
-  boss: { x: -1.1, y: 1.3, scale: 1.4 } };
+const POD_MOUNT = { scout: { x: -0.45, y: 0.62, scale: 0.8 }, gunner: { x: -0.6, y: 0.83, scale: 0.95 },
+  boss: { x: -1.1, y: 1.45, scale: 1.4 } };
 const POD_COLORS = { blue: '#2c2e36', blue_dark: '#3a3d47', yellow: '#b8262b', red: '#ff3b30' };
 let podTemplate = null;
 
