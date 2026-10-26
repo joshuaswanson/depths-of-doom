@@ -257,6 +257,29 @@ function addSway(material) {
   material.needsUpdate = true;
 }
 
+// The humpback has no rig: a slow wave runs down its body from the chest to the flukes, which beat up and down the
+// most. The model is one unit long with its head along +X.
+const WHALE_GLSL = /* glsl */ `
+  float whaleRear = smoothstep( 0.15, -0.5, transformed.x );
+  float whalePhase = uTime * 1.1 - transformed.x * 5.5;
+  transformed.y += sin( whalePhase ) * 0.05 * whaleRear * whaleRear;
+  transformed.y += sin( uTime * 1.1 + 1.2 ) * 0.006 * smoothstep( 0.1, 0.4, abs( transformed.z ) );
+`;
+
+function addWhaleSwim(material) {
+  const previous = material.onBeforeCompile;
+  const key = material.customProgramCacheKey?.() ?? material.name;
+  material.onBeforeCompile = (shader, renderer) => {
+    previous?.call(material, shader, renderer);
+    shader.uniforms.uTime = SHADER_TIME;
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nuniform float uTime;')
+      .replace('#include <begin_vertex>', `#include <begin_vertex>\n${WHALE_GLSL}`);
+  };
+  material.customProgramCacheKey = () => `${key}-whale`;
+  material.needsUpdate = true;
+}
+
 // Kelp and anemone tentacles bend in the current: still at the root, swaying more with height.
 export const CURRENT_MATERIALS = new Set(['kelp_stipe', 'kelp_blade', 'kelp_bladder', 'anemone_tentacle', 'anemone_tip']);
 const CURRENT_GLSL = /* glsl */ `
@@ -303,6 +326,10 @@ export function applySurfaceDetail(root) {
     }
     if (name.startsWith('angler_') && !swaying.has(o.material)) {
       addSway(o.material);
+      swaying.add(o.material);
+    }
+    if (name.startsWith('whale_') && !swaying.has(o.material)) {
+      addWhaleSwim(o.material);
       swaying.add(o.material);
     }
     if (CURRENT_MATERIALS.has(name) && !swaying.has(o.material)) {

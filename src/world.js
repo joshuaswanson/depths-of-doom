@@ -721,6 +721,42 @@ function settleAnchor(obj) {
   }
 }
 
+// Now and then a humpback glides slowly past far behind the action, a huge shape in the blue over the shelves.
+const WHALE_LENGTH = 34;
+const WHALE_SPEED = 2.4;
+const WHALE_GAP = [45, 75];
+
+function makeWhale() {
+  const whale = spawn('humpback');
+  whale.scale.setScalar(WHALE_LENGTH);
+  whale.visible = false;
+  whale.userData = { active: false, wait: 18, dir: 1, phase: rand(0, 6) };
+  return whale;
+}
+
+function updateWhale(whale, dt, t, cx, cy) {
+  const u = whale.userData;
+  if (!u.active) {
+    u.wait -= dt;
+    whale.visible = false;
+    // Only over the sunlit shelves, never down in the trenches.
+    if (u.wait > 0 || cy < -18) return;
+    u.active = true;
+    u.dir = Math.random() < 0.5 ? -1 : 1;
+    u.baseY = rand(10, 17);
+    whale.position.set(cx - u.dir * 75, u.baseY, rand(-44, -36));
+  }
+  const p = whale.position;
+  p.x += u.dir * WHALE_SPEED * dt;
+  p.y = u.baseY + Math.sin(t * 0.25 + u.phase) * 1.2;
+  whale.rotation.set(0, u.dir > 0 ? 0 : Math.PI, Math.cos(t * 0.25 + u.phase) * 0.06 * u.dir);
+  whale.visible = true;
+  if (Math.abs(p.x - cx) > 85 || cy < -40) {
+    u.active = false;
+    u.wait = rand(WHALE_GAP[0], WHALE_GAP[1]);
+  }
+}
+
 // Jellies gather in one glowing layer in the dark trenches, with a few stragglers drifting deeper.
 const JELLY_CEILING = 96;
 const JELLY_LAYER = [-122, -100];
@@ -915,6 +951,8 @@ export class World {
       scene.add(gull);
       return gull;
     });
+    this.whale = makeWhale();
+    scene.add(this.whale);
     this.anglers = Array.from({ length: 3 }, (_, i) => {
       const a = makeAngler();
       a.position.set(-36 + i * 36 + rand(-5, 5), -200, rand(-20, -4));
@@ -1202,6 +1240,7 @@ export class World {
     const cx = camera.position.x;
     const cy = camera.position.y;
     if (this.updateGulls(dt, cx, cy, hull) > 0) sfx.gull();
+    updateWhale(this.whale, dt, this.time, cx, cy);
     const t = this.time;
     this.uniforms.uTime.value = t;
     const shift = depthShift(cy);
