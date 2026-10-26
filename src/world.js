@@ -233,6 +233,22 @@ const LAYERS = [
 ];
 
 const CHAIN_Z = [-70, -26];
+// How far below the surface the top of the tallest prop must stay.
+const PROP_HEADROOM = 2;
+const modelHeights = new Map();
+
+// Height of a model above its base at scale 1.
+function modelHeight(name, obj) {
+  if (!modelHeights.has(name)) {
+    const probe = obj.clone();
+    probe.position.set(0, 0, 0);
+    probe.rotation.set(0, 0, 0);
+    probe.scale.setScalar(1);
+    probe.updateMatrixWorld(true);
+    modelHeights.set(name, Math.max(new THREE.Box3().setFromObject(probe).max.y, 0.1));
+  }
+  return modelHeights.get(name);
+}
 // The foam line floats in front of the action; each frame it is placed so it lines up with the true surface behind.
 const WATERLINE_Z = 3.5;
 // Rough ground radius of each seafloor piece, used to find clear spots for sinking wrecks.
@@ -1726,7 +1742,8 @@ export class World {
       if (layer.plain) plainMaterials(prop.obj);
       if (layer.tint) tint(prop.obj, layer.tint[0], layer.tint[1]);
       else if (deep) tint(prop.obj, '#1c2233', 0.45);
-      prop.obj.scale.setScalar(rand(layer.scale[0], layer.scale[1]));
+      prop.size = rand(layer.scale[0], layer.scale[1]);
+      prop.obj.scale.setScalar(prop.size);
       prop.kind = want;
       this.scene.add(prop.obj);
     }
@@ -1737,6 +1754,9 @@ export class World {
     for (let i = -2; i <= 2; i++) {
       for (const dz of [-half, 0, half]) ground = Math.min(ground, seabedAt(x + (i * half) / 2, z + dz));
     }
+    // Tall ruins shrink where the shelf rises, so none breaks the surface.
+    const room = (SURFACE_Y - PROP_HEADROOM - ground) / modelHeight(prop.obj.userData.model, prop.obj);
+    prop.obj.scale.setScalar(Math.min(prop.size, Math.max(room, 0.3)));
     prop.obj.position.set(x, ground - 0.25, z);
     prop.obj.visible = !SHELF_ONLY.test(prop.obj.userData.model) || onFlatShelf(x);
     prop.obj.rotation.set(0, rand(-0.5, 0.5), 0);
