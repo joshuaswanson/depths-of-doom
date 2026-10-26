@@ -924,7 +924,7 @@ function updateSpermWhale(whale, dt, cx, cy, busy) {
 const POD_SIZE = 5;
 const DOLPHIN_LENGTH = 4.6;
 const POD_GAP = [25, 45];
-const DOLPHIN_SPEED = 8.5;
+const DOLPHIN_SPEED = 7.2;
 // The same pull the sub feels when it breaches; water slows a dolphin quickly once it is back in.
 const LEAP_GRAVITY = 18;
 const WATER_DRAG = 3.5;
@@ -965,7 +965,7 @@ function updateDolphins(world, dt, t, cx, cy, halfW, sub) {
     const lanes = DOLPHIN_LANES.slice().sort(() => Math.random() - 0.5);
     dolphins.members = dolphins.pod.map((d, i) => ({
       d, x: cx - dolphins.dir * (halfW + 8 + i * 3.6 + rand(0, 2)), base: SURFACE_Y - rand(3, 4.2), z: lanes[i],
-      phase: rand(0, Math.PI * 2), rate: rand(1.5, 1.9), amp: rand(0.22, 0.34), leap: null, nextLeap: rand(1, 6),
+      phase: rand(0, Math.PI * 2), rate: rand(1.5, 1.9), amp: rand(0.16, 0.25), leap: null, nextLeap: rand(1, 6),
     }));
   }
   let anyInView = false;
