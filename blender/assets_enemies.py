@@ -130,15 +130,6 @@ def enemy_sub(P, name="enemy_sub", length=3.4, radius=0.85, tower=True, skull_ma
                 (nose_x + 0.75 * rn, rn * 1.16)]
         part.extrude(P["enemy_plate"], brow, depth=0.7 * rn, loc=(0, side * 0.4 * rn, 0),
                      rot=(math.pi / 2 + side * 0.35, 0, 0), bevel=0.03)
-    # A serrated ram under the nose, like a jaw full of teeth.
-    jaw = [(nose_x + 1.1 * rn, -rn * 1.0)]
-    teeth = 6
-    for i in range(teeth):
-        x0 = nose_x + 1.1 * rn - (1.55 * rn) * i / teeth
-        x1 = nose_x + 1.1 * rn - (1.55 * rn) * (i + 1) / teeth
-        jaw += [((x0 + x1) / 2, -rn * (1.42 + 0.04 * i)), (x1, -rn * 1.16)]
-    jaw += [(nose_x - 0.47 * rn, -rn * 1.16), (nose_x - 0.4 * rn, -rn * 0.98), (nose_x + 1.1 * rn, -rn * 0.86)]
-    part.extrude(P["steel"], jaw, depth=0.24 * rn, rot=(math.pi / 2, 0, 0), bevel=0.015)
     # Swept-back hydroplanes low on the flanks, like a shark's pectoral fins.
     for side in (-1, 1):
         x0 = -h * 0.42
