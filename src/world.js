@@ -909,9 +909,12 @@ function updateSpermWhale(whale, dt, cx, cy, busy) {
 }
 
 // A pod of dolphins sometimes races past just under the surface while the sub is up there, gone once off screen.
+// They porpoise in long arcs with their noses following the curve, and now and then one leaps clear of the water.
 const POD_SIZE = 5;
 const DOLPHIN_LENGTH = 3.2;
 const POD_GAP = [25, 45];
+const DOLPHIN_SPEED = 8.5;
+const LEAP_GRAVITY = 15;
 
 function makeDolphins(scene) {
   const pod = Array.from({ length: POD_SIZE }, () => {
@@ -921,17 +924,17 @@ function makeDolphins(scene) {
     scene.add(d);
     return d;
   });
-  const template = pod[0];
-  template.traverse((o) => {
+  pod[0].traverse((o) => {
     if (o.isMesh && !o.material.userData.tail) {
-      addTailBeat(o.material, { rate: 7, amount: 0.07 });
+      addTailBeat(o.material, { rate: 7, amount: 0.05 });
       o.material.userData.tail = true;
     }
   });
   return { pod, active: false, wait: 20, dir: 1, members: [] };
 }
 
-function updateDolphins(dolphins, dt, t, cx, cy, halfW, sub) {
+function updateDolphins(world, dt, t, cx, cy, halfW, sub) {
+  const dolphins = world.dolphins;
   const near = sub && sub.y > SURFACE_Y - 12 && cy > SURFACE_Y - 22;
   if (!dolphins.active) {
     for (const d of dolphins.pod) d.visible = false;
@@ -940,18 +943,39 @@ function updateDolphins(dolphins, dt, t, cx, cy, halfW, sub) {
     dolphins.active = true;
     dolphins.dir = Math.random() < 0.5 ? -1 : 1;
     dolphins.members = dolphins.pod.map((d, i) => ({
-      d, x: cx - dolphins.dir * (halfW + 6 + i * rand(1.5, 3)), y: SURFACE_Y - rand(1.6, 4.5), z: rand(-14, -6),
-      speed: rand(8, 10), phase: rand(0, 6),
+      d, x: cx - dolphins.dir * (halfW + 6 + i * 2.6 + rand(0, 1.5)), base: SURFACE_Y - rand(2.4, 3.4), z: rand(-12, -5),
+      phase: rand(0, Math.PI * 2), rate: rand(1.5, 1.9), amp: rand(0.9, 1.3), leap: null, nextLeap: rand(1.5, 5),
     }));
   }
   let anyInView = false;
   for (const m of dolphins.members) {
-    m.x += dolphins.dir * m.speed * dt;
-    // Porpoising: long arcs that bring them up near the surface and back down.
-    const arc = Math.sin(t * 1.6 + m.phase);
-    const y = Math.min(SURFACE_Y - 0.6, m.y + arc * 1.1);
+    m.x += dolphins.dir * DOLPHIN_SPEED * dt;
+    let y;
+    let vy;
+    if (m.leap) {
+      // Ballistic leap: out of the water and back in, nose following the arc.
+      m.leap.vy -= LEAP_GRAVITY * dt;
+      const wasAbove = m.leap.y > SURFACE_Y;
+      m.leap.y += m.leap.vy * dt;
+      y = m.leap.y;
+      vy = m.leap.vy;
+      if (wasAbove !== y > SURFACE_Y) world.effects?.splash({ x: m.x, y: SURFACE_Y, z: m.z }, 0.7);
+      if (vy < 0 && y < m.base) {
+        m.leap = null;
+        m.phase = -Math.PI / 2 - t * m.rate;
+        m.nextLeap = rand(3, 7);
+      }
+    } else {
+      const a = t * m.rate + m.phase;
+      y = m.base + Math.sin(a) * m.amp;
+      vy = Math.cos(a) * m.amp * m.rate;
+      m.nextLeap -= dt;
+      // Leap from the top of a rising arc.
+      if (m.nextLeap <= 0 && vy > 0.5 && Math.sin(a) > 0.2) m.leap = { y, vy: rand(7.5, 9) };
+    }
     m.d.position.set(m.x, y, m.z);
-    m.d.rotation.set(0, dolphins.dir > 0 ? 0 : Math.PI, Math.cos(t * 1.6 + m.phase) * 0.35);
+    const pitch = Math.atan2(vy, DOLPHIN_SPEED);
+    m.d.rotation.set(0, dolphins.dir > 0 ? 0 : Math.PI, pitch);
     m.d.visible = true;
     if (dolphins.dir * (m.x - cx) < halfW + 12) anyInView = true;
   }
@@ -1450,7 +1474,7 @@ export class World {
     if (this.updateGulls(dt, cx, cy, hull) > 0) sfx.gull();
     updateWhale(this.whale, dt, this.time, cx, cy);
     updateSpermWhale(this.spermWhale, dt, cx, cy, this.whale.userData.active);
-    updateDolphins(this.dolphins, dt, this.time, cx, cy, halfWidthAt(-10, this.aspect), sub);
+    updateDolphins(this, dt, this.time, cx, cy, halfWidthAt(-10, this.aspect), sub);
     const t = this.time;
     this.uniforms.uTime.value = t;
     const shift = depthShift(cy);

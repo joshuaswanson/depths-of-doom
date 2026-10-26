@@ -203,6 +203,7 @@ async function boot() {
   await loadModels((p) => hud.showLoading(p));
   world = new World(scene);
   effects = new Effects(scene);
+  world.effects = effects;
   player = new Player(scene);
   game = new Game({ scene, camera, world, effects, player, hud });
   resize();

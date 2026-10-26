@@ -2,7 +2,8 @@
 
     blender --background --python blender/import_marine.py -- SOURCE.glb OUT_NAME HEAD UP [DROP,DROP]
 
-HEAD and UP name the source's axes in Blender terms (for example +Y or -Z). Static meshes are joined and their
+HEAD and UP name the source's axes in Blender terms, either an axis (for example +Y or -Z) or a vector "x,y,z" for
+models posed off-axis. Static meshes are joined and their
 transforms applied, so a vertex shader can bend them along X; rigged models keep their armature and animation.
 """
 import os
@@ -30,7 +31,13 @@ for img in bpy.data.images:
         img.scale(1024, round(1024 * img.size[1] / img.size[0]))
 
 # Rotation taking the source's head and up axes onto +X and +Z.
-h, u = Vector(AXES[head]), Vector(AXES[up])
+def axis(spec):
+    return Vector(AXES[spec] if spec in AXES else [float(x) for x in spec.split(",")]).normalized()
+
+
+h = axis(head)
+u = axis(up)
+u = (u - u.dot(h) * h).normalized()
 basis = Matrix((h, u.cross(h), u)).transposed()
 rotation = basis.inverted().to_4x4()
 
