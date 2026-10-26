@@ -187,7 +187,8 @@ const WATERLINE_GLSL = /* glsl */ `
   }
 `;
 
-export function addWaterline(material) {
+// `ripple` scales the caustic light; `topOnly` keeps it to surfaces facing up toward the sun.
+export function addWaterline(material, { ripple = 1, topOnly = false } = {}) {
   if (material.userData.waterline) return;
   material.userData.waterline = true;
   const previous = material.onBeforeCompile;
@@ -222,9 +223,10 @@ export function addWaterline(material) {
         vec3 cp = vec3( wp.x * 2.2 + uTime * 0.25, wp.y * 2.2 - uTime * 0.5, wp.z * 2.2 );
         float ripple = pow( 1.0 - abs( wNoise( cp ) * 2.0 - 1.0 ), 7.0 ) + pow( 1.0 - abs( wNoise( cp * 1.9 + 5.0 ) * 2.0 - 1.0 ), 9.0 ) * 0.6;
         float shallow = smoothstep( uSurface - 26.0, uSurface - 1.0, wp.y );
-        totalEmissiveRadiance += vec3( 0.45, 0.85, 0.95 ) * ripple * ( 1.0 - above ) * shallow * 0.22;`);
+        float lit = ${topOnly ? 'smoothstep( -0.1, 0.55, inverseTransformDirection( normal, viewMatrix ).y )' : '1.0'};
+        totalEmissiveRadiance += vec3( 0.45, 0.85, 0.95 ) * ripple * ( 1.0 - above ) * shallow * lit * ${(0.22 * ripple).toFixed(3)};`);
   };
-  material.customProgramCacheKey = () => `${key}-waterline`;
+  material.customProgramCacheKey = () => `${key}-waterline${topOnly ? '-top' : ''}${ripple}`;
   material.needsUpdate = true;
 }
 
@@ -331,8 +333,8 @@ export function applySurfaceDetail(root) {
     }
     if (name.startsWith('whale_') && !swaying.has(o.material)) {
       addWhaleSwim(o.material);
-      // The same rippling sunlight the subs catch underwater.
-      addWaterline(o.material);
+      // The rippling sunlight the subs catch underwater, softer and only across its back.
+      addWaterline(o.material, { ripple: 0.6, topOnly: true });
       swaying.add(o.material);
     }
     if (CURRENT_MATERIALS.has(name) && !swaying.has(o.material)) {
