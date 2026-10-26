@@ -1788,8 +1788,12 @@ export class World {
     this.vessel = spawn('rusted_vessel');
     const vx = trenchMiddle(VESSEL.search[0], VESSEL.search[1]);
     this.vessel.scale.setScalar(VESSEL.length);
-    this.vessel.position.set(vx, seabedAt(vx, VESSEL.z) - VESSEL.sink, VESSEL.z);
+    this.vessel.position.set(vx, 0, VESSEL.z);
     this.vessel.rotation.set(0, VESSEL.yaw, VESSEL.roll);
+    // The model's origin is the middle of its bounds; rest the keel on the floor, settled a little into the silt.
+    this.vessel.updateMatrixWorld(true);
+    const keel = new THREE.Box3().setFromObject(this.vessel).min.y;
+    this.vessel.position.y = seabedAt(vx, VESSEL.z) - VESSEL.sink - keel;
     // Rust is dull: the lamp lights its colour directly in place of the faint reflections a bare metal hull would show.
     this.vessel.traverse((o) => {
       if (o.isMesh) o.material.metalness = 0.15;
