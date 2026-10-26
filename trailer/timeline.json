@@ -35,6 +35,14 @@
     },
     {
       "file": "shadows_in_the_trench.m4a",
+      "at": 73.27,
+      "from": 0,
+      "to": 5.2,
+      "fadeIn": 0.05,
+      "fadeOut": 1.8
+    },
+    {
+      "file": "shadows_in_the_trench.m4a",
       "at": 77.97,
       "from": 42.12,
       "to": 70.6,
