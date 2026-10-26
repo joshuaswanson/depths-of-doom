@@ -280,20 +280,28 @@ function makeRays() {
       uniforms: { uTime: { value: 0 }, uSeed: { value: Math.random() * 100 }, uStrength: { value: rand(0.1, 0.22) } },
       vertexShader: /* glsl */ `
         varying vec2 vUv;
-        void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 ); }`,
+        varying float vWorldY;
+        void main() {
+          vUv = uv;
+          vWorldY = ( modelMatrix * vec4( position, 1.0 ) ).y;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+        }`,
+      // The tilted shaft reaches above the water and is cut off level with the surface, brightest just under it.
       fragmentShader: /* glsl */ `
         uniform float uTime, uSeed, uStrength;
         varying vec2 vUv;
+        varying float vWorldY;
         void main() {
           float edge = smoothstep( 0.0, 0.35, vUv.x ) * smoothstep( 1.0, 0.65, vUv.x );
-          float fade = pow( vUv.y, 1.4 );
+          float below = ${SURFACE_Y.toFixed(1)} - vWorldY;
+          float fade = pow( clamp( 1.0 - below / 55.0, 0.0, 1.0 ), 1.4 ) * smoothstep( 0.0, 1.2, below );
           float flicker = 0.65 + 0.35 * sin( uTime * 0.7 + uSeed ) * sin( uTime * 0.31 + uSeed * 2.0 );
           gl_FragColor = vec4( vec3( 0.75, 0.95, 1.0 ) * edge * fade * flicker * uStrength, 1.0 );
         }`,
     });
-    const ray = new THREE.Mesh(new THREE.PlaneGeometry(rand(2.5, 7), 60), mat);
+    const ray = new THREE.Mesh(new THREE.PlaneGeometry(rand(2.5, 7), 76), mat);
     ray.userData.strength = mat.uniforms.uStrength.value;
-    ray.position.set(rand(-50, 50), SURFACE_Y - 30, rand(-45, -12));
+    ray.position.set(rand(-50, 50), SURFACE_Y - 26, rand(-45, -12));
     ray.rotation.z = rand(0.18, 0.38);
     rays.push(ray);
   }
