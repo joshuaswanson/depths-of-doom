@@ -409,10 +409,10 @@ html, body {
 }
 .badge img { display: block; width: min(36vw, 540px); }
 .badge:hover {
-  transform: translateY(-3px) scale(1.04) rotate(-1deg);
+  transform: scale(1.06);
   filter: drop-shadow(0 0.6vw 0.9vw rgba(0, 0, 0, 0.5)) brightness(1.12);
 }
-.badge:active { transform: translateY(0) scale(0.98); }
+.badge:active { transform: scale(0.98); }
 
 .subtitle {
   margin-top: 2vh;
