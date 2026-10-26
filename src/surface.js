@@ -287,6 +287,25 @@ function addWhaleSwim(material) {
   material.needsUpdate = true;
 }
 
+// A tail beat for unrigged swimmers one unit long with the head along +X: a wave runs back from the chest and the
+// flukes beat up and down the most. Each copy gets its own timing from where it sits in the world.
+export function addTailBeat(material, { rate = 6, amount = 0.06 } = {}) {
+  const previous = material.onBeforeCompile;
+  const key = material.customProgramCacheKey?.() ?? material.name;
+  material.onBeforeCompile = (shader, renderer) => {
+    previous?.call(material, shader, renderer);
+    shader.uniforms.uTime = SHADER_TIME;
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nuniform float uTime;')
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+        float beatSeed = modelMatrix[ 3 ].x * 0.7 + modelMatrix[ 3 ].z * 1.3;
+        float beatRear = smoothstep( 0.1, -0.5, transformed.x );
+        transformed.y += sin( uTime * ${rate.toFixed(2)} + transformed.x * 6.0 + beatSeed ) * ${amount.toFixed(3)} * beatRear * beatRear;`);
+  };
+  material.customProgramCacheKey = () => `${key}-tail${rate}`;
+  material.needsUpdate = true;
+}
+
 // Kelp and anemone tentacles bend in the current: still at the root, swaying more with height.
 export const CURRENT_MATERIALS = new Set(['kelp_stipe', 'kelp_blade', 'kelp_bladder', 'anemone_tentacle', 'anemone_tip']);
 const CURRENT_GLSL = /* glsl */ `

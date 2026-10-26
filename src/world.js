@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { animationsOf, findNode, plainMaterials, spawn, spawnSkinned, tint } from './assets.js';
 import { sfx } from './audio.js';
-import { CURRENT_MATERIALS, NOISE_GLSL, WHALE_BEND } from './surface.js';
+import { CURRENT_MATERIALS, NOISE_GLSL, WHALE_BEND, addTailBeat } from './surface.js';
 import {
   ABYSS_Y, CAMERA_Z, SHELF_Y, SURFACE_Y, TAN_HALF_FOV, WATER_GRADIENT_GLSL, darkness, depthShift,
 } from './water.js';
@@ -837,6 +837,131 @@ function updateWhale(whale, dt, t, cx, cy) {
   }
 }
 
+// Gives a far-off creature its own cap on the water haze, so it can sit softly in the blue and fade right out.
+function hazeCap(root) {
+  const haze = { value: 1 };
+  root.traverse((o) => {
+    if (!o.isMesh) return;
+    const m = o.material;
+    const previous = m.onBeforeCompile;
+    const key = m.customProgramCacheKey?.() ?? m.name;
+    m.defines = { ...m.defines, FOG_CAP: 'uHazeCap' };
+    m.onBeforeCompile = (shader, renderer) => {
+      previous?.call(m, shader, renderer);
+      shader.uniforms.uHazeCap = haze;
+      shader.fragmentShader = `uniform float uHazeCap;\n${shader.fragmentShader}`;
+    };
+    m.customProgramCacheKey = () => `${key}-hazecap`;
+    m.needsUpdate = true;
+  });
+  return haze;
+}
+
+// Now and then over a trench a sperm whale cruises into view, tips its nose down and dives into the dark, fading away
+// as it sinks below the light.
+const SPERM_LENGTH = 26;
+const SPERM_GAP = [70, 110];
+
+function makeSpermWhale() {
+  const holder = new THREE.Group();
+  const body = spawnSkinned('sperm_whale');
+  body.scale.setScalar(SPERM_LENGTH);
+  holder.add(body);
+  const mixer = new THREE.AnimationMixer(body);
+  const [clip] = animationsOf('sperm_whale');
+  if (clip) mixer.clipAction(clip).play();
+  holder.visible = false;
+  holder.userData = { mixer, haze: hazeCap(body), active: false, wait: 40, t: 0 };
+  return holder;
+}
+
+function updateSpermWhale(whale, dt, cx, cy, busy) {
+  const u = whale.userData;
+  if (!u.active) {
+    whale.visible = false;
+    u.wait -= dt;
+    if (u.wait > 0 || busy || cy < -50 || deepBelow(cx) < 80) return;
+    u.active = true;
+    u.t = 0;
+    u.dir = Math.random() < 0.5 ? -1 : 1;
+    u.pitch = 0;
+    whale.position.set(cx - u.dir * 40, cy + rand(-2, 5), rand(-56, -50));
+  }
+  u.t += dt;
+  u.mixer.update(dt);
+  // Cruise in level for a few seconds, then tip over and dive.
+  const want = u.t < 6 ? 0 : -0.95;
+  u.pitch += (want - u.pitch) * (1 - Math.exp(-dt * 0.5));
+  const speed = 4.5 + Math.max(0, u.t - 6) * 0.3;
+  const p = whale.position;
+  p.x += Math.cos(u.pitch) * u.dir * speed * dt;
+  p.y += Math.sin(u.pitch) * speed * dt;
+  whale.rotation.set(0, u.dir > 0 ? 0 : Math.PI, u.pitch);
+  // Fade in on arrival, and into the dark water as it sinks below the camera.
+  const arrive = Math.min(1, u.t / 3);
+  const sunk = THREE.MathUtils.smoothstep(cy - p.y, 6, 40);
+  u.haze.value = THREE.MathUtils.lerp(1, 0.5, arrive * (1 - sunk));
+  whale.visible = u.haze.value < 0.995;
+  if (sunk >= 1 || Math.abs(p.x - cx) > 120) {
+    u.active = false;
+    u.wait = rand(SPERM_GAP[0], SPERM_GAP[1]);
+  }
+}
+
+// A pod of dolphins sometimes races past just under the surface while the sub is up there, gone once off screen.
+const POD_SIZE = 5;
+const DOLPHIN_LENGTH = 3.2;
+const POD_GAP = [25, 45];
+
+function makeDolphins(scene) {
+  const pod = Array.from({ length: POD_SIZE }, () => {
+    const d = spawn('dolphin');
+    d.scale.setScalar(DOLPHIN_LENGTH);
+    d.visible = false;
+    scene.add(d);
+    return d;
+  });
+  const template = pod[0];
+  template.traverse((o) => {
+    if (o.isMesh && !o.material.userData.tail) {
+      addTailBeat(o.material, { rate: 7, amount: 0.07 });
+      o.material.userData.tail = true;
+    }
+  });
+  return { pod, active: false, wait: 20, dir: 1, members: [] };
+}
+
+function updateDolphins(dolphins, dt, t, cx, cy, halfW, sub) {
+  const near = sub && sub.y > SURFACE_Y - 12 && cy > SURFACE_Y - 22;
+  if (!dolphins.active) {
+    for (const d of dolphins.pod) d.visible = false;
+    dolphins.wait -= dt;
+    if (dolphins.wait > 0 || !near) return;
+    dolphins.active = true;
+    dolphins.dir = Math.random() < 0.5 ? -1 : 1;
+    dolphins.members = dolphins.pod.map((d, i) => ({
+      d, x: cx - dolphins.dir * (halfW + 6 + i * rand(1.5, 3)), y: SURFACE_Y - rand(1.6, 4.5), z: rand(-14, -6),
+      speed: rand(8, 10), phase: rand(0, 6),
+    }));
+  }
+  let anyInView = false;
+  for (const m of dolphins.members) {
+    m.x += dolphins.dir * m.speed * dt;
+    // Porpoising: long arcs that bring them up near the surface and back down.
+    const arc = Math.sin(t * 1.6 + m.phase);
+    const y = Math.min(SURFACE_Y - 0.6, m.y + arc * 1.1);
+    m.d.position.set(m.x, y, m.z);
+    m.d.rotation.set(0, dolphins.dir > 0 ? 0 : Math.PI, Math.cos(t * 1.6 + m.phase) * 0.35);
+    m.d.visible = true;
+    if (dolphins.dir * (m.x - cx) < halfW + 12) anyInView = true;
+  }
+  if (!anyInView) {
+    dolphins.active = false;
+    dolphins.wait = rand(POD_GAP[0], POD_GAP[1]);
+    for (const d of dolphins.pod) d.visible = false;
+  }
+}
+
 // Jellies gather in one glowing layer in the dark trenches, with a few stragglers drifting deeper.
 const JELLY_CEILING = 96;
 const JELLY_LAYER = [-122, -100];
@@ -1033,6 +1158,9 @@ export class World {
     });
     this.whale = makeWhale();
     scene.add(this.whale);
+    this.spermWhale = makeSpermWhale();
+    scene.add(this.spermWhale);
+    this.dolphins = makeDolphins(scene);
     this.anglers = Array.from({ length: 3 }, (_, i) => {
       const a = makeAngler();
       a.position.set(-36 + i * 36 + rand(-5, 5), -200, rand(-20, -4));
@@ -1321,6 +1449,8 @@ export class World {
     const cy = camera.position.y;
     if (this.updateGulls(dt, cx, cy, hull) > 0) sfx.gull();
     updateWhale(this.whale, dt, this.time, cx, cy);
+    updateSpermWhale(this.spermWhale, dt, cx, cy, this.whale.userData.active);
+    updateDolphins(this.dolphins, dt, this.time, cx, cy, halfWidthAt(-10, this.aspect), sub);
     const t = this.time;
     this.uniforms.uTime.value = t;
     const shift = depthShift(cy);
