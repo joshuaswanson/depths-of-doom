@@ -78,6 +78,9 @@ export function installWaterFog() {
   #ifdef FOG_CAP
     fogFactor = min( fogFactor, FOG_CAP );
   #endif
+  #ifdef FOG_MIN
+    fogFactor = max( fogFactor, FOG_MIN );
+  #endif
   gl_FragColor.rgb = mix( gl_FragColor.rgb, seaColor( fogT, fogColor.r, fogColor.g ), fogFactor );
 #endif
 `;

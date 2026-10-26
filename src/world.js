@@ -930,7 +930,7 @@ const LEAP_GRAVITY = 18;
 const WATER_DRAG = 3.5;
 const LEAP_SPACING = 0.9;
 const DOLPHIN_BEAT_RATE = 9;
-const DOLPHIN_LANES = [-5.5, -7.6, -9.7, -11.8, -13.9];
+const DOLPHIN_LANES = [-10, -12.1, -14.2, -16.3, -18.4];
 
 function makeDolphins(scene) {
   const pod = Array.from({ length: POD_SIZE }, () => {
@@ -944,6 +944,8 @@ function makeDolphins(scene) {
       o.material = o.material.clone();
       addTailBeat(o.material, { rate: DOLPHIN_BEAT_RATE, amount: 0.16, controls });
       addWaterline(o.material, { ripple: 0.85, topOnly: true });
+      // A little extra water haze, so the pod sits back in the blue.
+      o.material.defines = { ...o.material.defines, FOG_MIN: '0.2' };
     });
     d.userData.controls = controls;
     scene.add(d);
@@ -1005,7 +1007,7 @@ function updateDolphins(world, dt, t, cx, cy, halfW, sub) {
       // Leap from the top of a rising arc.
       // Launch hard enough to clear the surface by a few metres (rise = vy² / 2g), never two at once.
       const clear = t - (dolphins.lastLeap ?? -10) > LEAP_SPACING;
-      if (m.nextLeap <= 0 && clear && vy > 0.5 && Math.sin(a) > 0.2) {
+      if (m.nextLeap <= 0 && clear && vy > 0.05 && Math.sin(a) > 0.2) {
         // Clears the surface by rise = vy² / 2g, roughly 3 to 5 units.
         m.leap = { y, vy, target: rand(12.5, 14.5), launch: true };
         dolphins.lastLeap = t;
