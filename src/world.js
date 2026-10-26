@@ -258,11 +258,23 @@ const FOOTPRINT = {
   coral_table: 1.5, sponge_cluster: 0.55, anemone_patch: 0.95, coral_brain: 1.05, rock_a: 1.5, rock_b: 0.9,
   ruin_pillar_a: 1.0, ruin_pillar_b: 1.0, ruin_arch: 2.8, ruin_wall: 2.8, ruin_pier: 7, ruin_tower: 1.6, anchor: 1.0,
 };
-// How far two corals' footprints may overlap: they touch at 1, and below it their outer branches interleave.
-const CORAL_PACK = 0.85;
 const CORALS = ['coral_staghorn', 'coral_fan', 'coral_table', 'sponge_cluster', 'anemone_patch', 'coral_brain'];
 // Fixed resting places for sunken enemy subs: one in the murk near the western cliff, one on a trench floor.
 const WRECKS = [{ x: -150, z: -16, yaw: 0.5, roll: 0.18 }, { x: 236, z: -12, yaw: -0.4, roll: -0.12 }];
+// A rusted fishing boat lies listing on the very bottom of the first deep trench, just behind the sub's lane, where
+// it stays black until the sub's lamp sweeps across it.
+const VESSEL = { length: 60, z: -15, yaw: 0.25, roll: 0.22, sink: 3, search: [60, 400], haze: 0.35 };
+
+// The middle of the first stretch of floor at the deepest level between a and b.
+function trenchMiddle(a, b) {
+  let deepest = Infinity;
+  for (let x = a; x <= b; x += 2) deepest = Math.min(deepest, floorY(x));
+  let start = a;
+  while (floorY(start) > deepest + 2) start += 2;
+  let end = start;
+  while (end < b && floorY(end + 2) <= deepest + 2) end += 2;
+  return (start + end) / 2;
+}
 
 function makeBackdrop() {
   const mat = new THREE.ShaderMaterial({
@@ -1569,6 +1581,89 @@ function updateJellyGlow(jelly, dt, sub) {
 }
 
 
+// Where every piece of one stretch's cluster goes, worked out the same way each time so streaming order never
+// changes it. Reef rocks and corals pack in as tightly as they fit without touching. Each reef keeps within
+// CLUSTER_REACH of its middle, so reefs two stretches apart can never meet; the odd-numbered stretches pack around
+// the finished reefs on either side of them, so neighbouring reefs never overlap either.
+const CLUSTER_REACH = 16.5;
+const layoutCache = new Map();
+
+function clusterLayout(cell) {
+  let layout = layoutCache.get(cell);
+  if (layout) return layout;
+  const blockers = cell % 2 === 0 ? [] : [cell - 1, cell + 1].flatMap((c) => clusterLayout(c).footprints);
+  layout = layoutCluster(moundOf(cell), blockers);
+  layoutCache.set(cell, layout);
+  if (layoutCache.size > 64) layoutCache.delete(layoutCache.keys().next().value);
+  return layout;
+}
+
+function layoutCluster(m, blockers) {
+  let seed = m.cell * 9.13 + 1;
+  const r = () => {
+    seed += 1;
+    return hash(seed, 7);
+  };
+  const pieces = [];
+  const footprints = [];
+  const place = (name, x, z, scale) => {
+    if (SHELF_ONLY.test(name) && !onFlatShelf(x)) return;
+    footprints.push({ x, z, r: (FOOTPRINT[name] ?? 1) * scale, name });
+    pieces.push({ name, x, z, scale, yaw: r() * Math.PI * 2 });
+  };
+  // Packs a piece in as close to (x, z) as it fits: it tries spots spiralling out in small steps and takes the
+  // first that keeps clear of everything placed so far, or leaves it out if none does. Kelp stalks may crowd each
+  // other, as a forest does, but nothing else.
+  const nestle = (name, x, z, scale) => {
+    const reach = (FOOTPRINT[name] ?? 1) * scale;
+    const kelp = name.startsWith('kelp');
+    const clear = (f, px, pz) => (kelp && f.name.startsWith('kelp')) || Math.hypot(f.x - px, f.z - pz) >= f.r + reach;
+    const fits = (px, pz) => Math.abs(px - m.x) + reach <= CLUSTER_REACH && footprints.every((f) => clear(f, px, pz))
+      && blockers.every((f) => clear(f, px, pz));
+    for (let k = 0; k < 4000; k++) {
+      const a = k * 2.39996;
+      const d = 0.25 * Math.sqrt(k);
+      const px = x + Math.cos(a) * d;
+      const pz = z + Math.sin(a) * d;
+      if (fits(px, pz)) {
+        place(name, px, pz, scale);
+        return;
+      }
+    }
+  };
+  const deep = floorY(m.x) < SHELF_Y - 6;
+  if (deep) {
+    for (let i = 0; i < 2; i++) nestle(r() < 0.5 ? 'rock_a' : 'rock_b', m.x + (r() - 0.5) * 8, -6 - r() * 8, 0.8 + r() * 0.6);
+  } else if (m.reef) {
+    // Reefs near the middle of the shelf are bigger and denser. Everything aims for the reef's heart and is pushed
+    // out only as far as it must go to clear what is already there, so the reef grows as one tight clump.
+    nestle('reef_large', m.x, MOUND_Z, 1.5 + r() * 0.5);
+    for (let i = 0, rocks = 2 + Math.round(4 * m.centre); i < rocks; i++) {
+      nestle(r() < 0.5 ? 'reef_small' : 'reef_large', m.x + (r() - 0.5) * 4, MOUND_Z + 1 + (r() - 0.5) * 3,
+        1.1 + r() * 0.5);
+    }
+    const corals = Math.round(14 + 12 * reefAt(m.x) + r() * 5);
+    for (let i = 0; i < corals; i++) {
+      const a = r() * Math.PI * 2;
+      const d = r() * 2;
+      nestle(CORALS[Math.floor(r() * CORALS.length)], m.x + Math.cos(a) * d, MOUND_Z + 1 + Math.sin(a) * d,
+        1.0 + r() * 0.7);
+    }
+  } else if (m.murk > 0.5) {
+    // Out in the murk: dense kelp forests, thickest nearest the cliffs.
+    const stalks = 14 + Math.floor(r() * 6 + m.murk * 10);
+    nestle(r() < 0.5 ? 'rock_a' : 'rock_b', m.x + (r() - 0.5) * 6, MOUND_Z, 0.7 + r() * 0.5);
+    for (let i = 0; i < stalks; i++) {
+      nestle(r() < 0.7 ? 'kelp_tall' : 'kelp_short', m.x + (r() - 0.5) * 20, MOUND_Z + (r() - 0.5) * 16,
+        0.85 + r() * 0.5);
+    }
+  } else if (r() < 0.6) {
+    // The band of clean sand between the reef and the murk: just the odd rock.
+    nestle(r() < 0.5 ? 'rock_a' : 'rock_b', m.x + (r() - 0.5) * 6, MOUND_Z, 0.6 + r() * 0.5);
+  }
+  return { pieces, footprints };
+}
+
 // Bake a cluster of placed models into one mesh per material, anchored at the cluster's lowest point.
 function mergeCluster(pieces) {
   pieces.updateMatrixWorld(true);
@@ -1690,6 +1785,19 @@ export class World {
       scene.add(wreck);
       return wreck;
     });
+    this.vessel = spawn('rusted_vessel');
+    const vx = trenchMiddle(VESSEL.search[0], VESSEL.search[1]);
+    this.vessel.scale.setScalar(VESSEL.length);
+    this.vessel.position.set(vx, seabedAt(vx, VESSEL.z) - VESSEL.sink, VESSEL.z);
+    this.vessel.rotation.set(0, VESSEL.yaw, VESSEL.roll);
+    // Rust is dull: the lamp lights its colour directly in place of the faint reflections a bare metal hull would show.
+    this.vessel.traverse((o) => {
+      if (o.isMesh) o.material.metalness = 0.15;
+    });
+    // A lighter haze than the open water, so what the lamp lights still reads.
+    hazeCap(this.vessel).value = VESSEL.haze;
+    scene.add(this.vessel);
+    freeze(this.vessel);
   }
 
   setAspect(aspect) {
@@ -1865,69 +1973,14 @@ export class World {
   }
 
   buildCluster(m) {
-    let seed = m.cell * 9.13 + 1;
-    const r = () => {
-      seed += 1;
-      return hash(seed, 7);
-    };
+    const { pieces: layout, footprints } = clusterLayout(m.cell);
     const pieces = new THREE.Group();
-    const footprints = [];
-    // Packs a coral in as close to (x, z) as it fits: it tries spots spiralling out in small steps and takes the
-    // first that keeps clear of everything placed so far. Footprints may overlap a little, so branches still mesh.
-    const nestle = (name, x, z, scale) => {
-      const reach = (FOOTPRINT[name] ?? 1) * scale;
-      const fits = (px, pz) => footprints.every((f) => Math.hypot(f.x - px, f.z - pz) >= (f.r + reach) * CORAL_PACK);
-      for (let k = 0; k < 40; k++) {
-        const a = k * 2.39996;
-        const d = 0.45 * Math.sqrt(k);
-        const px = x + Math.cos(a) * d;
-        const pz = z + Math.sin(a) * d;
-        if (fits(px, pz)) {
-          place(name, px, pz, scale);
-          return;
-        }
-      }
-    };
-    const place = (name, x, z, scale) => {
-      if (SHELF_ONLY.test(name) && !onFlatShelf(x)) return;
-      footprints.push({ x, z, r: (FOOTPRINT[name] ?? 1) * scale });
-      const obj = spawn(name);
-      obj.scale.setScalar(scale);
-      obj.position.set(x, seabedAt(x, z) - 0.2, z);
-      obj.rotation.y = r() * Math.PI * 2;
+    for (const piece of layout) {
+      const obj = spawn(piece.name);
+      obj.scale.setScalar(piece.scale);
+      obj.position.set(piece.x, seabedAt(piece.x, piece.z) - 0.2, piece.z);
+      obj.rotation.y = piece.yaw;
       pieces.add(obj);
-    };
-    const deep = floorY(m.x) < SHELF_Y - 6;
-    if (deep) {
-      for (let i = 0; i < 2; i++) place(r() < 0.5 ? 'rock_a' : 'rock_b', m.x + (r() - 0.5) * 8, -6 - r() * 8, 0.8 + r() * 0.6);
-      return Object.assign([mergeCluster(pieces)], { footprints });
-    }
-    if (m.reef) {
-      // Reefs near the middle of the shelf are bigger, denser and spread wide enough to run into their neighbours.
-      const spread = 1 + 1.3 * m.centre;
-      place('reef_large', m.x, MOUND_Z, 1.5 + r() * 0.5);
-      for (let i = 0, rocks = 2 + Math.round(4 * m.centre); i < rocks; i++) {
-        place(r() < 0.5 ? 'reef_small' : 'reef_large', m.x + (r() - 0.5) * m.width * 1.4 * spread,
-          MOUND_Z + 1 + (r() - 0.5) * 5 * Math.sqrt(spread), 1.1 + r() * 0.5);
-      }
-      const corals = Math.round(14 + 12 * reefAt(m.x) + r() * 5);
-      for (let i = 0; i < corals; i++) {
-        const a = r() * Math.PI * 2;
-        const d = Math.sqrt(r()) * m.width * 0.95 * spread;
-        nestle(CORALS[Math.floor(r() * CORALS.length)], m.x + Math.cos(a) * d, MOUND_Z + 1 + Math.sin(a) * d * 0.7,
-          1.0 + r() * 0.7);
-      }
-    } else if (m.murk > 0.5) {
-      // Out in the murk: dense kelp forests, thickest nearest the cliffs.
-      const stalks = 14 + Math.floor(r() * 6 + m.murk * 10);
-      for (let i = 0; i < stalks; i++) {
-        place(r() < 0.7 ? 'kelp_tall' : 'kelp_short', m.x + (r() - 0.5) * 20, MOUND_Z + (r() - 0.5) * 16,
-          0.85 + r() * 0.5);
-      }
-      place(r() < 0.5 ? 'rock_a' : 'rock_b', m.x + (r() - 0.5) * 6, MOUND_Z, 0.7 + r() * 0.5);
-    } else {
-      // The band of clean sand between the reef and the murk: just the odd rock.
-      if (r() < 0.6) place(r() < 0.5 ? 'rock_a' : 'rock_b', m.x + (r() - 0.5) * 6, MOUND_Z, 0.6 + r() * 0.5);
     }
     return Object.assign([mergeCluster(pieces)], { footprints });
   }
