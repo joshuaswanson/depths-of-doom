@@ -117,11 +117,11 @@ def enemy_sub(P, name="enemy_sub", length=3.4, radius=0.85, tower=True, skull_ma
             red_light(part, P, b.frame(x, side(math.radians(-25))), radius=0.06 * radius / 0.85)
 
     if tower:
-        tx = -h * 0.05
+        tx = -h * 0.22
         tz = b.r(tx)
-        t_h = 0.75 * radius
+        r = radius * 0.75
+        t_h = 0.75 * r
         # A swept-back conning tower like a shark's dorsal fin, its leading edge raked toward the tail.
-        r = radius
         tower = [(tx - 0.3 * r, tz - 0.12), (tx + 0.18 * r, tz + t_h * 1.02), (tx + 0.55 * r, tz + t_h * 1.08),
                  (tx + 1.1 * r, tz + t_h * 0.38), (tx + 1.05 * r, tz - 0.12)]
         part.extrude(P["enemy_hull"], tower, depth=0.5 * r, rot=(math.pi / 2, 0, 0), bevel=0.05)
