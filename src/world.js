@@ -867,7 +867,7 @@ function hazeCap(root) {
 // Now and then over a trench a sperm whale cruises into view, tips its nose down and dives into the dark, fading away
 // as it sinks below the light.
 const SPERM_LENGTH = 26;
-const SPERM_GAP = [70, 110];
+const SPERM_GAP = [50, 80];
 
 function makeSpermWhale() {
   const holder = new THREE.Group();
@@ -889,21 +889,24 @@ function makeSpermWhale() {
       along: `( -( transformed.z - ${centre.toFixed(2)} ) / ${size.toFixed(2)} )` });
   });
   holder.visible = false;
-  holder.userData = { mixer, haze: hazeCap(body), active: false, wait: 40, t: 0 };
+  holder.userData = { mixer, haze: hazeCap(body), active: false, wait: 25, t: 0 };
   return holder;
 }
 
-function updateSpermWhale(whale, dt, cx, cy, busy) {
+function updateSpermWhale(whale, dt, cx, cy, humpback, aspect) {
   const u = whale.userData;
   if (!u.active) {
     whale.visible = false;
     u.wait -= dt;
-    if (u.wait > 0 || busy || cy < -50 || deepBelow(cx) < 80) return;
+    if (u.wait > 0 || cy < -50 || deepBelow(cx) < 80) return;
     u.active = true;
     u.t = 0;
-    u.dir = Math.random() < 0.5 ? -1 : 1;
+    // Come in from off screen on the side away from the humpback, so the two never cross.
+    const away = humpback.userData.active ? Math.sign(cx - humpback.position.x) || 1 : (Math.random() < 0.5 ? -1 : 1);
+    u.dir = -away;
     u.pitch = 0;
-    whale.position.set(cx - u.dir * 40, cy + rand(-2, 5), rand(-56, -50));
+    const z = rand(-56, -50);
+    whale.position.set(cx + away * (halfWidthAt(z, aspect) + SPERM_LENGTH * 0.6), cy + rand(-2, 5), z);
   }
   u.t += dt;
   u.mixer.update(dt);
@@ -949,7 +952,7 @@ function makeDolphins(scene) {
     d.traverse((o) => {
       if (!o.isMesh) return;
       o.material = o.material.clone();
-      addTailBeat(o.material, { rate: DOLPHIN_BEAT_RATE, amount: 0.16, controls });
+      addTailBeat(o.material, { rate: DOLPHIN_BEAT_RATE, amount: 0.2, front: 0.32, controls });
       addWaterline(o.material, { ripple: 0.85, topOnly: true });
       // A little extra water haze, so the pod sits back in the blue.
       o.material.defines = { ...o.material.defines, FOG_MIN: '0.2' };
@@ -1001,15 +1004,25 @@ function updateDolphins(world, dt, t, cx, cy, halfW, sub) {
       if (wasAbove && y <= SURFACE_Y) world.effects?.bigSplash({ x: m.x, y: SURFACE_Y, z: m.z }, 1.25, 1.4);
       else if (!wasAbove && y > SURFACE_Y) world.effects?.splash({ x: m.x, y: SURFACE_Y, z: m.z }, 0.8);
       if (!m.leap.launch && y <= SURFACE_Y && (y < m.base || vy > -1.2)) {
-        // Pick the swim arc back up exactly where it lands, heading down, so it carries on without a jump.
+        // Hand back to swimming without a jump: whatever gap is left between here and the swim arc becomes an
+        // offset that eases away, carrying the dive's downward speed with it.
         m.leap = null;
-        m.phase = Math.PI - Math.asin(THREE.MathUtils.clamp((y - m.base) / m.amp, -1, 1)) - t * m.rate;
+        m.phase = Math.PI - t * m.rate;
+        const a = t * m.rate + m.phase;
+        m.offset = y - (m.base + Math.sin(a) * m.amp);
+        m.offsetVel = vy - Math.cos(a) * m.amp * m.rate;
         m.nextLeap = rand(3.5, 8);
       }
     } else {
       const a = t * m.rate + m.phase;
-      y = m.base + Math.sin(a) * m.amp;
-      vy = Math.cos(a) * m.amp * m.rate;
+      // The landing offset settles like a damped spring, so position and speed both flow on smoothly.
+      if (m.offset) {
+        m.offsetVel += (-m.offset * 6 - m.offsetVel * 4.5) * dt;
+        m.offset += m.offsetVel * dt;
+        if (Math.abs(m.offset) < 0.002 && Math.abs(m.offsetVel) < 0.01) m.offset = 0;
+      }
+      y = m.base + Math.sin(a) * m.amp + (m.offset || 0);
+      vy = Math.cos(a) * m.amp * m.rate + (m.offset ? m.offsetVel : 0);
       m.nextLeap -= dt;
       // Leap from the top of a rising arc.
       // Launch hard enough to clear the surface by a few metres (rise = vy² / 2g), never two at once.
@@ -1534,7 +1547,7 @@ export class World {
     const cy = camera.position.y;
     if (this.updateGulls(dt, cx, cy, hull) > 0) sfx.gull();
     updateWhale(this.whale, dt, this.time, cx, cy, this.aspect);
-    updateSpermWhale(this.spermWhale, dt, cx, cy, this.whale.userData.active);
+    updateSpermWhale(this.spermWhale, dt, cx, cy, this.whale, this.aspect);
     updateDolphins(this, dt, this.time, cx, cy, halfWidthAt(-10, this.aspect), sub);
     const t = this.time;
     this.uniforms.uTime.value = t;
