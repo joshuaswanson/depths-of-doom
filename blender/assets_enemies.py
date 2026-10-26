@@ -117,7 +117,7 @@ def enemy_sub(P, name="enemy_sub", length=3.4, radius=0.85, tower=True, skull_ma
             red_light(part, P, b.frame(x, side(math.radians(-25))), radius=0.06 * radius / 0.85)
 
     if tower:
-        tx = -h * 0.22
+        tx = -h * 0.34
         tz = b.r(tx)
         r = radius * 0.75
         t_h = 0.75 * r
