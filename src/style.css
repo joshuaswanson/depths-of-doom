@@ -471,7 +471,11 @@ kbd {
   border-radius: 999px;
   overflow: hidden;
 }
-.loading-fill { height: 100%; background: linear-gradient(#ffd85a, var(--gold-deep)); transition: width 0.2s; }
+.loading-fill { height: 100%; width: 0; background: linear-gradient(#ffd85a, var(--gold-deep)); transition: width 0.2s; }
+.below { position: relative; }
+.below .unseen { visibility: hidden; }
+/* The bar sits where the Dive button will appear. */
+.below .loading { position: absolute; top: calc(4vh + 1.2vh + 1.6vw); left: 50%; margin: 0; transform: translateX(-50%); }
 
 @keyframes shake {
   0%, 100% { transform: translateX(0); }

@@ -4,6 +4,21 @@ const ICON = (name) => `${import.meta.env.BASE_URL}icons/${name}.webp`;
 const LOGO = `<div class="logo-wrap"><img class="logo-img" src="${import.meta.env.BASE_URL}logo.webp" alt="Depths of Doom">
   <a class="badge" href="https://joshuaswanson.github.io" target="_blank" rel="noopener">
     <img src="${import.meta.env.BASE_URL}badge.webp" alt="by Joshua Swanson"></a></div>`;
+const TITLE_CONTROLS = `<button class="big-btn">Dive!</button>
+  <div class="coop-panel">
+    <div class="coop-title">Dive with friends</div>
+    <div class="coop">
+      <button class="coop-btn host">Host a game</button>
+      <span class="coop-or">or</span>
+      <input class="coop-code" maxlength="4" placeholder="CODE" spellcheck="false" autocomplete="off">
+      <button class="coop-btn join">Join</button>
+    </div>
+    <div class="coop-status">Up to 4 subs. Share the code or the invite link.</div>
+  </div>
+  <div class="controls">
+    <div><kbd>WASD</kbd> / <kbd>Arrows</kbd> swim</div>
+    <div><kbd>P</kbd> pause &nbsp; <kbd>M</kbd> mute</div>
+  </div>`;
 
 const HEART = `<svg viewBox="0 0 34 31" class="heart-svg"><defs>
   <linearGradient id="hg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff6b6b"/>
@@ -93,31 +108,25 @@ export class Hud {
     this.health.classList.add('hurt');
   }
 
+  // The loading screen lays out the title screen's controls unseen beneath the logo, so the logo and badge sit
+  // exactly where they will on the title screen, and keeps the same logo element through the switch so its bob
+  // carries on unbroken.
   showLoading(progress) {
-    this.overlay.className = 'overlay show';
-    this.overlay.innerHTML = `<div class="panel">${LOGO}
-      <div class="loading"><div class="loading-fill" style="width:${Math.round(progress * 100)}%"></div></div></div>`;
+    let fill = this.overlay.querySelector('.loading-fill');
+    if (!fill) {
+      this.overlay.className = 'overlay show';
+      this.overlay.innerHTML = `<div class="panel">${LOGO}<div class="below"><div class="unseen">${TITLE_CONTROLS}</div>
+        <div class="loading"><div class="loading-fill"></div></div></div></div>`;
+      fill = this.overlay.querySelector('.loading-fill');
+    }
+    fill.style.width = `${Math.round(progress * 100)}%`;
   }
 
   showTitle() {
     this.overlay.className = 'overlay show';
-    this.overlay.innerHTML = `<div class="panel">
-      ${LOGO}
-      <button class="big-btn">Dive!</button>
-      <div class="coop-panel">
-        <div class="coop-title">Dive with friends</div>
-        <div class="coop">
-          <button class="coop-btn host">Host a game</button>
-          <span class="coop-or">or</span>
-          <input class="coop-code" maxlength="4" placeholder="CODE" spellcheck="false" autocomplete="off">
-          <button class="coop-btn join">Join</button>
-        </div>
-        <div class="coop-status">Up to 4 subs. Share the code or the invite link.</div>
-      </div>
-      <div class="controls">
-        <div><kbd>WASD</kbd> / <kbd>Arrows</kbd> swim</div>
-        <div><kbd>P</kbd> pause &nbsp; <kbd>M</kbd> mute</div>
-      </div></div>`;
+    const below = this.overlay.querySelector('.below');
+    if (below) below.innerHTML = TITLE_CONTROLS;
+    else this.overlay.innerHTML = `<div class="panel">${LOGO}<div class="below">${TITLE_CONTROLS}</div></div>`;
     this.overlay.querySelector('.big-btn').addEventListener('click', () => this.onStart());
     const code = this.overlay.querySelector('.coop-code');
     code.addEventListener('keydown', (e) => {
