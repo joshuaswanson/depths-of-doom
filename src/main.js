@@ -280,7 +280,7 @@ let cinematic = false;
 let cameraRig = null;
 
 function tick(dt) {
-  SHADER_TIME.value += dt;
+  if (state !== 'paused') SHADER_TIME.value += dt;
   if (state === 'playing') {
     game.update(dt, scriptedInput ?? readInput());
     if (net) {

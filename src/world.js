@@ -915,6 +915,7 @@ const DOLPHIN_LENGTH = 4.6;
 const POD_GAP = [25, 45];
 const DOLPHIN_SPEED = 8.5;
 const LEAP_GRAVITY = 11;
+const LEAP_SPACING = 0.9;
 const DOLPHIN_LANES = [-5.5, -7.6, -9.7, -11.8, -13.9];
 
 function makeDolphins(scene) {
@@ -950,7 +951,7 @@ function updateDolphins(world, dt, t, cx, cy, halfW, sub) {
     const lanes = DOLPHIN_LANES.slice().sort(() => Math.random() - 0.5);
     dolphins.members = dolphins.pod.map((d, i) => ({
       d, x: cx - dolphins.dir * (halfW + 8 + i * 3.6 + rand(0, 2)), base: SURFACE_Y - rand(3, 4.2), z: lanes[i],
-      phase: rand(0, Math.PI * 2), rate: rand(1.5, 1.9), amp: rand(0.9, 1.3), leap: null, nextLeap: rand(1.5, 5),
+      phase: rand(0, Math.PI * 2), rate: rand(1.5, 1.9), amp: rand(0.9, 1.3), leap: null, nextLeap: rand(1, 6),
     }));
   }
   let anyInView = false;
@@ -959,8 +960,13 @@ function updateDolphins(world, dt, t, cx, cy, halfW, sub) {
     let y;
     let vy;
     if (m.leap) {
-      // Ballistic leap: out of the water and back in, nose following the arc.
-      m.leap.vy -= LEAP_GRAVITY * dt;
+      // Surge up through the water to launch speed, then fly ballistically out and back in, nose following the arc.
+      if (m.leap.launch && m.leap.y < SURFACE_Y) {
+        m.leap.vy += (m.leap.target - m.leap.vy) * (1 - Math.exp(-dt * 6));
+      } else {
+        m.leap.launch = false;
+        m.leap.vy -= LEAP_GRAVITY * dt;
+      }
       const wasAbove = m.leap.y > SURFACE_Y;
       m.leap.y += m.leap.vy * dt;
       y = m.leap.y;
@@ -971,7 +977,7 @@ function updateDolphins(world, dt, t, cx, cy, halfW, sub) {
         // Pick the swim arc back up exactly where it lands, heading down, so it carries on without a jump.
         m.leap = null;
         m.phase = Math.PI - Math.asin(THREE.MathUtils.clamp((y - m.base) / m.amp, -1, 1)) - t * m.rate;
-        m.nextLeap = rand(3, 7);
+        m.nextLeap = rand(3.5, 8);
       }
     } else {
       const a = t * m.rate + m.phase;
@@ -979,8 +985,12 @@ function updateDolphins(world, dt, t, cx, cy, halfW, sub) {
       vy = Math.cos(a) * m.amp * m.rate;
       m.nextLeap -= dt;
       // Leap from the top of a rising arc.
-      // Launch hard enough to clear the surface by a few metres: rise = vy² / 2g.
-      if (m.nextLeap <= 0 && vy > 0.5 && Math.sin(a) > 0.2) m.leap = { y, vy: rand(11.5, 13) };
+      // Launch hard enough to clear the surface by a few metres (rise = vy² / 2g), never two at once.
+      const clear = t - (dolphins.lastLeap ?? -10) > LEAP_SPACING;
+      if (m.nextLeap <= 0 && clear && vy > 0.5 && Math.sin(a) > 0.2) {
+        m.leap = { y, vy, target: rand(10.5, 13.5), launch: true };
+        dolphins.lastLeap = t;
+      }
     }
     m.d.position.set(m.x, y, m.z);
     // In the air the tail rests and the body bows into an arch, straightening again back in the water.

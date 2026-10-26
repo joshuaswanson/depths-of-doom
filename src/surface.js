@@ -310,7 +310,7 @@ export function addTailBeat(material, { rate = 6, amount = 0.06, controls = null
         float beatAlong = smoothstep( 0.5, -0.5, transformed.x );
         float beatWave = sin( beatA + transformed.x * 2.4 );
         transformed.y += beatWave * uBeat * ${amount.toFixed(3)} * mix( 0.5, 1.0, pow( beatAlong, 1.6 ) );
-        transformed.y -= uArch * 0.09 * pow( transformed.x * 2.0, 2.0 );`);
+        transformed.y -= uArch * 0.18 * pow( transformed.x * 2.0, 2.0 );`);
   };
   material.customProgramCacheKey = () => `${key}-tail${rate}`;
   material.needsUpdate = true;
