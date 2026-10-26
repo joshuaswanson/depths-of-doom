@@ -363,9 +363,9 @@ const PANEL_SHARE = 0.17;
 const LOOSE_COIN_RANGE = 70;
 
 const ENEMY_TYPES = {
-  scout: { model: 'enemy_scout', hp: 5, scale: 0.85, rx: 1.4, ry: 0.5, coins: 12, boom: 0.9, speed: 4.2 },
-  gunner: { model: 'enemy_gunner', hp: 16, scale: 0.95, rx: 1.95, ry: 0.72, coins: 30, boom: 1.2, speed: 3.2 },
-  boss: { model: 'enemy_boss', hp: 280, scale: 1.1, rx: 3.75, ry: 1.35, coins: 260, boom: 2.8, speed: 2.4 },
+  scout: { model: 'enemy_scout', hp: 5, scale: 1.19, rx: 1.96, ry: 0.7, coins: 12, boom: 0.9, speed: 4.2 },
+  gunner: { model: 'enemy_gunner', hp: 16, scale: 1.28, rx: 2.63, ry: 0.97, coins: 30, boom: 1.2, speed: 3.2 },
+  boss: { model: 'enemy_boss', hp: 280, scale: 1.38, rx: 4.69, ry: 1.69, coins: 260, boom: 2.8, speed: 2.4 },
   mine: { model: 'mine', hp: 3, scale: 1.05, rx: 0.62, ry: 0.62, coins: 3, boom: 1.0, speed: 1.0 },
 };
 
