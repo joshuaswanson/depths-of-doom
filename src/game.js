@@ -146,6 +146,53 @@ function midTurn(e) {
   return Math.abs(Math.cos(e.flip.rotation.y)) < 0.5;
 }
 
+// The drum's three red missile tips come merged into one mesh; split them apart so each can slide in on its own when
+// its missile is fired.
+function splitTips(mesh) {
+  const geo = mesh.geometry.index ? mesh.geometry.toNonIndexed() : mesh.geometry;
+  const pos = geo.attributes.position;
+  const tris = pos.count / 3;
+  const centre = new THREE.Vector2();
+  const cents = [];
+  for (let t = 0; t < tris; t++) {
+    let y = 0;
+    let z = 0;
+    for (let k = 0; k < 3; k++) {
+      y += pos.getY(t * 3 + k) / 3;
+      z += pos.getZ(t * 3 + k) / 3;
+    }
+    cents.push([y, z]);
+    centre.x += y / tris;
+    centre.y += z / tris;
+  }
+  const angle = ([y, z]) => Math.atan2(z - centre.y, y - centre.x);
+  const a0 = angle(cents[0]);
+  const groups = [[], [], []];
+  cents.forEach((c, t) => {
+    const k = Math.round((((angle(c) - a0) % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2) / (Math.PI * 2 / 3)) % 3;
+    groups[k].push(t);
+  });
+  for (const group of groups) {
+    const part = new THREE.BufferGeometry();
+    for (const [name, attr] of Object.entries(geo.attributes)) {
+      const out = new Float32Array(group.length * 3 * attr.itemSize);
+      group.forEach((t, i) => {
+        for (let k = 0; k < 3; k++) {
+          for (let c = 0; c < attr.itemSize; c++) out[(i * 3 + k) * attr.itemSize + c] = attr.getComponent(t * 3 + k, c);
+        }
+      });
+      part.setAttribute(name, new THREE.BufferAttribute(out, attr.itemSize));
+    }
+    const tip = new THREE.Mesh(part, mesh.material);
+    tip.name = mesh.name;
+    tip.position.copy(mesh.position);
+    tip.quaternion.copy(mesh.quaternion);
+    tip.scale.copy(mesh.scale);
+    mesh.parent.add(tip);
+  }
+  mesh.removeFromParent();
+}
+
 // The player's missile drum, repainted in enemy colours.
 function enemyPod() {
   if (!podTemplate) {
@@ -156,6 +203,9 @@ function enemyPod() {
       o.material.color.set(POD_COLORS[o.material.name]);
       if (o.material.name === 'red') o.material.emissive = new THREE.Color('#ff2a1f').multiplyScalar(0.6);
     });
+    const tips = [];
+    podTemplate.traverse((o) => o.isMesh && o.material.name === 'red' && tips.push(o));
+    for (const mesh of tips) splitTips(mesh);
   }
   return podTemplate.clone(true);
 }
@@ -1136,7 +1186,11 @@ export class Game {
       if (e.reload > 0) {
         // The fired missile's tip sinks into the drum, then the next one slides out.
         e.reload = Math.max(0, e.reload - dt / ENEMY_RELOAD);
-        for (const tip of e.podTips) tip.position.x = -0.26 * THREE.MathUtils.smoothstep(e.reload, 0, 0.6);
+        e.podTips.forEach((tip, i) => {
+          tip.userData.restX ??= tip.position.x;
+          const retract = i === e.tipFired ? THREE.MathUtils.smoothstep(e.reload, 0, 0.6) : 0;
+          tip.position.x = tip.userData.restX - 0.26 * retract;
+        });
       }
       const dazzle = e.dazzled > 0 ? 0.5 : 1;
       const fireMult = (1 + this.wave * 0.05) * dazzle;
@@ -1461,6 +1515,7 @@ export class Game {
     // The missile leaves its tube along the drum's facing, then curves onto its aim.
     const forward = new THREE.Vector3(1, 0, 0).transformDirection(e.launcher.matrixWorld);
     const tube = midTurn(e) ? (e.facing > 0 ? 0 : Math.PI) : Math.atan2(forward.y, forward.x);
+    e.tipFired = ((e.tipFired ?? -1) + 1) % Math.max(1, e.podTips.length);
     pos.x -= Math.cos(tube) * 0.3;
     pos.y -= Math.sin(tube) * 0.3;
     this.spawnEnemyMissile(pos, Math.cos(tube) * speed * 0.45, Math.sin(tube) * speed * 0.45, { aim: a, speed });
