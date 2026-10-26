@@ -207,21 +207,22 @@ export function seabedAt(x, z = 0) {
   return floorY(x) + detailHeight(x, z);
 }
 
+// Ruins only stand on the sunlit shelves; anything off the shelf, down the cliffs and in the trenches, is bare rock.
 const LAYERS = [
   {
     z: [-100, -70], gap: [12, 24], scale: [2.4, 3.6], plain: true,
     props: ['ruin_tower', 'ruin_pillar_a', 'ruin_arch', 'ruin_tower', 'ruin_pier'],
-    deep: ['ruin_tower', 'rock_a', 'ruin_pillar_b'],
+    deep: ['rock_a', 'rock_b'],
   },
   {
     z: [-48, -22], gap: [6, 12], scale: [1.1, 1.7],
     props: ['ruin_pier', 'ruin_arch', 'ruin_pillar_a', 'ruin_pillar_b', 'ruin_wall', 'anchor', 'rock_a', 'ruin_tower'],
-    deep: ['rock_a', 'rock_b', 'ruin_pillar_b', 'ruin_wall'],
+    deep: ['rock_a', 'rock_b'],
   },
   {
     z: [-16, -2], gap: [7, 14], scale: [0.85, 1.35],
     props: ['ruin_pillar_b', 'rock_b', 'anchor', 'rock_a', 'ruin_wall'],
-    deep: ['rock_a', 'rock_b', 'rock_b', 'ruin_pillar_b'],
+    deep: ['rock_a', 'rock_b', 'rock_b'],
   },
   {
     z: [9, 13], gap: [5, 10], scale: [1.0, 1.5], tint: ['#0b2a3f', 0.6],
@@ -1468,7 +1469,7 @@ export class World {
 
   placeProp(prop, x) {
     const { layer } = prop;
-    const deep = floorY(x) < SHELF_Y - 14;
+    const deep = floorY(x) < SHELF_Y - 4;
     const murk = deep ? 0 : murkAt(x);
     const want = deep ? 'deep' : murk > 0.35 ? 'murk' : 'clear';
     if (prop.kind !== want) {
