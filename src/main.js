@@ -310,6 +310,7 @@ function tick(dt) {
     camera.fov = CAMERA_FOV;
     camera.updateProjectionMatrix();
   }
+  world.calm = !(state === 'playing' && game.inCombat);
   if (state !== 'paused') world.update(dt, camera, player.alive ? player.group.position : null, player.alive ? player : null);
   setAmbience(dt, state === 'playing' && {
     active: true,

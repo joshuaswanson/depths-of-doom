@@ -805,7 +805,9 @@ const WHALE_LENGTH = 46;
 const WHALE_Z = { near: -58, centre: -90 };
 const WHALE_SPEED = 2.6;
 const WHALE_TURN_RADIUS = 32;
-const WHALE_GAP = [35, 60];
+const WHALE_GAP = [25, 45];
+// How far back it starts to fade on its way out, and where it has vanished.
+const WHALE_FADE = [85, 150];
 const WHALE_ROAM = 60;
 // How much of the water's haze it takes on: a soft veil in open water, all of it near the shallows.
 const WHALE_HAZE = 0.68;
@@ -848,7 +850,7 @@ function whaleHome(cx) {
   return roam > 15 ? { x: (lo + hi) / 2, roam } : null;
 }
 
-function updateWhale(whale, dt, t, cx, cy, aspect) {
+function updateWhale(whale, dt, t, cx, cy, aspect, calm) {
   const u = whale.userData;
   if (!u.active) {
     u.wait -= dt;
@@ -872,23 +874,24 @@ function updateWhale(whale, dt, t, cx, cy, aspect) {
     u.fade = 0;
     u.heading = dir > 0 ? 0 : Math.PI;
     u.turn = 0;
+    u.departing = false;
+    u.song = rand(2, 5);
     // It stands about 12 units tall: keep it below the surface and well above anything on the trench floor.
     u.baseY = rand(-14, 6);
     whale.position.set(cx - dir * offscreen, u.baseY, WHALE_Z.near - 3);
   }
   const p = whale.position;
   const ahead = p.x + Math.cos(u.heading) * (45 + WHALE_TURN_RADIUS);
-  // Begin a half-circle when the floor ahead rises toward a shelf or it reaches the edge of its patch, curving toward
-  // the middle of its depth band.
+  // At the end of its patch, or before the floor rises toward a shelf, it turns away from the camera and swims off
+  // into the distance until the haze swallows it.
   const leaving = (p.x - u.home.x) * Math.cos(u.heading) > 0 && Math.abs(p.x - u.home.x) > u.home.roam;
-  if (u.turn === 0 && (deepBelow(ahead) < 45 || leaving)) {
-    const vx = Math.cos(u.heading);
-    const towardBack = p.z > WHALE_Z.centre;
-    u.turn = (towardBack ? -1 : 1) * Math.sign(vx || 1) * Math.PI;
+  if (!u.departing && (deepBelow(ahead) < 45 || leaving)) {
+    u.departing = true;
+    u.turn = Math.cos(u.heading) > 0 ? -Math.PI / 2 : Math.PI / 2;
   }
   if (u.turn !== 0) {
     // Ease into and out of the turn: slowest at the start and end, widest sweep in the middle.
-    const progress = 1 - Math.abs(u.turn) / Math.PI;
+    const progress = 1 - Math.abs(u.turn) / (Math.PI / 2);
     const ease = 0.35 + 0.65 * Math.sin(Math.PI * progress);
     const rate = (WHALE_SPEED / WHALE_TURN_RADIUS) * ease * 1.25 * dt * Math.sign(u.turn);
     const step = Math.abs(rate) > Math.abs(u.turn) ? u.turn : rate;
@@ -904,6 +907,7 @@ function updateWhale(whale, dt, t, cx, cy, aspect) {
   WHALE_BEND.value = u.bend + Math.sin(t * 0.45 + u.phase) * 0.012;
   p.x += Math.cos(u.heading) * WHALE_SPEED * dt;
   p.z = Math.min(WHALE_Z.near, p.z + Math.sin(u.heading) * WHALE_SPEED * dt);
+  const distant = THREE.MathUtils.smoothstep(-p.z, WHALE_FADE[0], WHALE_FADE[1]);
   p.y = u.baseY + Math.sin(t * 0.25 + u.phase) * 1.2;
   const bank = u.turn === 0 ? 0 : -Math.sign(u.turn) * 0.1;
   whale.rotation.set(THREE.MathUtils.lerp(whale.rotation.x, bank, 1 - Math.exp(-dt * 0.5)), -u.heading,
@@ -911,10 +915,19 @@ function updateWhale(whale, dt, t, cx, cy, aspect) {
   // Fade in on arrival, and out into the haze as the floor below rises toward the shallows.
   u.fade = Math.min(1, u.fade + dt / 4);
   const shallow = 1 - THREE.MathUtils.smoothstep(deepBelow(p.x), 25, 60);
-  u.haze.value = THREE.MathUtils.lerp(1, WHALE_HAZE, u.fade * (1 - shallow));
+  u.haze.value = THREE.MathUtils.lerp(1, WHALE_HAZE, u.fade * (1 - Math.max(shallow, distant)));
   whale.visible = u.haze.value < 0.995;
-  if (Math.abs(p.x - cx) > 320 || shallow > 0.98) {
+  // While it's clearly in view it sings now and then, softer the hazier it is, from its side of the screen.
+  const seen = 1 - (u.haze.value - WHALE_HAZE) / (1 - WHALE_HAZE);
+  u.song -= dt;
+  // Only in the quiet between waves, never over a fight.
+  if (u.song <= 0 && calm && seen > 0.25 && Math.abs(p.x - cx) < halfWidthAt(p.z, aspect)) {
+    u.song = rand(7, 14);
+    sfx.whaleCall(THREE.MathUtils.clamp((p.x - cx) / halfWidthAt(p.z, aspect), -1, 1), seen);
+  }
+  if (Math.abs(p.x - cx) > 320 || shallow > 0.98 || distant > 0.99) {
     u.active = false;
+    u.departing = false;
     u.wait = rand(WHALE_GAP[0], WHALE_GAP[1]);
   }
 }
@@ -1042,7 +1055,7 @@ function updateSpermWhale(whale, dt, cx, cy, humpback, aspect) {
 // A pod of dolphins sometimes races past just under the surface while the sub is up there, gone once off screen.
 // They porpoise in long arcs with their noses following the curve, and now and then one leaps clear of the water.
 const POD_SIZE = 5;
-const DOLPHIN_LENGTH = 4.6;
+const DOLPHIN_LENGTH = 5.2;
 const POD_GAP = [25, 45];
 const DOLPHIN_SPEED = 7.2;
 // The same pull the sub feels when it breaches; water slows a dolphin quickly once it is back in.
@@ -1174,30 +1187,30 @@ function updateDolphins(world, dt, t, cx, cy, halfW, sub) {
   }
 }
 
-// A couple of marlin cruise the open blue above the trenches, near the surface: wandering, now and then putting on
-// a burst of speed, and wheeling round before they reach the shelves. They come and go off screen.
-const MARLIN_COUNT = 2;
+// Now and then a marlin cruises across the open blue above a trench, near the surface: in from one side of the
+// screen, out the other, then gone. Its depth and pace drift gently so it never moves in a straight mechanical line.
 const MARLIN_LENGTH = 6.5;
-const MARLIN_BAND = [SURFACE_Y - 18, SURFACE_Y - 4];
+const MARLIN_BAND = [SURFACE_Y - 16, SURFACE_Y - 5];
+const MARLIN_SPEED = 5.5;
+const MARLIN_GAP = [12, 25];
 
-function makeMarlins(scene) {
-  return Array.from({ length: MARLIN_COUNT }, () => {
-    const fish = spawn('marlin');
-    fish.scale.setScalar(MARLIN_LENGTH);
-    fish.rotation.order = 'YXZ';
-    const controls = { beat: { value: 1 }, phase: { value: rand(0, Math.PI * 2) }, arch: { value: 0 },
-      rate: { value: rand(7, 8.5) } };
-    fish.traverse((o) => {
-      if (!o.isMesh) return;
-      o.material = o.material.clone();
-      addTailBeat(o.material, { rate: 7.5, amount: 0.07, front: 0.15, sideways: true, controls });
-      addWaterline(o.material, { ripple: 0.85, topOnly: true });
-    });
-    fish.visible = false;
-    fish.userData = { controls, active: false, wait: rand(4, 16) };
-    scene.add(fish);
-    return fish;
+function makeMarlin(scene) {
+  const fish = spawn('marlin');
+  fish.scale.setScalar(MARLIN_LENGTH);
+  fish.rotation.order = 'YXZ';
+  // The stroke is driven from here: rate stays 0 in the shader and the phase advances with the fish's speed, so a
+  // change of pace never makes the tail jump.
+  const controls = { beat: { value: 1 }, phase: { value: 0 }, arch: { value: 0 }, rate: { value: 0 } };
+  fish.traverse((o) => {
+    if (!o.isMesh) return;
+    o.material = o.material.clone();
+    addTailBeat(o.material, { amount: 0.07, front: 0.15, sideways: true, controls });
+    addWaterline(o.material, { ripple: 0.85, topOnly: true });
   });
+  fish.visible = false;
+  fish.userData = { controls, active: false, wait: rand(6, 14) };
+  scene.add(fish);
+  return fish;
 }
 
 function updateMarlin(fish, dt, t, cx, cy, halfW) {
@@ -1206,61 +1219,36 @@ function updateMarlin(fish, dt, t, cx, cy, halfW) {
   if (!u.active) {
     fish.visible = false;
     u.wait -= dt;
-    if (u.wait > 0 || !open) return;
+    if (u.wait > 0 || !open || deepBelow(cx) < 60) return;
     const side = Math.random() < 0.5 ? -1 : 1;
-    const x = cx + side * (halfW + 10);
-    if (deepBelow(x) < 60 || deepBelow(cx) < 40) {
+    const x = cx + side * (halfW + MARLIN_LENGTH);
+    if (deepBelow(x) < 50) {
       u.wait = 2;
       return;
     }
     u.active = true;
     u.dir = -side;
-    u.yaw = u.dir > 0 ? 0 : Math.PI;
-    u.speed = rand(5, 7);
-    u.cruise = u.speed;
-    u.y = rand(MARLIN_BAND[0], MARLIN_BAND[1]);
-    u.targetY = u.y;
-    u.burst = 0;
-    u.nextBurst = rand(2, 6);
-    u.nextWander = 0;
-    fish.position.set(x, u.y, rand(-26, -9));
+    u.base = rand(MARLIN_BAND[0], MARLIN_BAND[1]);
+    u.seed = rand(0, 100);
+    u.pitch = 0;
+    fish.position.set(x, u.base, rand(-24, -10));
   }
   const p = fish.position;
-  // Wander up and down within the band, and now and then dart forward.
-  u.nextWander -= dt;
-  if (u.nextWander <= 0) {
-    u.nextWander = rand(2, 4);
-    u.targetY = rand(MARLIN_BAND[0], MARLIN_BAND[1]);
-  }
-  u.nextBurst -= dt;
-  if (u.nextBurst <= 0) {
-    u.burst = 1.2;
-    u.nextBurst = rand(4, 9);
-  }
-  u.burst = Math.max(0, u.burst - dt);
-  const want = u.cruise * (u.burst > 0 ? 2.2 : 1);
-  u.speed += (want - u.speed) * (1 - Math.exp(-dt * 2.5));
-  // Wheel round before the floor rises toward a shelf, or once well past the camera.
-  const ahead = p.x + u.dir * 25;
-  if (u.turning === undefined && (deepBelow(ahead) < 45 || (p.x - cx) * u.dir > halfW + 30 && Math.random() < dt * 0.5)) {
-    u.dir = -u.dir;
-    u.turning = true;
-  }
-  const targetYaw = u.dir > 0 ? 0 : Math.PI;
-  const turn = THREE.MathUtils.clamp(targetYaw - u.yaw, -dt * 1.6, dt * 1.6);
-  u.yaw += turn;
-  if (Math.abs(targetYaw - u.yaw) < 0.01) u.turning = undefined;
-  const vy = (u.targetY - p.y) * 0.6;
-  p.x += Math.cos(u.yaw) * u.speed * dt;
-  p.z = THREE.MathUtils.clamp(p.z - Math.sin(u.yaw) * u.speed * dt * 0.5, -30, -6);
-  p.y += vy * dt;
-  fish.rotation.set(Math.sign(turn) * -0.35, u.yaw, Math.atan2(vy, u.speed));
-  u.controls.rate.value = (7 + u.speed * 0.25) * (u.burst > 0 ? 1.4 : 1);
+  // Smooth wandering: depth and pace follow slow overlapping waves.
+  const speed = MARLIN_SPEED * (1 + 0.18 * Math.sin(t * 0.5 + u.seed) + 0.08 * Math.sin(t * 1.3 + u.seed * 2));
+  const y = u.base + 2.2 * Math.sin(t * 0.33 + u.seed) + 0.8 * Math.sin(t * 0.81 + u.seed * 3);
+  const vy = (y - p.y) / Math.max(dt, 1e-3);
+  p.x += u.dir * speed * dt;
+  p.y = y;
+  p.z += Math.sin(t * 0.4 + u.seed) * 0.6 * dt;
+  u.pitch += (Math.atan2(vy, speed) - u.pitch) * (1 - Math.exp(-dt * 3));
+  const yaw = (u.dir > 0 ? 0 : Math.PI) + Math.sin(t * 0.4 + u.seed) * 0.08;
+  fish.rotation.set(Math.sin(t * 0.7 + u.seed) * 0.05, yaw, u.pitch);
+  u.controls.phase.value += (6 + speed * 0.35) * dt;
   fish.visible = true;
-  if (!open || Math.abs(p.x - cx) > halfW + 60 || deepBelow(p.x) < 25) {
+  if ((p.x - cx) * u.dir > halfW + MARLIN_LENGTH * 1.2 || !open) {
     u.active = false;
-    u.turning = undefined;
-    u.wait = rand(8, 20);
+    u.wait = rand(MARLIN_GAP[0], MARLIN_GAP[1]);
   }
 }
 
@@ -1463,7 +1451,7 @@ export class World {
     this.spermWhale = makeSpermWhale();
     scene.add(this.spermWhale);
     this.dolphins = makeDolphins(scene);
-    this.marlins = makeMarlins(scene);
+    this.marlin = makeMarlin(scene);
     this.anglers = Array.from({ length: 3 }, (_, i) => {
       const a = makeAngler();
       a.position.set(-36 + i * 36 + rand(-5, 5), -200, rand(-20, -4));
@@ -1746,10 +1734,10 @@ export class World {
     const cx = camera.position.x;
     const cy = camera.position.y;
     if (this.updateGulls(dt, cx, cy, hull) > 0) sfx.gull();
-    updateWhale(this.whale, dt, this.time, cx, cy, this.aspect);
+    updateWhale(this.whale, dt, this.time, cx, cy, this.aspect, this.calm ?? true);
     updateSpermWhale(this.spermWhale, dt, cx, cy, this.whale, this.aspect);
     updateDolphins(this, dt, this.time, cx, cy, halfWidthAt(-10, this.aspect), sub);
-    for (const fish of this.marlins) updateMarlin(fish, dt, this.time, cx, cy, halfWidthAt(-18, this.aspect));
+    updateMarlin(this.marlin, dt, this.time, cx, cy, halfWidthAt(-18, this.aspect));
     const t = this.time;
     this.uniforms.uTime.value = t;
     const shift = depthShift(cy);

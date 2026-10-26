@@ -219,7 +219,82 @@ export function setMusic(mix) {
   }
 }
 
+// A long echoing tail for whale song: a feedback delay through a soft lowpass, made once.
+let songEcho = null;
+function echo() {
+  if (songEcho) return songEcho;
+  const input = ctx.createGain();
+  const delay = ctx.createDelay(2);
+  delay.delayTime.value = 0.42;
+  const feedback = ctx.createGain();
+  feedback.gain.value = 0.55;
+  const tone = ctx.createBiquadFilter();
+  tone.type = 'lowpass';
+  tone.frequency.value = 900;
+  input.connect(delay).connect(tone).connect(feedback).connect(delay);
+  tone.connect(sfxBus);
+  songEcho = input;
+  return songEcho;
+}
+
+// One humpback call: a slow moaning glide with a little vibrato and a breathy overtone, panned to the whale's side.
+function whaleMoan({ from, to, peak, dur, delay, vol, pan }) {
+  const t = ctx.currentTime + delay;
+  const osc = ctx.createOscillator();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(from, t);
+  osc.frequency.linearRampToValueAtTime(peak, t + dur * 0.45);
+  osc.frequency.exponentialRampToValueAtTime(to, t + dur);
+  const over = ctx.createOscillator();
+  over.type = 'triangle';
+  over.frequency.setValueAtTime(from * 2.01, t);
+  over.frequency.linearRampToValueAtTime(peak * 2.01, t + dur * 0.45);
+  over.frequency.exponentialRampToValueAtTime(to * 2.01, t + dur);
+  const lfo = ctx.createOscillator();
+  lfo.frequency.value = 5.5;
+  const depth = ctx.createGain();
+  depth.gain.value = peak * 0.012;
+  lfo.connect(depth).connect(osc.frequency);
+  const overGain = ctx.createGain();
+  overGain.gain.value = 0.25;
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'lowpass';
+  filter.frequency.value = 1400;
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(0.0001, t);
+  gain.gain.exponentialRampToValueAtTime(vol, t + dur * 0.3);
+  gain.gain.setValueAtTime(vol, t + dur * 0.6);
+  gain.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  const panner = ctx.createStereoPanner();
+  panner.pan.value = pan;
+  osc.connect(filter);
+  over.connect(overGain).connect(filter);
+  filter.connect(gain).connect(panner);
+  panner.connect(sfxBus);
+  panner.connect(echo());
+  for (const o of [osc, over, lfo]) {
+    o.start(t);
+    o.stop(t + dur + 0.05);
+  }
+}
+
 export const sfx = {
+  // A short phrase of humpback song, gentle and far off.
+  whaleCall(pan = 0, loud = 1) {
+    if (!ctx || muted) return;
+    const vol = 0.05 + 0.07 * loud;
+    const base = 150 + Math.random() * 90;
+    const phrases = [
+      [[base, base * 0.8, base * 1.6, 2.6]],
+      [[base * 1.1, base * 0.7, base * 1.3, 1.8], [base * 0.9, base * 1.5, base * 1.1, 2.2]],
+      [[base * 2.2, base * 1.4, base * 2.6, 1.4], [base * 0.75, base * 0.6, base, 2.8]],
+    ];
+    let delay = 0;
+    for (const [from, to, peak, dur] of phrases[Math.floor(Math.random() * phrases.length)]) {
+      whaleMoan({ from, to, peak, dur, delay, vol, pan });
+      delay += dur * 0.85;
+    }
+  },
   torpedo() {
     noise({ dur: 0.5, vol: 0.25, freq: 1500, to: 300 });
     tone({ type: 'sine', freq: 200, to: 90, dur: 0.3, vol: 0.2 });
