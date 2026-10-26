@@ -721,14 +721,23 @@ function settleAnchor(obj) {
   }
 }
 
-// Now and then a humpback glides slowly past far behind the action, a huge shape in the blue over the shelves.
-const WHALE_LENGTH = 34;
-const WHALE_SPEED = 2.4;
+// Now and then a humpback glides slowly past far behind the action, a huge shape in the blue over the shelves. It
+// swims behind every layer of scenery (the far ruins end about 106 units back, and its flippers reach a quarter of its
+// length to either side), so nothing ever cuts through it.
+const WHALE_LENGTH = 85;
+const WHALE_DEPTH = [-136, -130];
+const WHALE_SPEED = 4.2;
 const WHALE_GAP = [45, 75];
 
 function makeWhale() {
   const whale = spawn('humpback');
   whale.scale.setScalar(WHALE_LENGTH);
+  // So far back the water fog would swallow it; cap the haze so it reads as a giant shape in the blue.
+  whale.traverse((o) => {
+    if (!o.isMesh) return;
+    o.material.defines = { ...o.material.defines, FOG_CAP: '0.55' };
+    o.material.needsUpdate = true;
+  });
   whale.visible = false;
   whale.userData = { active: false, wait: 18, dir: 1, phase: rand(0, 6) };
   return whale;
@@ -743,15 +752,16 @@ function updateWhale(whale, dt, t, cx, cy) {
     if (u.wait > 0 || cy < -18) return;
     u.active = true;
     u.dir = Math.random() < 0.5 ? -1 : 1;
-    u.baseY = rand(10, 17);
-    whale.position.set(cx - u.dir * 75, u.baseY, rand(-44, -36));
+    // At this size it stands about 20 units tall; keep all of it below the surface.
+    u.baseY = rand(6, 12);
+    whale.position.set(cx - u.dir * 140, u.baseY, rand(WHALE_DEPTH[0], WHALE_DEPTH[1]));
   }
   const p = whale.position;
   p.x += u.dir * WHALE_SPEED * dt;
   p.y = u.baseY + Math.sin(t * 0.25 + u.phase) * 1.2;
   whale.rotation.set(0, u.dir > 0 ? 0 : Math.PI, Math.cos(t * 0.25 + u.phase) * 0.06 * u.dir);
   whale.visible = true;
-  if (Math.abs(p.x - cx) > 85 || cy < -40) {
+  if (Math.abs(p.x - cx) > 150 || cy < -40) {
     u.active = false;
     u.wait = rand(WHALE_GAP[0], WHALE_GAP[1]);
   }
