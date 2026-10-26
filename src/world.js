@@ -726,12 +726,12 @@ function settleAnchor(obj) {
 // right; it stays behind the sunbeams (which end 45 units back, and its flippers reach a quarter of its length to
 // either side). When the floor ahead starts rising toward a shelf it swings round in a wide, banking half-circle, and
 // if it drifts near the shallows it fades away into the water.
-const WHALE_LENGTH = 52;
-const WHALE_Z = { near: -64, centre: -82 };
-const WHALE_SPEED = 2.9;
-const WHALE_TURN_RADIUS = 18;
+const WHALE_LENGTH = 46;
+const WHALE_Z = { near: -58, centre: -72 };
+const WHALE_SPEED = 2.6;
+const WHALE_TURN_RADIUS = 14;
 const WHALE_GAP = [35, 60];
-const WHALE_ROAM = 45;
+const WHALE_ROAM = 60;
 // How much of the water's haze it takes on: a soft veil in open water, all of it near the shallows.
 const WHALE_HAZE = 0.68;
 const deepBelow = (x) => SHELF_Y - floorY(x);
@@ -761,15 +761,16 @@ function makeWhale() {
   return whale;
 }
 
-// A spot out of view over deep water to start from, swimming toward the camera's side.
-function whaleStart(cx) {
-  for (const side of Math.random() < 0.5 ? [-1, 1] : [1, -1]) {
-    for (const dx of [80, 100, 60]) {
-      const x = cx + side * dx;
-      if (deepBelow(x) > 60 && deepBelow(x - side * 40) > 40) return { x, dir: -side };
-    }
-  }
-  return null;
+// The whale keeps to its own patch of open water over the middle of the trench near the camera, whatever the
+// player does: the trench is found by walking out from the camera until the floor rises.
+function whaleHome(cx) {
+  if (deepBelow(cx) < 45) return null;
+  let lo = cx;
+  let hi = cx;
+  while (deepBelow(lo - 5) > 45 && cx - lo < 400) lo -= 5;
+  while (deepBelow(hi + 5) > 45 && hi - cx < 400) hi += 5;
+  const roam = Math.min(WHALE_ROAM, (hi - lo) / 2 - 30);
+  return roam > 15 ? { x: (lo + hi) / 2, roam } : null;
 }
 
 function updateWhale(whale, dt, t, cx, cy) {
@@ -778,24 +779,26 @@ function updateWhale(whale, dt, t, cx, cy) {
     u.wait -= dt;
     whale.visible = false;
     if (u.wait > 0) return;
-    const start = deepBelow(cx) > 30 ? whaleStart(cx) : null;
-    if (!start) {
+    const home = whaleHome(cx);
+    if (!home) {
       u.wait = 2;
       return;
     }
     u.active = true;
+    u.home = home;
     u.fade = 0;
-    u.heading = start.dir > 0 ? 0 : Math.PI;
+    const dir = Math.random() < 0.5 ? -1 : 1;
+    u.heading = dir > 0 ? 0 : Math.PI;
     u.turn = 0;
     // It stands about 12 units tall: keep it below the surface and well above anything on the trench floor.
     u.baseY = rand(-14, 6);
-    whale.position.set(start.x, u.baseY, WHALE_Z.near - 3);
+    whale.position.set(home.x - dir * home.roam * 0.8, u.baseY, WHALE_Z.near - 3);
   }
   const p = whale.position;
   const ahead = p.x + Math.cos(u.heading) * 45;
-  // Begin a half-circle when the floor ahead rises toward a shelf, or once it has swum well past the player so it
-  // loiters in view, curving toward the middle of its depth band.
-  const leaving = (p.x - cx) * Math.cos(u.heading) > 0 && Math.abs(p.x - cx) > WHALE_ROAM;
+  // Begin a half-circle when the floor ahead rises toward a shelf or it reaches the edge of its patch, curving toward
+  // the middle of its depth band.
+  const leaving = (p.x - u.home.x) * Math.cos(u.heading) > 0 && Math.abs(p.x - u.home.x) > u.home.roam;
   if (u.turn === 0 && (deepBelow(ahead) < 45 || leaving)) {
     const vx = Math.cos(u.heading);
     const towardBack = p.z > WHALE_Z.centre;
