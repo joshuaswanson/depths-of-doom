@@ -79,7 +79,7 @@ def red_light(part, P, matrix, radius=0.07):
 
 
 def enemy_sub(P, name="enemy_sub", length=3.4, radius=0.85, tower=True, skull_mark=False, scope=1.0,
-              spikes=0, turret=False):
+              spikes=0, turret=False, gatling=False):
     root = empty(name)
     b = SharkBody(length=length, radius=radius * 1.08)
     h = length / 2
@@ -139,16 +139,17 @@ def enemy_sub(P, name="enemy_sub", length=3.4, radius=0.85, tower=True, skull_ma
             m = b.frame(x, theta)
             part.cylinder(P["enemy_plate"], matrix=m @ trs((0, 0, 0.12)), radius=0.1, radius2=0.0, depth=0.3, segs=10)
 
+    turret_at = None
     if turret:
+        # A gun turret on the back; its barrels are a separate pivoting part so the game can aim them.
+        tk = radius / 0.85
         tx = h * 0.4
         tz = b.r(tx)
-        part.cylinder(P["enemy_plate"], loc=(tx, 0, tz + 0.08), radius=0.3, depth=0.2, segs=24, bevel=0.04)
-        part.sphere(P["enemy_hull"], loc=(tx, 0, tz + 0.2), scale=(0.28, 0.26, 0.2), segs=20, rings=10)
-        for y in (-0.1, 0.1):
-            part.cylinder(P["gunmetal"], loc=(tx - 0.45, y, tz + 0.25), radius=0.05, depth=0.6,
-                          rot=(0, math.pi / 2, 0), segs=12)
-            part.cylinder(P["enemy_light"], loc=(tx - 0.76, y, tz + 0.25), radius=0.03, depth=0.01,
-                          rot=(0, math.pi / 2, 0), segs=10)
+        part.cylinder(P["enemy_plate"], loc=(tx, 0, tz + 0.08 * tk), radius=0.3 * tk, depth=0.2 * tk, segs=24,
+                      bevel=0.04)
+        part.sphere(P["enemy_hull"], loc=(tx, 0, tz + 0.2 * tk), scale=(0.28 * tk, 0.26 * tk, 0.2 * tk), segs=20,
+                    rings=10)
+        turret_at = (tx, tz + 0.25 * tk, tk)
 
     # A heavy armoured brow hooded down over the viewport, slanting into a frown at the centre.
     rn = b.r(nose_x)
@@ -170,6 +171,26 @@ def enemy_sub(P, name="enemy_sub", length=3.4, radius=0.85, tower=True, skull_ma
     for x in (-h * 0.32, h * 0.02, h * 0.36):
         bolted_plate(part, P["enemy_plate"], P["steel"], b, x, -math.pi / 2, 0.3 * k)
     part.build(f"{name}_body", root)
+
+    if turret_at:
+        tx, tz, tk = turret_at
+        pivot = empty("turret_guns", root, (tx, 0, tz))
+        guns = Part()
+        # The boss carries a heavy four-barrel gun; the gunner a twin.
+        offsets = [(-0.1, 0.0), (0.1, 0.0)]
+        if gatling:
+            offsets = [(-0.11, 0.07), (0.11, 0.07), (-0.11, -0.07), (0.11, -0.07)]
+        guns.sphere(P["gunmetal"], loc=(0, 0, 0), scale=(0.16 * tk, 0.2 * tk, 0.14 * tk), segs=16, rings=10)
+        for y, z in offsets:
+            guns.cylinder(P["gunmetal"], loc=(-0.45 * tk, y * tk, z * tk), radius=0.05 * tk, depth=0.6 * tk,
+                          rot=(0, math.pi / 2, 0), segs=12)
+            guns.cylinder(P["enemy_light"], loc=(-0.76 * tk, y * tk, z * tk), radius=0.03 * tk, depth=0.01,
+                          rot=(0, math.pi / 2, 0), segs=10)
+        if gatling:
+            guns.cylinder(P["enemy_red"], loc=(-0.2 * tk, 0, 0), radius=0.13 * tk, depth=0.12 * tk,
+                          rot=(0, math.pi / 2, 0), segs=16)
+        guns.build("turret_guns_mesh", pivot)
+        empty("gun_muzzle", pivot, (-0.82 * tk, 0, 0))
 
     # Portholes, plates and bolts along the flanks. The game hides them on hulls that carry a spray-painted skull,
     # so the boss, which always does, has none.
@@ -200,7 +221,7 @@ def enemy_gunner(P):
 
 
 def enemy_boss(P):
-    return enemy_sub(P, "enemy_boss", length=5.8, radius=1.45, skull_mark=True, spikes=5, turret=True)
+    return enemy_sub(P, "enemy_boss", length=5.8, radius=1.45, skull_mark=True, spikes=5, turret=True, gatling=True)
 
 
 def mine(P):

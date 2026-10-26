@@ -227,6 +227,8 @@ export class Net {
       this.killed.add(ev.id);
       this.replicas.delete(ev.id);
       if (e && !e.dead) game.killEnemy(e, ev.by === this.slot ? game.localPlayer : null);
+    } else if (ev.t === 'eb') {
+      game.spawnEnemyBullet({ x: ev.x, y: ev.y, z: ev.z }, ev.vx, ev.vy);
     } else if (ev.t === 'em') {
       game.spawnEnemyMissile({ x: ev.x, y: ev.y, z: ev.z }, ev.vx, ev.vy, ev.steer);
     } else if (ev.t === 'coin') {

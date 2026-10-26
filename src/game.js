@@ -299,7 +299,7 @@ function viewportGlow(type) {
 const DESPAWN_DIST = 60;
 const ENEMY_TOP = SURFACE_Y - 1.8;
 const enemyFloor = (x) => seabedAt(x) + 1.8;
-const DAMAGE = { missile: 12, mine: 22 };
+const DAMAGE = { missile: 12, mine: 22, bullet: 2.2 };
 const GRAVITY = 20;
 const LOOSE_COIN_MAX = 10;
 const ENEMY_MASS = { scout: 0.9, gunner: 1.6, boss: 6 };
@@ -355,7 +355,7 @@ const LOOSE_COIN_RANGE = 70;
 const ENEMY_TYPES = {
   scout: { model: 'enemy_scout', hp: 5, scale: 0.85, rx: 1.25, ry: 0.62, coins: 12, boom: 0.9, speed: 4.2 },
   gunner: { model: 'enemy_gunner', hp: 16, scale: 0.95, rx: 1.75, ry: 0.9, coins: 30, boom: 1.2, speed: 3.2 },
-  boss: { model: 'enemy_boss', hp: 170, scale: 0.95, rx: 2.9, ry: 1.45, coins: 220, boom: 2.4, speed: 2.4 },
+  boss: { model: 'enemy_boss', hp: 280, scale: 1.1, rx: 3.35, ry: 1.68, coins: 260, boom: 2.8, speed: 2.4 },
   mine: { model: 'mine', hp: 3, scale: 1.05, rx: 0.62, ry: 0.62, coins: 3, boom: 1.0, speed: 1.0 },
 };
 
@@ -428,9 +428,11 @@ export class Game {
     this.enemyMissiles = [];
     this.coinsList = [];
     this.bullets = [];
+    this.enemyBullets = [];
     this.aspect = 1.5;
     this.cam = new THREE.Vector2(0, 0);
     this.makeBulletMesh();
+    this.makeEnemyBulletMesh();
     this.status = playerStatus(this.scene);
     this.makeMineChains();
     this.brokenChains = [];
@@ -556,6 +558,7 @@ export class Game {
       list.length = 0;
     }
     this.bullets.length = 0;
+    this.enemyBullets.length = 0;
     this.brokenChains = [];
     for (const w of this.wrecks ?? []) this.scene.remove(w.e.obj);
     this.wrecks = [];
@@ -812,6 +815,8 @@ export class Game {
     }
     if (spec.type === 'boss') this.boss = e;
     e.id = spec.id ?? this.nextId++;
+    e.turret = findNode(model, 'turret_guns');
+    e.gunMuzzle = spec.type === 'boss' ? findNode(model, 'gun_muzzle') : null;
     this.enemies.push(e);
     return e;
   }
@@ -1341,6 +1346,7 @@ export class Game {
         e.tilt.rotation.z = -e.pitch;
         e.tilt.rotation.x = Math.sin(e.t * 1.6) * 0.04;
       }
+      if (e.turret) this.aimTurret(e, dt);
       if (e.propeller) e.propeller.rotation.x += dt * (dazed ? 3 : 14);
       e.spinVel = (e.spinVel ?? 0) * Math.exp(-dt * 2.2);
       e.daze = (e.daze ?? 0) + e.spinVel * dt;
@@ -1458,27 +1464,42 @@ export class Game {
         }
       }
     } else if (e.type === 'boss') {
+      // Slow but slippery: it keeps out of the sub's line of fire, weaves, and now and then lunges sideways.
       const range = dist - 11;
       desired.copy(dir).multiplyScalar(THREE.MathUtils.clamp(range, -1, 1) * speed).add(tangent.clone().multiplyScalar(speed * 0.35));
-      this.steerEnemy(e, desired, dt, 0.8);
-      e.fire -= dt * (1 + this.wave * 0.02) * dazzle;
+      const inLine = Math.abs(p.y - pc.y) < 2.6 && Math.sign(p.x - pc.x) === tgt.facingSign;
+      if (inLine) desired.y += Math.sign(p.y - pc.y || 1) * speed * 1.1;
+      desired.y += Math.sin(e.t * 0.9) * speed * 0.5;
+      e.lunge = (e.lunge ?? rand(3, 6)) - dt;
+      if (e.lunge <= 0) {
+        e.lunge = rand(4.5, 7.5);
+        e.lungeT = 1.1;
+        e.lungeDir = Math.random() < 0.5 ? -1 : 1;
+      }
+      if (e.lungeT > 0) {
+        e.lungeT -= dt;
+        desired.addScaledVector(new THREE.Vector2(-dir.y, dir.x), e.lungeDir * speed * 2.4);
+      }
+      this.steerEnemy(e, desired, dt, 1.3);
+      this.bossGun(e, dt, tgt, visible, dazzle);
+      e.fire -= dt * (1 + this.wave * 0.03) * dazzle;
       if (e.fire <= 0 && visible && !midTurn(e)) {
         e.attack = (e.attack + 1) % 3;
         const base = Math.atan2(dir.y, dir.x);
         if (e.attack === 0) {
-          e.fire = 2.6;
-          for (let i = -2; i <= 2; i++) this.enemyAimed(e, null, 0, base + i * 0.22, 7.5);
+          e.fire = 2.0;
+          for (let i = -3; i <= 3; i++) this.enemyAimed(e, null, 0, base + i * 0.2, 7.8);
         } else if (e.attack === 1) {
-          e.fire = 3.0;
+          e.fire = 2.6;
           for (let i = 0; i < 3; i++) {
             this.spawnEnemy({ type: 'mine', pos: { x: p.x + dir.x * 2.5, y: p.y + (i - 1) * 1.6 } });
           }
         } else {
-          e.fire = 3.2;
-          for (let i = 0; i < 6; i++) {
+          e.fire = 2.4;
+          for (let i = 0; i < 9; i++) {
             setTimeout(() => {
-              if (!e.dead) this.enemyAimed(e, tgt.center, rand(-0.08, 0.08));
-            }, i * 150);
+              if (!e.dead) this.enemyAimed(e, tgt.center, rand(-0.1, 0.1));
+            }, i * 120);
           }
         }
       }
@@ -1695,14 +1716,101 @@ export class Game {
       });
     }
     this.spawnEnemyMissile({ x: 0, y: 0 }, 1, 0);
+    this.spawnEnemyBullet({ x: 0, y: 0, z: 0 }, 1, 0);
+    this.updateEnemyBullets(0);
     const temp = this.enemies.slice(before);
     return () => {
       for (const e of temp) this.scene.remove(e.obj);
       this.enemies.splice(before);
       for (const m of this.enemyMissiles) this.scene.remove(m.obj);
       this.enemyMissiles.length = 0;
+      this.enemyBullets.length = 0;
+      this.enemyBulletMesh.count = 0;
       this.boss = null;
     };
+  }
+
+  // Swing a turret's barrels (which point along the hull's nose) toward the nearest sub, within a forward arc.
+  aimTurret(e, dt) {
+    const c = this.targetFor(e).center;
+    const parent = e.turret.parent;
+    const local = parent.worldToLocal(new THREE.Vector3(c.x, c.y, e.obj.position.z));
+    const pivot = e.turret.position;
+    const want = THREE.MathUtils.clamp(Math.atan2(-(local.y - pivot.y), -(local.x - pivot.x)), -1.1, 1.1);
+    e.turret.rotation.z += (want - e.turret.rotation.z) * (1 - Math.exp(-dt * 6));
+  }
+
+  // The boss's turret machine gun: bursts of tracer rounds at its target, with short pauses in between.
+  bossGun(e, dt, tgt, visible, dazzle) {
+    if (!e.gunMuzzle) return;
+    if (e.burst > 0) {
+      e.burstTimer -= dt;
+      while (e.burst > 0 && e.burstTimer <= 0) {
+        e.burstTimer += 0.085;
+        e.burst--;
+        const from = e.gunMuzzle.getWorldPosition(new THREE.Vector3());
+        const c = tgt.center;
+        const a = Math.atan2(c.y - from.y, c.x - from.x) + rand(-0.1, 0.1);
+        const speed = 15 + this.wave * 0.2;
+        this.spawnEnemyBullet(from, Math.cos(a) * speed, Math.sin(a) * speed);
+      }
+      return;
+    }
+    e.gunTimer = (e.gunTimer ?? 2) - dt * dazzle;
+    if (e.gunTimer > 0 || !visible) return;
+    e.gunTimer = rand(1.7, 2.5);
+    e.burst = 7 + Math.floor(this.wave / 5) * 2;
+    e.burstTimer = 0;
+  }
+
+  spawnEnemyBullet(pos, vx, vy) {
+    if (this.role === 'host') this.net.event({ t: 'eb', x: pos.x, y: pos.y, z: pos.z, vx, vy });
+    this.enemyBullets.push({ x: pos.x, y: pos.y, z: pos.z, vx, vy, life: 2.4 });
+    this.effects.muzzle(pos, { x: vx, y: vy });
+    const now = performance.now();
+    if (now - (this.lastGunSound ?? 0) > 60) {
+      this.lastGunSound = now;
+      sfx.enemyGun();
+    }
+  }
+
+  updateEnemyBullets(dt) {
+    const pl = this.player;
+    const m = new THREE.Matrix4();
+    const q = new THREE.Quaternion();
+    const v = new THREE.Vector3();
+    const one = new THREE.Vector3(1, 1, 1);
+    const zAxis = new THREE.Vector3(0, 0, 1);
+    let alive = 0;
+    for (const b of this.enemyBullets) {
+      b.life -= dt;
+      b.x += b.vx * dt;
+      b.y += b.vy * dt;
+      if (b.life <= 0 || b.y < seabedAt(b.x)) continue;
+      if (pl.alive && pl.hitTest(b.x, b.y, 0.08)) {
+        this.effects.sparkle({ x: b.x, y: b.y, z: 0.8 }, '#ffb08a', 5, 4);
+        this.hurtPlayer(DAMAGE.bullet, { x: b.x, y: b.y });
+        continue;
+      }
+      q.setFromAxisAngle(zAxis, Math.atan2(b.vy, b.vx));
+      m.compose(v.set(b.x, b.y, b.z), q, one);
+      this.enemyBulletMesh.setMatrixAt(alive, m);
+      this.enemyBullets[alive++] = b;
+    }
+    this.enemyBullets.length = alive;
+    this.enemyBulletMesh.count = alive;
+    this.enemyBulletMesh.instanceMatrix.needsUpdate = true;
+  }
+
+  makeEnemyBulletMesh() {
+    const geo = new THREE.CapsuleGeometry(0.06, 0.42, 2, 6);
+    geo.rotateZ(Math.PI / 2);
+    const mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(3.2, 0.7, 0.35), toneMapped: false, fog: false });
+    this.enemyBulletMesh = new THREE.InstancedMesh(geo, mat, 800);
+    this.enemyBulletMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    this.enemyBulletMesh.frustumCulled = false;
+    this.enemyBulletMesh.count = 0;
+    this.scene.add(this.enemyBulletMesh);
   }
 
   muzzleOf(e) {
@@ -2007,6 +2115,19 @@ export class Game {
 
   updateWaves(dt) {
     if (this.over) return;
+    // While the boss is alive, more subs keep coming to its aid.
+    if (this.boss && !this.boss.dead) {
+      this.reinforce = (this.reinforce ?? 8) - dt;
+      if (this.reinforce <= 0 && this.enemies.filter((e) => e.type !== 'mine').length < 7) {
+        this.reinforce = rand(7, 10);
+        const angle = rand(0, Math.PI * 2);
+        const n = 2 + Math.floor(Math.random() * 2);
+        for (let i = 0; i < n; i++) {
+          const type = i === 0 && this.wave >= 10 ? 'gunner' : 'scout';
+          this.queue.push({ type, delay: i === 0 ? 0.3 : 0.5, angle: angle + i * 0.15 });
+        }
+      }
+    }
     if (this.queue.length) {
       this.spawnTimer -= dt;
       while (this.queue.length && this.spawnTimer <= 0) {
@@ -2104,6 +2225,7 @@ export class Game {
     }
     this.updateEnemies(dt);
     this.updateProjectiles(dt);
+    this.updateEnemyBullets(dt);
     if (this.role !== 'guest') this.scatterCoins(dt);
     this.updateCoins(dt);
     if (this.role !== 'guest') this.updateWaves(dt);

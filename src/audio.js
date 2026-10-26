@@ -227,6 +227,10 @@ export const sfx = {
   missile() {
     noise({ dur: 0.45, vol: 0.2, freq: 3000, to: 600, q: 3 });
   },
+  enemyGun() {
+    noise({ dur: 0.06, vol: 0.12, freq: 3200, to: 900 });
+    tone({ type: 'square', freq: 210, to: 90, dur: 0.05, vol: 0.05 });
+  },
   enemyShot() {
     tone({ type: 'sawtooth', freq: 320, to: 140, dur: 0.18, vol: 0.06 });
   },

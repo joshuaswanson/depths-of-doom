@@ -39,7 +39,7 @@ export async function loadModels(onProgress) {
 }
 
 // Nodes the game moves, swaps, or toggles on their own; everything else in a model is rigid and gets merged.
-const MOVING = /^(side_detail|propeller|thruster_prop|sonar_dish|grapple_arm|grapple_claw|cannon_barrels|jaw|lure|wing_|wings_folded|skull_mark|muzzle|lens|jelly_bell|spotlight_head)/;
+const MOVING = /^(turret_guns|side_detail|propeller|thruster_prop|sonar_dish|grapple_arm|grapple_claw|cannon_barrels|jaw|lure|wing_|wings_folded|skull_mark|muzzle|lens|jelly_bell|spotlight_head)/;
 
 // Merge each rigid group of meshes into one mesh per material, cutting draw calls from dozens per model to a few.
 function mergeStatic(root) {
