@@ -1089,6 +1089,7 @@ const POD_GAP = [25, 45];
 const DOLPHIN_SPEED = 7.2;
 // The same pull the sub feels when it breaches; water slows a dolphin quickly once it is back in.
 const LEAP_GRAVITY = 18;
+const SPLASH_LEAD = 0.5;
 const WATER_DRAG = 3.5;
 const LEAP_SPACING = 0.9;
 const DOLPHIN_BEAT_RATE = 9;
@@ -1155,8 +1156,11 @@ function updateDolphins(world, dt, t, cx, cy, halfW, sub) {
       m.leap.y += m.leap.vy * dt;
       y = m.leap.y;
       vy = m.leap.vy;
-      if (wasAbove && y <= SURFACE_Y) world.effects?.bigSplash({ x: m.x, y: SURFACE_Y, z: m.z }, 1.25, 1.4);
-      else if (!wasAbove && y > SURFACE_Y) world.effects?.splash({ x: m.x, y: SURFACE_Y, z: m.z }, 0.8);
+      // The nose meets the water a moment before the middle of the body does.
+      if (!m.leap.landed && !m.leap.launch && vy < 0 && y <= SURFACE_Y + SPLASH_LEAD) {
+        m.leap.landed = true;
+        world.effects?.bigSplash({ x: m.x, y: SURFACE_Y, z: m.z }, 1.25, 1.4);
+      } else if (!wasAbove && y > SURFACE_Y) world.effects?.splash({ x: m.x, y: SURFACE_Y, z: m.z }, 0.8);
       if (!m.leap.launch && y <= SURFACE_Y && (y < m.base || vy > -1.2)) {
         // Hand back to swimming without a jump: whatever gap is left between here and the swim arc becomes an
         // offset that eases away, carrying the dive's downward speed with it.
