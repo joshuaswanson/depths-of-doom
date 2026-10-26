@@ -1187,11 +1187,13 @@ function updateDolphins(world, dt, t, cx, cy, halfW, sub) {
   }
 }
 
-// Now and then a marlin cruises across the open blue above a trench, near the surface: in from one side of the
-// screen, out the other, then gone. Its depth and pace drift gently so it never moves in a straight mechanical line.
+// Now and then a marlin cruises across the open blue above a trench, a little below the dolphins' zone: in from one
+// side of the screen, out the other, then gone. Its depth and pace drift gently, and if the sub comes close it
+// bolts away at speed.
 const MARLIN_LENGTH = 6.5;
-const MARLIN_BAND = [SURFACE_Y - 16, SURFACE_Y - 5];
+const MARLIN_BAND = [SURFACE_Y - 22, SURFACE_Y - 14];
 const MARLIN_SPEED = 5.5;
+const MARLIN_SHY = 11;
 const MARLIN_GAP = [12, 25];
 
 function makeMarlin(scene) {
@@ -1213,7 +1215,7 @@ function makeMarlin(scene) {
   return fish;
 }
 
-function updateMarlin(fish, dt, t, cx, cy, halfW) {
+function updateMarlin(fish, dt, t, cx, cy, halfW, sub) {
   const u = fish.userData;
   const open = cy > SURFACE_Y - 40;
   if (!u.active) {
@@ -1228,26 +1230,40 @@ function updateMarlin(fish, dt, t, cx, cy, halfW) {
     }
     u.active = true;
     u.dir = -side;
+    u.yaw = u.dir > 0 ? 0 : Math.PI;
+    u.boost = 0;
     u.base = rand(MARLIN_BAND[0], MARLIN_BAND[1]);
     u.seed = rand(0, 100);
     u.pitch = 0;
     fish.position.set(x, u.base, rand(-24, -10));
   }
   const p = fish.position;
+  // Startled by the sub: turn away from it if need be and bolt, easing back to a cruise once clear.
+  if (sub && Math.hypot(sub.x - p.x, sub.y - p.y) < MARLIN_SHY) {
+    u.boost = 1;
+    u.dir = Math.sign(p.x - sub.x) || u.dir;
+  }
+  u.boost = Math.max(0, u.boost - dt * 0.25);
   // Smooth wandering: depth and pace follow slow overlapping waves.
-  const speed = MARLIN_SPEED * (1 + 0.18 * Math.sin(t * 0.5 + u.seed) + 0.08 * Math.sin(t * 1.3 + u.seed * 2));
-  const y = u.base + 2.2 * Math.sin(t * 0.33 + u.seed) + 0.8 * Math.sin(t * 0.81 + u.seed * 3);
+  const cruise = MARLIN_SPEED * (1 + 0.18 * Math.sin(t * 0.5 + u.seed) + 0.08 * Math.sin(t * 1.3 + u.seed * 2));
+  const want = cruise * (1 + 2.8 * Math.min(1, u.boost * 1.5));
+  u.speed = u.speed === undefined ? want : u.speed + (want - u.speed) * (1 - Math.exp(-dt * (want > u.speed ? 4 : 1)));
+  const speed = u.speed;
+  const targetYaw = u.dir > 0 ? 0 : Math.PI;
+  u.yaw += (targetYaw - u.yaw) * (1 - Math.exp(-dt * (u.boost > 0 ? 6 : 2)));
+  const y = u.base + 1.6 * Math.sin(t * 0.33 + u.seed) + 0.6 * Math.sin(t * 0.81 + u.seed * 3);
   const vy = (y - p.y) / Math.max(dt, 1e-3);
-  p.x += u.dir * speed * dt;
+  p.x += Math.cos(u.yaw) * speed * dt;
   p.y = y;
   p.z += Math.sin(t * 0.4 + u.seed) * 0.6 * dt;
   u.pitch += (Math.atan2(vy, speed) - u.pitch) * (1 - Math.exp(-dt * 3));
-  const yaw = (u.dir > 0 ? 0 : Math.PI) + Math.sin(t * 0.4 + u.seed) * 0.08;
+  const yaw = u.yaw + Math.sin(t * 0.4 + u.seed) * 0.08;
   fish.rotation.set(Math.sin(t * 0.7 + u.seed) * 0.05, yaw, u.pitch);
   u.controls.phase.value += (6 + speed * 0.35) * dt;
   fish.visible = true;
   if ((p.x - cx) * u.dir > halfW + MARLIN_LENGTH * 1.2 || !open) {
     u.active = false;
+    u.speed = undefined;
     u.wait = rand(MARLIN_GAP[0], MARLIN_GAP[1]);
   }
 }
@@ -1737,7 +1753,7 @@ export class World {
     updateWhale(this.whale, dt, this.time, cx, cy, this.aspect, this.calm ?? true);
     updateSpermWhale(this.spermWhale, dt, cx, cy, this.whale, this.aspect);
     updateDolphins(this, dt, this.time, cx, cy, halfWidthAt(-10, this.aspect), sub);
-    updateMarlin(this.marlin, dt, this.time, cx, cy, halfWidthAt(-18, this.aspect));
+    updateMarlin(this.marlin, dt, this.time, cx, cy, halfWidthAt(-18, this.aspect), sub);
     const t = this.time;
     this.uniforms.uTime.value = t;
     const shift = depthShift(cy);
