@@ -133,11 +133,11 @@ def enemy_sub(P, name="enemy_sub", length=3.4, radius=0.85, tower=True, skull_ma
             """Periscope point, scaled up from where the periscope leaves the tower."""
             return (tx + 0.15 + (dx - 0.15) * scope, 0, tz + t_h * (0.8 + (dz - 0.8) * scope))
 
-        pipe = [grow(0.15, 0.8), grow(0.15, 1.35), grow(0.05, 1.45), grow(-0.15, 1.45)]
+        pipe = [grow(0.15, 0.8), grow(0.15, 1.35), grow(0.08, 1.45), grow(-0.02, 1.45)]
         part.tube(P["gunmetal"], pipe, radius=0.1 * radius * scope, segs=14)
-        part.cylinder(P["gunmetal"], loc=grow(-0.22, 1.45), radius=0.15 * radius * scope, depth=0.2 * scope,
+        part.cylinder(P["gunmetal"], loc=grow(-0.09, 1.45), radius=0.15 * radius * scope, depth=0.2 * scope,
                       rot=(0, math.pi / 2, 0), bevel=0.03)
-        part.cylinder(P["enemy_light"], loc=grow(-0.33, 1.45), radius=0.1 * radius * scope, depth=0.02,
+        part.cylinder(P["enemy_light"], loc=grow(-0.2, 1.45), radius=0.1 * radius * scope, depth=0.02,
                       rot=(0, math.pi / 2, 0))
 
 
