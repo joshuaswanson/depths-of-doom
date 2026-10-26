@@ -761,7 +761,7 @@ export class Game {
             x = cx;
           }
         }
-        if (!spec.prewarm && (best < 0 || (best < 0.25 && Math.random() < 0.65))) return null;
+        if (!spec.prewarm && (best < 0 || (best < 0.5 && Math.random() < 0.9))) return null;
         y = pc.y + rand(-4, 4);
       }
       if (!placed && !onShelf(x)) return null;

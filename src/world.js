@@ -65,13 +65,28 @@ export function floorY(x) {
 }
 
 // 0 in the open middle of a shelf, rising to 1 near a cliff edge and over the deep floor beyond it.
+// Each shelf is laid out in zones by how far it is from its middle: a raised coral reef in the centre, a band of
+// clean sand around it, then murky water with kelp forests, anchors and mines out toward the cliffs.
+const REEF_ZONE = [0.44, 0.6];
+const MURK_ZONE = [0.2, 0.36];
+const REEF_RISE = 4.5;
+
+// 0 in the clear middle of a shelf, 1 out in the murk near the cliffs and over the deep floor beyond.
 export function murkAt(x) {
-  let murk = 0;
-  for (let o = -72; o <= 72; o += 6) {
-    const drop = SHELF_Y - floorY(x + o);
-    murk = Math.max(murk, THREE.MathUtils.smoothstep(drop, 1.5, 8) * (1 - Math.abs(o) / 80));
-  }
-  return murk;
+  return 1 - THREE.MathUtils.smoothstep(shelfCentre(x), MURK_ZONE[0], MURK_ZONE[1]);
+}
+
+// 1 across the reef in the middle of a shelf, 0 outside it.
+function reefAt(x) {
+  return THREE.MathUtils.smoothstep(shelfCentre(x), REEF_ZONE[0], REEF_ZONE[1]);
+}
+
+// The seabed swells up into a broad reef platform across the middle of the shelf.
+function reefRise(x, z) {
+  const reef = reefAt(x);
+  if (reef <= 0) return 0;
+  const dz = (z - MOUND_Z) / 26;
+  return REEF_RISE * reef * Math.exp(-dz * dz);
 }
 
 // Reef mounds: one per stretch of shelf, placed and sized by a hash of the stretch so they never move.
@@ -103,7 +118,24 @@ function onFlatShelf(x) {
 }
 
 // 1 halfway between a shelf's two cliff edges, falling to 0 at either edge and over the deep floor.
+const centreCache = new Map();
 function shelfCentre(x) {
+  const c = Math.floor(x / 4);
+  const t = x / 4 - c;
+  return shelfCentreAt(c * 4) * (1 - t) + shelfCentreAt(c * 4 + 4) * t;
+}
+
+function shelfCentreAt(x) {
+  let v = centreCache.get(x);
+  if (v === undefined) {
+    v = measureShelfCentre(x);
+    centreCache.set(x, v);
+    if (centreCache.size > 4000) centreCache.delete(centreCache.keys().next().value);
+  }
+  return v;
+}
+
+function measureShelfCentre(x) {
   const onShelf = (at) => floorY(at) > SHELF_Y - 3;
   if (!onShelf(x)) return 0;
   let left = x;
@@ -118,14 +150,14 @@ function shelfCentre(x) {
 function makeMound(cell) {
   const x = cell * MOUND_CELL + MOUND_CELL * (0.2 + 0.6 * hash(cell, 1));
   const centre = shelfCentre(x);
-  const clear = 1 - THREE.MathUtils.smoothstep(murkAt(x), 0.1, 0.3);
   return {
     cell,
     x,
     centre,
     height: 3.0 + 3.5 * hash(cell, 2),
     width: 4.5 + 3.5 * hash(cell, 3),
-    reef: hash(cell, 4) < Math.min(1, 1.15 * Math.pow(centre, 1.3)) * clear,
+    reef: reefAt(x) > 0.3,
+    murk: murkAt(x),
   };
 }
 
@@ -159,7 +191,7 @@ function reefGlow(x, z) {
 
 function detailHeight(x, z) {
   const shelf = 1 - THREE.MathUtils.smoothstep(SHELF_Y - floorY(x), 2, 10);
-  return baseDetail(x, z) + (shelf > 0 ? moundHeight(x, z) * shelf : 0);
+  return baseDetail(x, z) + (shelf > 0 ? (moundHeight(x, z) + reefRise(x, z)) * shelf : 0);
 }
 
 function baseDetail(x, z) {
@@ -373,7 +405,7 @@ function shapeTile(tile, target, budget = Infinity) {
     const z = pos.getZ(i);
     const floor = floorY(x);
     const shelf = 1 - THREE.MathUtils.smoothstep(SHELF_Y - floor, 2, 10);
-    const raised = shelf > 0 ? moundHeight(x, z) * shelf : 0;
+    const raised = shelf > 0 ? (moundHeight(x, z) + reefRise(x, z)) * shelf : 0;
     const y = floor + baseDetail(x, z) + raised;
     pos.setY(i, y);
     const n = 0.5 + 0.5 * Math.sin(x * 0.236 + z * 0.13) * Math.cos(x * 0.55 - z * 0.29);
@@ -722,17 +754,17 @@ function playGull(gull, name, fade = 0.25) {
   gull.userData.current = next;
 }
 
-// Anchors and kelp crowd the murky sand toward the cliffs, and kelp takes over more of the clear sand the further it is
-// from the middle of a shelf, where the corals and ruins stay.
-function chooseProp(layer, mood, murk, centre) {
+// Anchors and kelp crowd the murky sand toward the cliffs; the clear middle of a shelf keeps its corals and ruins.
+function chooseProp(layer, mood, murk) {
   if (mood === 'deep') return pick(layer.deep);
   const others = layer.props.filter((n) => n !== 'anchor');
   if (mood === 'murk') {
     if (layer.props.includes('anchor') && Math.random() < 0.55 * murk) return 'anchor';
     if (layer.props.includes('kelp_short')) return Math.random() < 0.75 ? 'kelp_short' : pick(layer.deep);
   }
-  if (layer.props.includes('kelp_short') && Math.random() < 0.7 * (1 - centre)) return 'kelp_short';
-  return pick(others);
+  // Clear water keeps its corals and ruins; kelp only grows out in the murk.
+  const clear = others.filter((n) => !n.startsWith('kelp'));
+  return pick(clear.length ? clear : others);
 }
 
 // Sunken anchors lie where they fell: leaning with the crown dug in, toppled onto their back, or half buried.
@@ -1433,7 +1465,7 @@ export class World {
     const want = deep ? 'deep' : murk > 0.35 ? 'murk' : 'clear';
     if (prop.kind !== want) {
       if (prop.obj) this.scene.remove(prop.obj);
-      const name = chooseProp(layer, want, murk, deep ? 0 : shelfCentre(x));
+      const name = chooseProp(layer, want, murk);
       prop.obj = spawn(name);
       prop.obj.userData.model = name;
       if (layer.plain) plainMaterials(prop.obj);
@@ -1540,29 +1572,24 @@ export class World {
         place(r() < 0.5 ? 'reef_small' : 'reef_large', m.x + (r() - 0.5) * m.width * 1.4 * spread,
           MOUND_Z + 1 + (r() - 0.5) * 5 * Math.sqrt(spread), 1.1 + r() * 0.5);
       }
-      const corals = Math.round(5 + 14 * m.centre + r() * 5);
+      const corals = Math.round(14 + 12 * reefAt(m.x) + r() * 5);
       for (let i = 0; i < corals; i++) {
         const a = r() * Math.PI * 2;
         const d = Math.sqrt(r()) * m.width * 0.95 * spread;
         place(CORALS[Math.floor(r() * CORALS.length)], m.x + Math.cos(a) * d, MOUND_Z + 1 + Math.sin(a) * d * 0.7,
           1.0 + r() * 0.7);
       }
-      for (let i = 0, kelp = 3 + Math.round(6 * (1 - m.centre)); i < kelp; i++) {
-        const side = r() < 0.5 ? -1 : 1;
-        place(r() < 0.6 ? 'kelp_tall' : 'kelp_short', m.x + side * (m.width * spread + r() * 3),
-          MOUND_Z - 2 - r() * 5,
-          0.8 + r() * 0.4);
-      }
-    } else {
-      // Kelp beds grow thicker and spread wider away from the reef in the middle, and most of all in the murk.
-      const murk = murkAt(m.x);
-      const outer = Math.max(murk, 1 - m.centre);
-      const stalks = 6 + Math.floor(r() * 4 + outer * 12);
+    } else if (m.murk > 0.5) {
+      // Out in the murk: dense kelp forests, thickest nearest the cliffs.
+      const stalks = 14 + Math.floor(r() * 6 + m.murk * 10);
       for (let i = 0; i < stalks; i++) {
-        place(r() < 0.65 ? 'kelp_tall' : 'kelp_short', m.x + (r() - 0.5) * (8 + outer * 12),
-          MOUND_Z + (r() - 0.5) * (8 + outer * 7), 0.8 + r() * 0.5);
+        place(r() < 0.7 ? 'kelp_tall' : 'kelp_short', m.x + (r() - 0.5) * 20, MOUND_Z + (r() - 0.5) * 16,
+          0.85 + r() * 0.5);
       }
       place(r() < 0.5 ? 'rock_a' : 'rock_b', m.x + (r() - 0.5) * 6, MOUND_Z, 0.7 + r() * 0.5);
+    } else {
+      // The band of clean sand between the reef and the murk: just the odd rock.
+      if (r() < 0.6) place(r() < 0.5 ? 'rock_a' : 'rock_b', m.x + (r() - 0.5) * 6, MOUND_Z, 0.6 + r() * 0.5);
     }
     return Object.assign([mergeCluster(pieces)], { footprints });
   }
