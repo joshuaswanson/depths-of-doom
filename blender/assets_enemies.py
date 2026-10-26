@@ -134,10 +134,10 @@ def enemy_sub(P, name="enemy_sub", length=3.4, radius=0.85, tower=True, skull_ma
             return (tx + 0.15 + (dx - 0.15) * scope, 0, tz + t_h * (0.8 + (dz - 0.8) * scope))
 
         pipe = [grow(0.15, 0.8), grow(0.15, 1.35), grow(0.05, 1.45), grow(-0.15, 1.45)]
-        part.tube(P["gunmetal"], pipe, radius=0.06 * radius * scope, segs=12)
-        part.cylinder(P["gunmetal"], loc=grow(-0.2, 1.45), radius=0.09 * radius * scope, depth=0.15 * scope,
-                      rot=(0, math.pi / 2, 0), bevel=0.02)
-        part.cylinder(P["enemy_light"], loc=grow(-0.28, 1.45), radius=0.06 * radius * scope, depth=0.02,
+        part.tube(P["gunmetal"], pipe, radius=0.1 * radius * scope, segs=14)
+        part.cylinder(P["gunmetal"], loc=grow(-0.22, 1.45), radius=0.15 * radius * scope, depth=0.2 * scope,
+                      rot=(0, math.pi / 2, 0), bevel=0.03)
+        part.cylinder(P["enemy_light"], loc=grow(-0.33, 1.45), radius=0.1 * radius * scope, depth=0.02,
                       rot=(0, math.pi / 2, 0))
 
 
@@ -167,11 +167,13 @@ def enemy_sub(P, name="enemy_sub", length=3.4, radius=0.85, tower=True, skull_ma
         part.extrude(P["enemy_plate"], brow, depth=0.7 * rn, loc=(0, side * 0.4 * rn, 0),
                      rot=(math.pi / 2 + side * 0.35, 0, 0), bevel=0.03)
     # Swept-back hydroplanes low on the flanks, like a shark's pectoral fins.
+    # Rooted on the hull surface itself, a little below the waterline of the flank.
     for side in (-1, 1):
         x0 = -h * 0.42
+        root_at = b.point(x0 + 0.35 * radius, (math.pi if side > 0 else 0) - math.radians(18), -0.03)
         fin = [(x0, 0), (x0 + 0.85 * radius, 0.75 * radius), (x0 + 1.05 * radius, 0.68 * radius), (x0 + 0.7 * radius, 0)]
         part.extrude(P["gunmetal"], [(x, y * side) for x, y in fin], depth=0.07 * radius,
-                     loc=(0, side * 0.92 * radius, -0.32 * radius), rot=(0.18 * side, 0, 0), bevel=0.02)
+                     loc=(0, root_at.y, root_at.z), rot=(0.18 * side, 0, 0), bevel=0.02)
 
     k = radius / 0.85
     seam(part, P["enemy_plate"], b, -h * 0.62, h * 0.7, -math.pi / 2, radius=0.016 * k, rivets=14,
