@@ -157,7 +157,7 @@ def enemy_sub(P, name="enemy_sub", length=3.4, radius=0.85, tower=True, skull_ma
     if turret:
         # A gun turret on the back; its barrels are a separate pivoting part so the game can aim them.
         tk = radius / 0.85
-        tx = h * 0.4
+        tx = h * 0.3
         tz = b.r(tx)
         part.cylinder(P["enemy_plate"], loc=(tx, 0, tz + 0.08 * tk), radius=0.3 * tk, depth=0.2 * tk, segs=24,
                       bevel=0.04)
