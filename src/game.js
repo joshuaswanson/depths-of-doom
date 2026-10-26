@@ -34,8 +34,17 @@ const DEEP_COMBAT_LEAD = 4;
 // Breathing room between waves, long enough for the calm music to come back.
 const WAVE_BREAK = 25;
 // Where each enemy hull carries its missile drum, in model space (the nose points to -X).
-const POD_MOUNT = { scout: { x: -0.45, y: 0.44, scale: 0.8 }, gunner: { x: -0.6, y: 0.6, scale: 0.95 },
-  boss: { x: -1.1, y: 1.05, scale: 1.4 } };
+// Where an enemy can carry its missile drum, in model space (the nose points to -X): on top in front of the tower,
+// slung underneath fore or aft, or on a flank behind the portholes. A skull is painted on both flanks, so
+// skulled subs never get a flank spot. One spot is picked at random per sub.
+const POD_MOUNTS = {
+  scout: { scale: 0.8, spots: [{ x: -0.72, y: 0.44 }, { x: -0.5, y: -0.44, under: true },
+    { x: 0.42, y: -0.42, under: true }, { x: 0.45, z: 0.44, flank: true }] },
+  gunner: { scale: 0.95, spots: [{ x: -1.05, y: 0.6 }, { x: -0.75, y: -0.6, under: true },
+    { x: 0.55, y: -0.58, under: true }, { x: 0.66, z: 0.6, flank: true }] },
+  boss: { scale: 1.4, spots: [{ x: -1.8, y: 1.05 }, { x: -1.3, y: -1.05, under: true },
+    { x: 0.9, y: -1.02, under: true }] },
+};
 const POD_COLORS = { blue: '#2c2e36', blue_dark: '#3a3d47', yellow: '#b8262b', red: '#ff3b30' };
 let podTemplate = null;
 
@@ -791,11 +800,19 @@ export class Game {
     if (e.muzzle && spec.type !== 'mine') {
       e.glow = viewportGlow(spec.type);
       e.muzzle.add(e.glow.group);
-      const pod = POD_MOUNT[spec.type];
+      const mount = POD_MOUNTS[spec.type];
+      const spots = mount.spots.filter((s) => !(s.flank && skulled));
+      const spot = spots[Math.floor(Math.random() * spots.length)];
+      const side = Math.random() < 0.5 ? 1 : -1;
       const launcher = enemyPod();
-      launcher.position.set(pod.x, pod.y, 0);
-      launcher.rotation.y = Math.PI;
-      launcher.scale.setScalar(pod.scale);
+      if (spot.flank) {
+        launcher.position.set(spot.x, 0, side * spot.z);
+        launcher.rotation.set(side * Math.PI / 2, Math.PI, 0);
+      } else {
+        launcher.position.set(spot.x, spot.y, 0);
+        launcher.rotation.set(spot.under ? Math.PI : 0, Math.PI, 0);
+      }
+      launcher.scale.setScalar(mount.scale);
       model.add(launcher);
       e.muzzle = findNode(launcher, 'muzzle');
       e.launcher = launcher;
