@@ -19,6 +19,7 @@ const CRUISE_BUILD = 0.32;
 const CRUISE_BOOST = 0.9;
 const MAX_CLIMB = 0.9;
 export const RIG_SCALE = 0.82;
+const WALL_BOUNCE_SPEED = 3;
 const REGEN_DELAY = 5;
 // From this hull level the sub gets the long "car" hull with a flat front deck and a deck-mounted gun.
 const BIG_HULL_LEVEL = 4;
@@ -659,7 +660,8 @@ export class Player {
     const lift = bounds.bottom(nx) + e.hy - p.y;
     const noseRock = bounds.bottom(nx + Math.sign(dx) * e.hx * 0.8) - p.y;
     if ((lift > 0 && lift > Math.abs(dx) * MAX_CLIMB) || noseRock > 0) {
-      this.vel.x *= -0.25;
+      // A real crash bounces off; pressing on into the wall just stops dead, so the speed never flickers.
+      this.vel.x = Math.abs(this.vel.x) > WALL_BOUNCE_SPEED ? this.vel.x * -0.25 : 0;
     } else {
       p.x = nx;
     }

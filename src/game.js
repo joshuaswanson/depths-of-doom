@@ -2179,10 +2179,12 @@ export class Game {
   updateCamera(dt) {
     const pl = this.player;
     const pc = pl.center;
-    const tx = pc.x + Math.cos(pl.yaw) * 2.5 + pl.vel.x * 0.3;
+    let tx = pc.x + Math.cos(pl.yaw) * 2.5 + pl.vel.x * 0.3;
     // The store panel covers the bottom of the screen, so frame the sub in the open water above it.
     const share = this.panelShare ?? PANEL_SHARE;
     const ty = pc.y + pl.vel.y * 0.2 - this.halfH * share;
+    // Leading the sub along a cliff would carry the camera over the rock and inside it, so the lead stops short.
+    tx = this.clearOfRock(tx, pc.x, this.cam.y);
     this.cam.x = THREE.MathUtils.lerp(this.cam.x, tx, 1 - Math.exp(-dt * 2.2));
     this.cam.y = THREE.MathUtils.lerp(this.cam.y, ty, 1 - Math.exp(-dt * 2.2));
     let lowest = Infinity;
@@ -2190,12 +2192,24 @@ export class Game {
     this.camFloor = THREE.MathUtils.lerp(this.camFloor ?? lowest, lowest, 1 - Math.exp(-dt * 1.5));
     const floorLimit = Math.min(this.camFloor + this.halfH - 3, pc.y + 1.5 - this.halfH * share);
     this.cam.y = THREE.MathUtils.clamp(this.cam.y, floorLimit, SURFACE_Y + 1);
-    // Leading the sub along a cliff can carry the camera over the rock and inside it; pull it back toward the sub.
-    const step = Math.sign(pc.x - this.cam.x) * 0.2;
-    for (let i = 0; i < 25 && step && seabedAt(this.cam.x, CAMERA_Z) > this.cam.y - 1.5; i++) {
-      if (Math.abs(pc.x - this.cam.x) <= Math.abs(step)) break;
-      this.cam.x += step;
+    this.cam.x = this.clearOfRock(this.cam.x, pc.x, this.cam.y);
+  }
+
+  // The x furthest from `from` toward `x` where the camera at height `y` stays clear of the rock, found by halving
+  // the gap, so the answer slides smoothly as the sub moves. Only rock rising well above the ground under the sub
+  // counts, so skimming a flat floor keeps the full lead.
+  clearOfRock(x, from, y) {
+    const limit = Math.max(y - 1.5, seabedAt(from, CAMERA_Z) + 1.5);
+    const blocked = (at) => seabedAt(at, CAMERA_Z) > limit;
+    if (!blocked(x)) return x;
+    let clear = from;
+    let rock = x;
+    for (let i = 0; i < 12; i++) {
+      const mid = (clear + rock) / 2;
+      if (blocked(mid)) rock = mid;
+      else clear = mid;
     }
+    return clear;
   }
 
   // Diving into a dark trench without a lamp suggests buying one, once per descent.
