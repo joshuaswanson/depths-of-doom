@@ -1461,6 +1461,8 @@ function mergeCluster(pieces) {
     if (!merged) continue;
     const mesh = new THREE.Mesh(merged, material);
     mesh.renderOrder = order;
+    mesh.castShadow = !material.transparent;
+    mesh.receiveShadow = true;
     cluster.add(mesh);
   }
   return cluster;

@@ -49,10 +49,10 @@ scene.add(hemi);
 const sun = new THREE.DirectionalLight('#fff1d6', 2.1);
 sun.position.set(-6, 14, 10);
 scene.add(sun);
-// Sunlight from nearly straight overhead, the only light that casts shadows: they fall just under each sub and
-// coral, a little toward the camera, where the side-on view can see them on the seabed.
+// Sunlight from high overhead, the only light that casts shadows: they fall under each sub and coral, a little
+// to the right and toward the camera, where the side-on view can see them on the seabed.
 const overhead = new THREE.DirectionalLight('#e8fbff', 0.6);
-const OVERHEAD_OFFSET = new THREE.Vector3(-2, 20, -4).normalize().multiplyScalar(60);
+const OVERHEAD_OFFSET = new THREE.Vector3(-5, 20, -8).normalize().multiplyScalar(60);
 const SHADOW_SPAN = 30;
 const SHADOW_MAP = 2048;
 overhead.position.copy(OVERHEAD_OFFSET);
