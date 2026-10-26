@@ -770,8 +770,8 @@ export class Player {
     su.uCharge.value = this.shieldCharge;
     su.uBreak.value = this.shieldBreak;
     su.uStrength.value = THREE.MathUtils.lerp(su.uStrength.value, this.shieldCharges > 0 ? 1 : 0, 1 - Math.exp(-dt * 5));
-    this.shield.visible = su.uStrength.value > 0.02 || this.shieldFlash > 0.01 || this.shieldHitAge < 1.2
-      || this.shieldBreak > 0 || this.shieldCharge >= 0;
+    this.shield.visible = this.alive && (su.uStrength.value > 0.02 || this.shieldFlash > 0.01 || this.shieldHitAge < 1.2
+      || this.shieldBreak > 0 || this.shieldCharge >= 0);
 
     this.sinceHit += dt;
     if (this.alive && this.sinceHit > REGEN_DELAY) this.hp = Math.min(this.maxHp, this.hp + REGEN_RATE * dt);
