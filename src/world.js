@@ -773,7 +773,7 @@ function whaleHome(cx) {
   return roam > 15 ? { x: (lo + hi) / 2, roam } : null;
 }
 
-function updateWhale(whale, dt, t, cx, cy) {
+function updateWhale(whale, dt, t, cx, cy, aspect) {
   const u = whale.userData;
   if (!u.active) {
     u.wait -= dt;
@@ -784,15 +784,22 @@ function updateWhale(whale, dt, t, cx, cy) {
       u.wait = 2;
       return;
     }
+    // Arrive from beyond the edge of the screen, over deep water, swimming in toward its patch.
+    const offscreen = halfWidthAt(WHALE_Z.near, aspect) + WHALE_LENGTH * 0.6;
+    const sides = (Math.random() < 0.5 ? [-1, 1] : [1, -1]).filter((side) => deepBelow(cx + side * offscreen) > 45);
+    if (!sides.length) {
+      u.wait = 2;
+      return;
+    }
+    const dir = -sides[0];
     u.active = true;
     u.home = home;
     u.fade = 0;
-    const dir = Math.random() < 0.5 ? -1 : 1;
     u.heading = dir > 0 ? 0 : Math.PI;
     u.turn = 0;
     // It stands about 12 units tall: keep it below the surface and well above anything on the trench floor.
     u.baseY = rand(-14, 6);
-    whale.position.set(home.x - dir * home.roam * 0.8, u.baseY, WHALE_Z.near - 3);
+    whale.position.set(cx - dir * offscreen, u.baseY, WHALE_Z.near - 3);
   }
   const p = whale.position;
   const ahead = p.x + Math.cos(u.heading) * (45 + WHALE_TURN_RADIUS);
@@ -1526,7 +1533,7 @@ export class World {
     const cx = camera.position.x;
     const cy = camera.position.y;
     if (this.updateGulls(dt, cx, cy, hull) > 0) sfx.gull();
-    updateWhale(this.whale, dt, this.time, cx, cy);
+    updateWhale(this.whale, dt, this.time, cx, cy, this.aspect);
     updateSpermWhale(this.spermWhale, dt, cx, cy, this.whale.userData.active);
     updateDolphins(this, dt, this.time, cx, cy, halfWidthAt(-10, this.aspect), sub);
     const t = this.time;
