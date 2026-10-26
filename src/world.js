@@ -965,7 +965,7 @@ function updateDolphins(world, dt, t, cx, cy, halfW, sub) {
     const lanes = DOLPHIN_LANES.slice().sort(() => Math.random() - 0.5);
     dolphins.members = dolphins.pod.map((d, i) => ({
       d, x: cx - dolphins.dir * (halfW + 8 + i * 3.6 + rand(0, 2)), base: SURFACE_Y - rand(3, 4.2), z: lanes[i],
-      phase: rand(0, Math.PI * 2), rate: rand(1.5, 1.9), amp: rand(0.9, 1.3), leap: null, nextLeap: rand(1, 6),
+      phase: rand(0, Math.PI * 2), rate: rand(1.5, 1.9), amp: rand(0.5, 0.75), leap: null, nextLeap: rand(1, 6),
     }));
   }
   let anyInView = false;
