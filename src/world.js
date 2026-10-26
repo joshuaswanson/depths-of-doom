@@ -1438,7 +1438,7 @@ function updateMantas(world, dt, t, cx, cy, aspect) {
     const yaw = Math.atan2(-Math.cos(r.angle) * r.dir, -Math.sin(r.angle) * r.dir);
     ray.rotation.set(-r.dir * 0.22, yaw, 0.06 * Math.cos(t * 0.4 + r.seed));
     // Long slow wingbeats with a glide between bursts.
-    const glide = 0.55 + 0.45 * Math.sin(t * 0.21 + r.seed);
+    const glide = 0.7 + 0.3 * Math.sin(t * 0.21 + r.seed);
     r.controls.phase.value += (1.5 + glide * 0.6) * dt;
     r.controls.flap.value = glide;
   }

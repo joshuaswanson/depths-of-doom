@@ -340,7 +340,9 @@ export function addWingFlap(material, controls) {
       .replace('#include <begin_vertex>', `#include <begin_vertex>
         float flapSpan = abs( transformed.z );
         float flapReach = smoothstep( 0.04, 0.4, flapSpan ) * flapSpan / 0.4;
-        transformed.y += sin( uFlapPhase - flapSpan * 4.0 ) * uFlap * 0.15 * flapReach;
+        // The wave runs out along the span and back across the wing from its leading edge, so the tips ripple.
+        float flapWave = uFlapPhase - flapSpan * 6.5 + transformed.x * 2.5;
+        transformed.y += sin( flapWave ) * uFlap * 0.2 * flapReach;
         transformed.y -= sin( uFlapPhase ) * uFlap * 0.012;
         float flapTail = smoothstep( -0.15, -0.5, transformed.x );
         transformed.z += sin( uFlapPhase * 0.5 - transformed.x * 6.0 ) * 0.025 * flapTail;`);
