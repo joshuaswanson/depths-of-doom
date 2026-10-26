@@ -1206,7 +1206,7 @@ function makeMarlin(scene) {
   fish.traverse((o) => {
     if (!o.isMesh) return;
     o.material = o.material.clone();
-    addTailBeat(o.material, { amount: 0.07, front: 0.15, sideways: true, controls });
+    addTailBeat(o.material, { amount: 0.07, front: 0.28, sideways: true, controls });
     addWaterline(o.material, { ripple: 0.85, topOnly: true });
   });
   fish.visible = false;
@@ -1259,7 +1259,10 @@ function updateMarlin(fish, dt, t, cx, cy, halfW, sub) {
   u.pitch += (Math.atan2(vy, speed) - u.pitch) * (1 - Math.exp(-dt * 3));
   const yaw = u.yaw + Math.sin(t * 0.4 + u.seed) * 0.08;
   fish.rotation.set(Math.sin(t * 0.7 + u.seed) * 0.05, yaw, u.pitch);
-  u.controls.phase.value += (6 + speed * 0.35) * dt;
+  // A quicker, slightly stronger beat while it bolts; the whole body still ripples a little with the tail.
+  const fleeing = Math.min(1, u.boost * 1.5);
+  u.controls.phase.value += (6 + speed * 0.35 + fleeing * 9) * dt;
+  u.controls.beat.value = 1 + fleeing * 0.2;
   fish.visible = true;
   if ((p.x - cx) * u.dir > halfW + MARLIN_LENGTH * 1.2 || !open) {
     u.active = false;
