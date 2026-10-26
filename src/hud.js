@@ -14,11 +14,10 @@ const TITLE_CONTROLS = `<button class="big-btn">Dive!</button>
       <button class="coop-btn join">Join</button>
     </div>
     <div class="coop-status">Up to 4 subs. Share the code or the invite link.</div>
-  </div>
-  <div class="controls">
-    <div><kbd>WASD</kbd> / <kbd>Arrows</kbd> swim</div>
-    <div><kbd>P</kbd> pause &nbsp; <kbd>M</kbd> mute</div>
   </div>`;
+// Movement keys laid out as they sit on a keyboard: one key above, three below.
+const keyCluster = (up, left, down, right) => `<div class="key-grid"><kbd class="k-up">${up}</kbd>
+  <kbd class="k-left">${left}</kbd><kbd class="k-down">${down}</kbd><kbd class="k-right">${right}</kbd></div>`;
 
 const HEART = `<svg viewBox="0 0 34 31" class="heart-svg"><defs>
   <linearGradient id="hg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff6b6b"/>
@@ -206,6 +205,30 @@ export class Hud {
     this.banner.classList.remove('show');
     void this.banner.offsetWidth;
     this.banner.classList.add('show');
+  }
+
+  // The controls, shown beside the sub at the start of the first dive: how to swim on its left, pause and mute on
+  // its right. They fade away on their own.
+  showControlHints() {
+    this.hints?.remove();
+    this.hints = el('div', 'hints', `<div class="hint hint-left">
+        <div class="hint-keys">${keyCluster('W', 'A', 'S', 'D')}<span class="hint-or">or</span>
+        ${keyCluster('&uarr;', '&larr;', '&darr;', '&rarr;')}</div>
+        <div class="hint-label">swim</div></div>
+      <div class="hint hint-right"><div><kbd>P</kbd> pause</div><div><kbd>M</kbd> mute</div></div>`);
+    this.root.append(this.hints);
+    this.hints.addEventListener('animationend', () => {
+      this.hints?.remove();
+      this.hints = null;
+    });
+  }
+
+  // Keeps the hints either side of the sub, `gap` pixels clear of its centre.
+  placeHints(x, y, gap) {
+    if (!this.hints) return;
+    this.hints.style.setProperty('--x', `${x}px`);
+    this.hints.style.setProperty('--y', `${y}px`);
+    this.hints.style.setProperty('--gap', `${gap}px`);
   }
 
   showToast(text) {

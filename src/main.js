@@ -221,12 +221,31 @@ function startCoop(connect) {
   connect(net);
 }
 
+let hintsShown = false;
 function startGame() {
   unlockAudio();
   game.reset();
   state = 'playing';
   hud.hideOverlay();
   hud.setVisible(true);
+  if (!hintsShown) {
+    hintsShown = true;
+    hud.showControlHints();
+  }
+}
+
+const hintPoint = new THREE.Vector3();
+function placeHints() {
+  if (!hud.hints) return;
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  const { x: cx, y: cy } = player.center;
+  const z = player.group.position.z;
+  const centre = hintPoint.set(cx, cy, z).project(camera);
+  const x = (centre.x * 0.5 + 0.5) * w;
+  const y = (0.5 - centre.y * 0.5) * h;
+  const edge = hintPoint.set(cx + player.bodyHalf.hx, cy, z).project(camera);
+  hud.placeHints(x, y, Math.abs((edge.x * 0.5 + 0.5) * w - x) + w * 0.03);
 }
 
 function pause() {
@@ -367,6 +386,7 @@ function tick(dt) {
     hud.update({ player, coins: game.coins, wave: game.wave, boss: game.boss });
     hud.drawRadar(player, game.radarEnemies(), game.radarRange, game.radarSweep, game.radarCoins());
   }
+  placeHints();
   composer.render();
 }
 

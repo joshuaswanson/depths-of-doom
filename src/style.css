@@ -238,6 +238,47 @@ html, body {
 }
 .toast.show { animation: toast 1.6s ease-out forwards; }
 
+.hints {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+  animation: hints 7.4s ease-in-out forwards;
+}
+.hint {
+  position: absolute;
+  top: var(--y);
+  transform: translateY(-50%);
+  font-size: 1.4vw;
+  font-weight: 700;
+  color: #fff;
+  -webkit-text-stroke: 0.1vw #0d1d33;
+  paint-order: stroke fill;
+  text-shadow: 0 0.2vw 0 #0d1d33;
+}
+.hint-left { right: calc(100% - var(--x) + var(--gap)); text-align: center; }
+.hint-right { left: calc(var(--x) + var(--gap)); display: grid; gap: 0.8vh; }
+.hint-keys { display: flex; align-items: center; gap: 0.9vw; }
+.hint-or { font-size: 1.1vw; color: #cfe6f7; }
+.hint-label { margin-top: 0.6vh; }
+.key-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 2.4vw);
+  grid-template-rows: repeat(2, 2.4vw);
+  gap: 0.25vw;
+}
+.key-grid kbd { display: flex; align-items: center; justify-content: center; padding: 0; font-size: 1.15vw; }
+.key-grid .k-up { grid-area: 1 / 2; }
+.key-grid .k-left { grid-area: 2 / 1; }
+.key-grid .k-down { grid-area: 2 / 2; }
+.key-grid .k-right { grid-area: 2 / 3; }
+@keyframes hints {
+  0% { opacity: 0; }
+  5% { opacity: 1; }
+  73% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
 .upgrade-bar {
   position: absolute;
   bottom: 1.2vh;
