@@ -19,7 +19,7 @@ function el(tag, cls, html) {
 }
 
 export class Hud {
-  constructor(root, { onBuy, onStart, onResume, onPause }) {
+  constructor(root, { onBuy, onStart, onResume, onPause, onHost, onJoin }) {
     this.root = root;
     this.onBuy = onBuy;
 
@@ -79,7 +79,11 @@ export class Hud {
     this.overlay = el('div', 'overlay');
     root.append(topLeft, this.pauseBtn, this.radar, this.bossBar, this.banner, this.toast, this.bar, this.overlay);
     this.onStart = onStart;
+    this.onHost = onHost;
+    this.onJoin = onJoin;
     this.onResume = onResume;
+    this.room = el('div', 'room-code');
+    root.append(this.room);
     this.lastPips = '';
   }
 
@@ -100,11 +104,39 @@ export class Hud {
     this.overlay.innerHTML = `<div class="panel">
       ${LOGO}
       <button class="big-btn">Dive!</button>
+      <div class="coop">
+        <button class="coop-btn host">Host co-op</button>
+        <input class="coop-code" maxlength="4" placeholder="CODE" spellcheck="false" autocomplete="off">
+        <button class="coop-btn join">Join</button>
+      </div>
+      <div class="coop-status"></div>
       <div class="controls">
         <div><kbd>WASD</kbd> / <kbd>Arrows</kbd> swim</div>
         <div><kbd>P</kbd> pause &nbsp; <kbd>M</kbd> mute</div>
       </div></div>`;
     this.overlay.querySelector('.big-btn').addEventListener('click', () => this.onStart());
+    const code = this.overlay.querySelector('.coop-code');
+    code.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.code === 'Enter' && code.value.trim().length === 4) this.onJoin(code.value);
+    });
+    this.overlay.querySelector('.coop-btn.host').addEventListener('click', () => this.onHost());
+    this.overlay.querySelector('.coop-btn.join').addEventListener('click', () => {
+      if (code.value.trim().length === 4) this.onJoin(code.value);
+      else this.coopStatus('Type the 4-letter code from the host.');
+    });
+  }
+
+  coopStatus(text) {
+    const box = this.overlay.querySelector('.coop-status');
+    if (box) box.textContent = text;
+  }
+
+  showRoom(code, slot) {
+    this.room.innerHTML = `Co-op room <b>${code}</b>${slot ? ` &middot; you are P${slot}` : ''}`;
+    this.room.classList.add('show');
+    // A shared game can't be paused, so its pause button goes.
+    this.pauseBtn.style.display = 'none';
   }
 
   showGameOver(stats) {

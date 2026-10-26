@@ -608,6 +608,7 @@ export class Player {
 
   update(dt, input, bounds) {
     this.time += dt;
+    this.lastInput = input;
     const thrust = new THREE.Vector2(input.x, input.y);
     if (thrust.lengthSq() > 1) thrust.normalize();
     const pushing = thrust.lengthSq() > 0.01;

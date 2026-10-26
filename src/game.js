@@ -25,6 +25,9 @@ const MAX_BROKEN_CHAINS = 12;
 const MAX_WRECKS = 14;
 const MAX_COINS = 400;
 const FIRST_WAVE_DELAY = 22;
+// Co-op: how far a sub may stray from the group's centre, and how long a sunk sub waits to come back.
+const LEASH = 12;
+const RESPAWN_TIME = 5;
 const COMBAT_HOLD = 2;
 const DEEP_COMBAT_LEAD = 4;
 // Breathing room between waves, long enough for the calm music to come back.
@@ -412,6 +415,13 @@ function playerStatus(scene) {
 export class Game {
   constructor({ scene, camera, world, effects, player, hud }) {
     Object.assign(this, { scene, camera, world, effects, player, hud });
+    // `player` is this machine's own sub. In co-op, `players` also holds the other subs; `this.player` is briefly
+    // pointed at each of them while their weapons fire, and always points back at the local sub afterwards.
+    this.localPlayer = player;
+    this.players = [player];
+    this.role = 'solo';
+    this.net = null;
+    this.nextId = 1;
     this.enemies = [];
     this.torpedoes = [];
     this.missiles = [];
@@ -569,6 +579,37 @@ export class Game {
     this.wasAbove = false;
   }
 
+  get remotePlayers() {
+    return this.players.slice(1);
+  }
+
+  asPlayer(p, fn) {
+    const local = this.player;
+    this.player = p;
+    try {
+      fn();
+    } finally {
+      this.player = local;
+    }
+  }
+
+  // The nearest living sub, which an enemy hunts.
+  targetFor(e) {
+    const p = e.obj.position;
+    let best = this.localPlayer;
+    let bd = Infinity;
+    for (const pl of this.players) {
+      if (!pl.alive) continue;
+      const c = pl.group.position;
+      const d = (c.x - p.x) ** 2 + (c.y - p.y) ** 2;
+      if (d < bd) {
+        bd = d;
+        best = pl;
+      }
+    }
+    return best;
+  }
+
   setAspect(aspect) {
     this.aspect = aspect;
   }
@@ -582,7 +623,15 @@ export class Game {
   }
 
   get bounds() {
-    return { bottom: (x) => seabedAt(x) + 0.7 };
+    const b = { bottom: (x) => seabedAt(x) + 0.7 };
+    // In co-op the subs stay within a screen or so of each other, so everyone fights the same waves.
+    const alive = this.players.filter((pl) => pl.alive);
+    if (alive.length > 1) {
+      const cx = alive.reduce((sum, pl) => sum + pl.group.position.x, 0) / alive.length;
+      b.left = cx - LEASH;
+      b.right = cx + LEASH;
+    }
+    return b;
   }
 
   onScreen(x, y, margin = 0) {
@@ -611,6 +660,7 @@ export class Game {
     }
     this.coins -= cost;
     const added = this.player.upgrade(id);
+    this.net?.retintLocal();
     sfx.upgrade();
     this.hud.flashSlot(id, true);
     this.hud.showToast(`${def.name} Lv. ${lvl + 1}!`);
@@ -633,6 +683,7 @@ export class Game {
       q.push({ type: 'boss', delay: 2.5 });
       for (let i = 0; i < 3 + w / 5; i++) q.push({ type: 'scout', delay: rand(4, 7) });
       this.hud.showBanner(`Wave ${w}`, 'Something big is coming...');
+      this.net?.event({ t: 'banner', a: `Wave ${w}`, b: 'Something big is coming...' });
     } else {
       let budget = 4 + w * 2.6;
       while (budget > 0) {
@@ -651,6 +702,7 @@ export class Game {
         }
       }
       this.hud.showBanner(`Wave ${w}`, w === 1 ? 'Sink those grumpy subs!' : '');
+      this.net?.event({ t: 'banner', a: `Wave ${w}`, b: w === 1 ? 'Sink those grumpy subs!' : '' });
     }
     this.queue = q;
     this.spawnTimer = 1.5;
@@ -659,6 +711,7 @@ export class Game {
 
   spawnEnemy(spec) {
     const type = ENEMY_TYPES[spec.type];
+    const placed = spec.prewarm || spec.replica;
     const obj = new THREE.Group();
     const flip = new THREE.Group();
     const tilt = new THREE.Group();
@@ -707,10 +760,10 @@ export class Game {
         if (!spec.prewarm && (best < 0 || (best < 0.25 && Math.random() < 0.65))) return null;
         y = pc.y + rand(-4, 4);
       }
-      if (!spec.prewarm && !onShelf(x)) return null;
+      if (!placed && !onShelf(x)) return null;
       const floor = seabedAt(x);
       y = THREE.MathUtils.clamp(y, floor + 3, Math.min(ENEMY_TOP, floor + MAX_CHAIN));
-      if (!spec.prewarm && Math.abs(y - (spec.pos?.y ?? pc.y)) > 12) return null;
+      if (!placed && Math.abs(y - (spec.pos?.y ?? pc.y)) > 12) return null;
       anchor = { x, y: floor };
       // Moored mines hang a little behind or in front of the sub's lane so their chains never cut through it.
       obj.position.set(x, y, (Math.random() < 0.7 ? -1 : 1) * MINE_LANE);
@@ -758,6 +811,7 @@ export class Game {
       obj.add(e.bar.group);
     }
     if (spec.type === 'boss') this.boss = e;
+    e.id = spec.id ?? this.nextId++;
     this.enemies.push(e);
     return e;
   }
@@ -788,19 +842,37 @@ export class Game {
     return dx * dx + dy * dy < 1;
   }
 
-  damageEnemy(e, amount) {
+  // Only the sub that fired does damage; its owner's machine is the one that counts the hit. A guest reports its hits
+  // to the host, which keeps the enemies' health.
+  damageEnemy(e, amount, owner = this.player) {
     if (e.dead) return;
-    e.hp -= amount * this.player.damageMult;
     e.flash = Math.min(1, Math.max(e.flash, 0.35 + amount * 0.08));
-    if (e.hp <= 0) this.killEnemy(e);
+    if (owner !== this.localPlayer) return;
+    const dealt = amount * owner.damageMult;
+    if (this.role === 'guest') {
+      this.net.send({ t: 'dmg', id: e.id, a: dealt });
+      return;
+    }
+    e.hp -= dealt;
+    if (e.hp <= 0) this.killEnemy(e, owner);
   }
 
-  killEnemy(e) {
+  // Damage a guest reported from its own shots.
+  applyRemoteDamage(id, amount, from) {
+    const e = this.enemies.find((o) => o.id === id && !o.dead);
+    if (!e) return;
+    e.hp -= amount;
+    e.flash = Math.min(1, Math.max(e.flash, 0.5));
+    if (e.hp <= 0) this.killEnemy(e, from);
+  }
+
+  killEnemy(e, killer = this.localPlayer) {
     e.dead = true;
     const p = e.obj.position.clone();
     this.effects.explosion(p, e.def.boom);
     sfx.boom(e.type === 'boss' || e.type === 'gunner');
-    if (e.type !== 'mine') this.kills++;
+    if (e.type !== 'mine' && killer === this.localPlayer) this.kills++;
+    if (this.role === 'host') this.net.event({ t: 'kill', id: e.id, by: killer?.netId });
     if (e.type === 'boss') {
       this.boss = null;
       for (let i = 1; i <= 5; i++) {
@@ -816,12 +888,14 @@ export class Game {
       if (this.brokenChains.length > MAX_BROKEN_CHAINS) this.brokenChains.shift();
     }
     if (e.type === 'mine') {
-      for (const other of this.enemies) {
-        if (other !== e && !other.dead && other.obj.position.distanceTo(p) < 3) this.damageEnemy(other, 12);
+      if (this.role !== 'guest') {
+        for (const other of this.enemies) {
+          if (other !== e && !other.dead && other.obj.position.distanceTo(p) < 3) this.damageEnemy(other, 12);
+        }
       }
       if (this.player.alive && this.player.hitTest(p.x, p.y, 1.4)) this.hurtPlayer(DAMAGE.mine, p);
     }
-    this.dropCoins(p, e.def.coins + (e.type === 'boss' ? this.wave * 6 : 0));
+    if (this.role !== 'guest') this.dropCoins(p, e.def.coins + (e.type === 'boss' ? this.wave * 6 : 0));
     if (e.type === 'mine') this.scene.remove(e.obj);
     else this.sinkWreck(e);
   }
@@ -958,7 +1032,7 @@ export class Game {
       const obj = new THREE.Object3D();
       obj.scale.setScalar(big ? 0.8 : 0.55);
       obj.position.set(x + i * 0.9, y + Math.sin(i * 1.7) * 0.5, 0.3);
-      this.coinsList.push({ obj, value: big ? 5 : 1, vx: 0, vy: 0, t: rand(0, 6), spin: rand(1.5, 2.5), loose: true,
+      this.addCoin({ obj, value: big ? 5 : 1, vx: 0, vy: 0, t: rand(0, 6), spin: rand(1.5, 2.5), loose: true,
         homeY: obj.position.y });
     }
   }
@@ -974,8 +1048,31 @@ export class Game {
       obj.position.set(pos.x, Math.min(pos.y, SURFACE_Y - 0.5), 0.3);
       const a = rand(0, Math.PI * 2);
       const s = rand(1.5, 4.5);
-      this.coinsList.push({ obj, value: v, vx: Math.cos(a) * s, vy: Math.sin(a) * s + 1.5, t: 0, spin: rand(2, 4) });
+      this.addCoin({ obj, value: v, vx: Math.cos(a) * s, vy: Math.sin(a) * s + 1.5, t: 0, spin: rand(2, 4) });
     }
+  }
+
+  addCoin(c) {
+    c.id ??= this.nextId++;
+    this.coinsList.push(c);
+    if (this.role === 'host') {
+      const p = c.obj.position;
+      this.net.event({ t: 'coin', id: c.id, x: p.x, y: p.y, vx: c.vx, vy: c.vy, v: c.value, loose: !!c.loose, s: c.obj.scale.x,
+        t0: c.t });
+    }
+  }
+
+  // A coin the host dropped, recreated on a guest.
+  addRemoteCoin(m) {
+    const obj = new THREE.Object3D();
+    obj.scale.setScalar(m.s);
+    obj.position.set(m.x, m.y, 0.3);
+    this.coinsList.push({ id: m.id, obj, value: m.v, vx: m.vx, vy: m.vy, t: m.t0, spin: rand(1.5, 4), loose: m.loose,
+      homeY: m.y });
+  }
+
+  removeCoin(id) {
+    for (const c of this.coinsList) if (c.id === id) c.dead = true;
   }
 
   hurtPlayer(amount, from) {
@@ -1011,9 +1108,26 @@ export class Game {
         setTimeout(() => this.effects.explosion({ x: c.x + rand(-2, 2), y: c.y + rand(-1, 1), z: 0.5 }, 1.2), i * 180);
       }
       sfx.boom(true);
-      this.over = true;
-      this.overTimer = 2.4;
+      if (this.role === 'solo') {
+        this.over = true;
+        this.overTimer = 2.4;
+      } else {
+        this.respawnTimer = RESPAWN_TIME;
+        this.hud.showToast(`Sunk! Back in ${RESPAWN_TIME} seconds`);
+      }
     }
+  }
+
+  // Back in the fight next to the others, at full health and briefly untouchable.
+  respawn() {
+    const pl = this.localPlayer;
+    const others = this.remotePlayers.filter((r) => r.alive);
+    const x = others.length ? others[0].group.position.x : pl.group.position.x;
+    pl.group.position.set(x, Math.max(seabedAt(x) + 4, Math.min(pl.group.position.y + 6, SURFACE_Y - 3)), 0);
+    pl.vel.set(0, 0);
+    pl.hp = pl.maxHp;
+    pl.alive = true;
+    pl.invuln = 2.5;
   }
 
   nearestEnemy(x, y, filter = () => true, maxDist = 26) {
@@ -1055,7 +1169,7 @@ export class Game {
       part.muzzle.getWorldPosition(this.tmp);
       const spread = rand(-0.6, 0.6);
       this.bullets.push({
-        x: this.tmp.x, y: this.tmp.y, z: this.tmp.z, life: 1.1, trail: 0,
+        x: this.tmp.x, y: this.tmp.y, z: this.tmp.z, life: 1.1, trail: 0, owner: pl,
         vx: fwd.x * 26 + side.x * spread + pl.vel.x * 0.5, vy: fwd.y * 26 + side.y * spread + pl.vel.y * 0.5,
       });
       this.effects.muzzle(this.tmp, fwd);
@@ -1069,7 +1183,7 @@ export class Game {
       obj.scale.setScalar(0.8);
       obj.position.copy(this.tmp);
       this.scene.add(obj);
-      this.torpedoes.push({ obj, vel: fwd.clone().multiplyScalar(3), life: 6, trail: 0 });
+      this.torpedoes.push({ obj, vel: fwd.clone().multiplyScalar(3), life: 6, trail: 0, owner: pl });
       sfx.torpedo();
     }
     for (const part of pl.partsOf('missile')) {
@@ -1082,7 +1196,7 @@ export class Game {
       obj.position.copy(this.tmp);
       this.scene.add(obj);
       const up = this.tmp.y > pl.center.y ? 1 : -1;
-      this.missiles.push({ obj, vx: fwd.x * 2, vy: 6 * up, life: 5, trail: 0, age: 0 });
+      this.missiles.push({ obj, vx: fwd.x * 2, vy: 6 * up, life: 5, trail: 0, age: 0, owner: pl });
       this.effects.muzzle(this.tmp);
       sfx.missile();
     }
@@ -1177,9 +1291,9 @@ export class Game {
 
   updateEnemies(dt) {
     const pl = this.player;
-    const pc = pl.center;
     const desired = new THREE.Vector2();
-    this.dazzleEnemies(dt);
+    const guest = this.role === 'guest';
+    if (!guest) this.dazzleEnemies(dt);
     for (const e of this.enemies) {
       if (e.dead) continue;
       e.t += dt;
@@ -1192,91 +1306,19 @@ export class Game {
           tip.position.x = tip.userData.restX - 0.26 * retract;
         });
       }
-      const dazzle = e.dazzled > 0 ? 0.5 : 1;
-      const fireMult = (1 + this.wave * 0.05) * dazzle;
       const p = e.obj.position;
-      const toP = new THREE.Vector2(pc.x - p.x, pc.y - p.y);
-      const dist = toP.length();
-      const dir = toP.clone().divideScalar(dist || 1);
-      const tangent = new THREE.Vector2(-dir.y, dir.x).multiplyScalar(e.orbit);
-      const speed = (e.def.speed + this.wave * 0.06) * (e.dazzled > 0 ? 0.6 : 1);
-      const visible = this.onScreen(p.x, p.y, -0.5);
-      e.stunned = Math.max(0, (e.stunned ?? 0) - dt);
-      const dazed = e.stunned > 0;
-
-      if (dazed) {
-        e.vel.multiplyScalar(Math.exp(-dt * 1.5));
-      } else if (e.type === 'scout') {
-        e.steer -= dt;
-        if (e.steer <= 0) {
-          e.steer = rand(2.2, 3.5);
-          e.target = dir.clone().multiplyScalar(speed).add(tangent.clone().multiplyScalar(rand(0.5, 1.8)));
-        }
-        desired.copy(e.target ?? dir);
-        const weave = tangent.clone().multiplyScalar(Math.sin(e.t * 2.2) * 1.4);
-        this.steerEnemy(e, desired.add(weave), dt, 1.5);
-        e.fire -= dt * fireMult;
-        if (e.fire <= 0 && visible && dist < 15 && !midTurn(e)) {
-          e.fire = rand(2.0, 3.2);
-          this.enemyAimed(e, pc, rand(-0.1, 0.1));
-        }
-      } else if (e.type === 'gunner') {
-        const range = dist - 9;
-        desired.copy(dir).multiplyScalar(THREE.MathUtils.clamp(range, -1, 1) * speed).add(tangent.clone().multiplyScalar(speed * 0.5));
-        this.steerEnemy(e, desired, dt, 1.2);
-        e.fire -= dt * fireMult;
-        if (e.fire <= 0 && visible && !midTurn(e)) {
-          e.fire = rand(2.8, 3.6);
-          const n = 2 + Math.floor(this.wave / 4);
-          for (let i = 0; i < n; i++) {
-            setTimeout(() => {
-              if (!e.dead) this.enemyAimed(e, this.player.center, rand(-0.12, 0.12));
-            }, i * 220);
-          }
-        }
-      } else if (e.type === 'boss') {
-        const range = dist - 11;
-        desired.copy(dir).multiplyScalar(THREE.MathUtils.clamp(range, -1, 1) * speed).add(tangent.clone().multiplyScalar(speed * 0.35));
-        this.steerEnemy(e, desired, dt, 0.8);
-        e.fire -= dt * (1 + this.wave * 0.02) * dazzle;
-        if (e.fire <= 0 && visible && !midTurn(e)) {
-          e.attack = (e.attack + 1) % 3;
-          const base = Math.atan2(dir.y, dir.x);
-          if (e.attack === 0) {
-            e.fire = 2.6;
-            for (let i = -2; i <= 2; i++) this.enemyAimed(e, null, 0, base + i * 0.22, 7.5);
-          } else if (e.attack === 1) {
-            e.fire = 3.0;
-            for (let i = 0; i < 3; i++) {
-              this.spawnEnemy({ type: 'mine', pos: { x: p.x + dir.x * 2.5, y: p.y + (i - 1) * 1.6 } });
-            }
-          } else {
-            e.fire = 3.2;
-            for (let i = 0; i < 6; i++) {
-              setTimeout(() => {
-                if (!e.dead) this.enemyAimed(e, this.player.center, rand(-0.08, 0.08));
-              }, i * 150);
-            }
-          }
-        }
-      } else if (e.type === 'mine' && e.anchor) {
-        const length = e.length ?? (e.length = p.y - e.anchor.y);
-        const near = dist < 16 ? THREE.MathUtils.clamp(Math.atan2(pc.x - e.anchor.x, length) * 0.6, -0.4, 0.4) : 0;
-        e.lean = THREE.MathUtils.lerp(e.lean, near + Math.sin(e.t * 0.7) * 0.06, 1 - Math.exp(-dt * 0.8));
-        p.x = e.anchor.x + Math.sin(e.lean) * length;
-        p.y = e.anchor.y + Math.cos(e.lean) * length + Math.sin(e.t * 1.3) * 0.15;
-        e.vel.set(0, 0);
-        e.model.rotation.z += e.spin * dt * 0.3;
-      } else if (e.type === 'mine') {
-        desired.copy(dir).multiplyScalar(speed);
-        desired.y += Math.sin(e.t * 1.5) * 0.4;
-        this.steerEnemy(e, desired, dt, 0.6);
-        e.model.rotation.z += e.spin * dt * 0.6;
-        e.model.rotation.y += e.spin * dt * 0.3;
+      let dist = 0;
+      let dazed = (e.stunned ?? 0) > 0;
+      if (guest) {
+        this.followReplica(e, dt);
+      } else {
+        ({ dist, dazed } = this.enemyBrain(e, dt, desired));
       }
 
-      p.x += e.vel.x * dt;
-      p.y += e.vel.y * dt;
+      if (!guest) {
+        p.x += e.vel.x * dt;
+        p.y += e.vel.y * dt;
+      }
       if (p.y > ENEMY_TOP) {
         p.y = ENEMY_TOP;
         e.vel.y = Math.min(e.vel.y, 0);
@@ -1330,7 +1372,7 @@ export class Game {
       }
 
       e.bumpCooldown = Math.max(0, (e.bumpCooldown ?? 0) - dt);
-      if (e.type === 'mine') {
+      if (e.type === 'mine' && !guest) {
         const victim = this.enemies.find((o) => o !== e && !o.dead && o.type !== 'mine' && this.enemyHit(o, p.x, p.y, 0.55));
         if (victim) {
           this.killEnemy(e);
@@ -1339,12 +1381,16 @@ export class Game {
       }
       if (pl.alive) {
         if (e.type === 'mine') {
-          if (pl.invuln <= 0 && pl.hitTest(p.x, p.y, e.def.ry)) this.killEnemy(e);
+          if (pl.invuln <= 0 && pl.hitTest(p.x, p.y, e.def.ry)) {
+            if (guest) this.damageEnemy(e, 999);
+            else this.killEnemy(e);
+          }
         } else if (this.hullContact(e)) {
           this.bump(e);
         }
       }
 
+      if (guest) continue;
       if (e.type === 'mine' && dist > DESPAWN_DIST) {
         e.dead = true;
         this.scene.remove(e.obj);
@@ -1357,10 +1403,117 @@ export class Game {
       }
     }
     this.enemies = this.enemies.filter((e) => !e.dead);
-    this.separateEnemies(dt);
+    if (!guest) this.separateEnemies(dt);
     for (const c of this.brokenChains) sinkChain(c, dt);
     this.brokenChains = this.brokenChains.filter((c) => Math.abs(c.nodes[0].x - this.cam.x) < 80);
     this.updateMineChains();
+  }
+
+  // An enemy's AI on the host (or solo): steer toward its target sub and fire when it has a shot.
+  enemyBrain(e, dt, desired) {
+    const tgt = this.targetFor(e);
+    const pc = tgt.center;
+    const p = e.obj.position;
+    const dazzle = e.dazzled > 0 ? 0.5 : 1;
+    const fireMult = (1 + this.wave * 0.05) * dazzle;
+    const toP = new THREE.Vector2(pc.x - p.x, pc.y - p.y);
+    const dist = toP.length();
+    const dir = toP.clone().divideScalar(dist || 1);
+    const tangent = new THREE.Vector2(-dir.y, dir.x).multiplyScalar(e.orbit);
+    const speed = (e.def.speed + this.wave * 0.06) * (e.dazzled > 0 ? 0.6 : 1);
+    // In co-op an enemy also fires when it is on its target's screen, which may not be the host's.
+    const visible = this.onScreen(p.x, p.y, -0.5)
+      || (Math.abs(p.x - pc.x) < this.halfW - 0.5 && Math.abs(p.y - pc.y) < this.halfH - 0.5);
+    e.stunned = Math.max(0, (e.stunned ?? 0) - dt);
+    const dazed = e.stunned > 0;
+
+    if (dazed) {
+      e.vel.multiplyScalar(Math.exp(-dt * 1.5));
+    } else if (e.type === 'scout') {
+      e.steer -= dt;
+      if (e.steer <= 0) {
+        e.steer = rand(2.2, 3.5);
+        e.target = dir.clone().multiplyScalar(speed).add(tangent.clone().multiplyScalar(rand(0.5, 1.8)));
+      }
+      desired.copy(e.target ?? dir);
+      const weave = tangent.clone().multiplyScalar(Math.sin(e.t * 2.2) * 1.4);
+      this.steerEnemy(e, desired.add(weave), dt, 1.5);
+      e.fire -= dt * fireMult;
+      if (e.fire <= 0 && visible && dist < 15 && !midTurn(e)) {
+        e.fire = rand(2.0, 3.2);
+        this.enemyAimed(e, pc, rand(-0.1, 0.1));
+      }
+    } else if (e.type === 'gunner') {
+      const range = dist - 9;
+      desired.copy(dir).multiplyScalar(THREE.MathUtils.clamp(range, -1, 1) * speed).add(tangent.clone().multiplyScalar(speed * 0.5));
+      this.steerEnemy(e, desired, dt, 1.2);
+      e.fire -= dt * fireMult;
+      if (e.fire <= 0 && visible && !midTurn(e)) {
+        e.fire = rand(2.8, 3.6);
+        const n = 2 + Math.floor(this.wave / 4);
+        for (let i = 0; i < n; i++) {
+          setTimeout(() => {
+            if (!e.dead) this.enemyAimed(e, tgt.center, rand(-0.12, 0.12));
+          }, i * 220);
+        }
+      }
+    } else if (e.type === 'boss') {
+      const range = dist - 11;
+      desired.copy(dir).multiplyScalar(THREE.MathUtils.clamp(range, -1, 1) * speed).add(tangent.clone().multiplyScalar(speed * 0.35));
+      this.steerEnemy(e, desired, dt, 0.8);
+      e.fire -= dt * (1 + this.wave * 0.02) * dazzle;
+      if (e.fire <= 0 && visible && !midTurn(e)) {
+        e.attack = (e.attack + 1) % 3;
+        const base = Math.atan2(dir.y, dir.x);
+        if (e.attack === 0) {
+          e.fire = 2.6;
+          for (let i = -2; i <= 2; i++) this.enemyAimed(e, null, 0, base + i * 0.22, 7.5);
+        } else if (e.attack === 1) {
+          e.fire = 3.0;
+          for (let i = 0; i < 3; i++) {
+            this.spawnEnemy({ type: 'mine', pos: { x: p.x + dir.x * 2.5, y: p.y + (i - 1) * 1.6 } });
+          }
+        } else {
+          e.fire = 3.2;
+          for (let i = 0; i < 6; i++) {
+            setTimeout(() => {
+              if (!e.dead) this.enemyAimed(e, tgt.center, rand(-0.08, 0.08));
+            }, i * 150);
+          }
+        }
+      }
+    } else if (e.type === 'mine' && e.anchor) {
+      const length = e.length ?? (e.length = p.y - e.anchor.y);
+      const near = dist < 16 ? THREE.MathUtils.clamp(Math.atan2(pc.x - e.anchor.x, length) * 0.6, -0.4, 0.4) : 0;
+      e.lean = THREE.MathUtils.lerp(e.lean, near + Math.sin(e.t * 0.7) * 0.06, 1 - Math.exp(-dt * 0.8));
+      p.x = e.anchor.x + Math.sin(e.lean) * length;
+      p.y = e.anchor.y + Math.cos(e.lean) * length + Math.sin(e.t * 1.3) * 0.15;
+      e.vel.set(0, 0);
+      e.model.rotation.z += e.spin * dt * 0.3;
+    } else if (e.type === 'mine') {
+      desired.copy(dir).multiplyScalar(speed);
+      desired.y += Math.sin(e.t * 1.5) * 0.4;
+      this.steerEnemy(e, desired, dt, 0.6);
+      e.model.rotation.z += e.spin * dt * 0.6;
+      e.model.rotation.y += e.spin * dt * 0.3;
+    }
+    return { dist, dazed };
+  }
+
+  // A guest's copy of an enemy eases toward where the host last said it was, carried along by its velocity.
+  followReplica(e, dt) {
+    const n = e.net;
+    if (!n) return;
+    n.x += n.vx * dt;
+    n.y += n.vy * dt;
+    const k = 1 - Math.exp(-dt * 10);
+    const p = e.obj.position;
+    p.x += (n.x - p.x) * k;
+    p.y += (n.y - p.y) * k;
+    p.z += (n.z - p.z) * k;
+    e.vel.set(n.vx, n.vy);
+    e.hp = n.hp;
+    e.stunned = n.st;
   }
 
   // The hull as a capsule: a segment along its length, tilted with its pitch, and a radius wide enough to take in
@@ -1523,6 +1676,7 @@ export class Game {
   }
 
   spawnEnemyMissile(pos, vx, vy, steer = null) {
+    if (this.role === 'host') this.net.event({ t: 'em', x: pos.x, y: pos.y, z: pos.z, vx, vy, steer });
     const obj = spawn('proj_missile');
     obj.scale.setScalar(steer ? 0.45 : 0.9);
     obj.position.set(pos.x, pos.y, steer ? pos.z : 0.2);
@@ -1583,7 +1737,7 @@ export class Game {
       let hit = false;
       for (const e of this.enemies) {
         if (!e.dead && this.enemyHit(e, b.x, b.y, 0.1)) {
-          this.damageEnemy(e, 1);
+          this.damageEnemy(e, 1, b.owner);
           this.effects.sparkle({ x: b.x, y: b.y, z: 0.5 }, '#ffe9a0', 3, 3);
           hit = true;
           break;
@@ -1640,8 +1794,10 @@ export class Game {
       const floor = seabedAt(p.x);
       if (hitE || t.life <= 0 || p.y < floor) {
         if (hitE) {
-          this.damageEnemy(hitE, 7);
-          for (const e of this.enemies) if (e !== hitE && !e.dead && e.obj.position.distanceTo(p) < 2.4) this.damageEnemy(e, 3);
+          this.damageEnemy(hitE, 7, t.owner);
+          for (const e of this.enemies) {
+            if (e !== hitE && !e.dead && e.obj.position.distanceTo(p) < 2.4) this.damageEnemy(e, 3, t.owner);
+          }
         }
         if (hitE || p.y < floor) {
           this.effects.explosion(p, 0.7);
@@ -1691,7 +1847,7 @@ export class Game {
           sfx.boom();
         }
         if (hitE) {
-          this.damageEnemy(hitE, 4);
+          this.damageEnemy(hitE, 4, mi.owner);
           this.effects.explosion(p, 0.6);
           sfx.boom();
         }
@@ -1770,6 +1926,7 @@ export class Game {
       if (!c.loose && c.t > 11) c.obj.visible = Math.floor(c.t * 10) % 2 === 0;
       if (pl.alive && pl.hitTest(p.x, p.y, 0.3)) {
         c.dead = true;
+        if (this.net) this.net.taken(c.id);
         this.coins += c.value;
         this.coinsTotal += c.value;
         this.effects.coinBurst(p);
@@ -1814,6 +1971,7 @@ export class Game {
       this.coins += bonus;
       this.coinsTotal += bonus;
       this.hud.showToast(`Wave ${this.wave} cleared! +${bonus} coins`);
+      if (this.role === 'host') this.net.event({ t: 'cleared', wave: this.wave, bonus });
       this.hud.pulseCoins();
       sfx.coin();
       return;
@@ -1884,28 +2042,38 @@ export class Game {
   update(dt, input) {
     const pl = this.player;
     pl.update(dt, input, this.bounds);
-    this.fireWeapons(dt);
-    this.updateGrapple(dt);
+    for (const r of this.remotePlayers) this.net.updateRemote(r, dt);
+    for (const sub of this.players) {
+      this.asPlayer(sub, () => {
+        this.fireWeapons(dt);
+        this.updateGrapple(dt);
+      });
+    }
     this.updateEnemies(dt);
     this.updateProjectiles(dt);
-    this.scatterCoins(dt);
+    if (this.role !== 'guest') this.scatterCoins(dt);
     this.updateCoins(dt);
-    this.updateWaves(dt);
+    if (this.role !== 'guest') this.updateWaves(dt);
+    if (this.respawnTimer > 0 && !pl.alive) {
+      this.respawnTimer -= dt;
+      if (this.respawnTimer <= 0) this.respawn();
+    }
     this.updateCamera(dt);
     this.splashCheck();
     this.updateCombatHold(dt);
     this.planeSpray(dt);
     this.spotlightHint();
 
-    if (pl.alive) {
-      const prop = pl.propellerWorld(this.tmp);
-      const rate = (0.5 + pl.vel.length() * 0.25 + pl.levels.propulsion * 0.15 + pl.cruise * 1.5) * pl.drive;
-      const back = pl.forward.multiplyScalar(-2);
+    for (const sub of this.players) {
+      if (!sub.alive) continue;
+      const prop = sub.propellerWorld(this.tmp);
+      const rate = (0.5 + sub.vel.length() * 0.25 + sub.levels.propulsion * 0.15 + sub.cruise * 1.5) * (sub.drive ?? 0);
+      const back = sub.forward.multiplyScalar(-2);
       for (let n = rate; n > 0; n--) {
         if (Math.random() < n) this.effects.bubble(prop, { spread: 0.25, vel: { x: back.x, y: back.y } });
       }
-      for (const part of pl.partsOf('propulsion')) {
-        if (Math.random() < 0.35 * pl.drive && part.props[0]) {
+      for (const part of sub.partsOf('propulsion')) {
+        if (Math.random() < 0.35 * (sub.drive ?? 0) && part.props[0]) {
           part.props[0].getWorldPosition(this.tmp);
           this.effects.bubble(this.tmp, { spread: 0.12, size: [0.08, 0.2], vel: { x: back.x, y: back.y } });
         }

@@ -516,3 +516,59 @@ kbd {
   color: #cdeeff;
   text-shadow: 0 2px 0 rgba(0, 0, 0, 0.4);
 }
+
+.coop {
+  margin-top: 2.6vh;
+  display: flex;
+  gap: 0.8vw;
+  justify-content: center;
+  align-items: center;
+}
+.coop-btn {
+  padding: 0.7vh 1.6vw;
+  font-family: inherit;
+  font-size: 1.25vw;
+  font-weight: 700;
+  color: #e9f6ff;
+  background: linear-gradient(#2f7fb8, #1b4f7a);
+  border: 0.18vw solid #0d2a42;
+  border-radius: 999px;
+  box-shadow: 0 0.3vw 0 #0d2a42;
+  cursor: pointer;
+}
+.coop-btn:hover { filter: brightness(1.15); }
+.coop-code {
+  width: 6.5vw;
+  padding: 0.7vh 0.6vw;
+  font-family: inherit;
+  font-size: 1.25vw;
+  font-weight: 700;
+  letter-spacing: 0.25em;
+  text-align: center;
+  text-transform: uppercase;
+  color: #fff;
+  background: rgba(4, 18, 31, 0.6);
+  border: 0.18vw solid #2f7fb8;
+  border-radius: 0.6vw;
+  outline: none;
+}
+.coop-status {
+  min-height: 2.2vh;
+  margin-top: 1.2vh;
+  font-size: 1.05vw;
+  color: #ffd23a;
+}
+.room-code {
+  position: absolute;
+  top: 1.4vh;
+  right: 1.4vw;
+  padding: 0.6vh 1vw;
+  font-size: 1.05vw;
+  font-weight: 600;
+  color: #cdeeff;
+  background: rgba(4, 18, 31, 0.55);
+  border-radius: 999px;
+  display: none;
+}
+.room-code.show { display: block; }
+.room-code b { color: #ffd23a; letter-spacing: 0.12em; }

@@ -16,6 +16,7 @@ import { setAmbience, setMusic, toggleMute, unlockAudio } from './audio.js';
 import { Effects } from './effects.js';
 import { Game } from './game.js';
 import { Hud } from './hud.js';
+import { Net } from './net.js';
 import { Player } from './player.js';
 import { CAMERA_FOV, CAMERA_Z, SURFACE_Y, installWaterFog } from './water.js';
 import { World } from './world.js';
@@ -78,9 +79,11 @@ const hud = new Hud(hudRoot, {
     if (state === 'playing') game.buy(id);
   },
   onStart: () => startGame(),
+  onHost: () => startCoop((net) => net.host()),
+  onJoin: (code) => startCoop((net) => net.join(code)),
   onResume: () => resume(),
   onPause: () => {
-    if (state === 'playing') pause();
+    if (state === 'playing' && !net) pause();
   },
 });
 hud.showLoading(0);
@@ -90,7 +93,7 @@ window.addEventListener('keydown', (e) => {
   keys.add(e.code);
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
   if (e.repeat) return;
-  if (e.code === 'KeyP' || e.code === 'Escape') {
+  if ((e.code === 'KeyP' || e.code === 'Escape') && !net) {
     if (state === 'playing') pause();
     else if (state === 'paused') resume();
   }
@@ -100,7 +103,7 @@ window.addEventListener('keydown', (e) => {
 window.addEventListener('keyup', (e) => keys.delete(e.code));
 window.addEventListener('blur', () => {
   keys.clear();
-  if (state === 'playing') pause();
+  if (state === 'playing' && !net) pause();
 });
 
 function readInput() {
@@ -154,6 +157,21 @@ function adaptResolution(dt) {
     renderer.setPixelRatio(pixelRatio);
     resize();
   }
+}
+
+// Co-op: the game only starts once the room is ready, the host's registered or the guest's been welcomed in.
+let net = null;
+function startCoop(connect) {
+  if (net) return;
+  unlockAudio();
+  net = new Net(game, {
+    onStatus: (text) => (state === 'playing' ? hud.showToast(text) : hud.coopStatus(text)),
+    onReady: ({ code, slot }) => {
+      startGame();
+      hud.showRoom(code, slot);
+    },
+  });
+  connect(net);
 }
 
 function startGame() {
@@ -234,6 +252,7 @@ function tick(dt) {
   SHADER_TIME.value += dt;
   if (state === 'playing') {
     game.update(dt, scriptedInput ?? readInput());
+    net?.tick(dt);
     if (game.over && game.overTimer <= 0) {
       state = 'gameover';
       hud.showGameOver({ wave: game.wave, kills: game.kills, coins: game.coinsTotal, parts: game.partCount });
