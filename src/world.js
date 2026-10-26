@@ -1194,6 +1194,8 @@ const MARLIN_LENGTH = 6.5;
 const MARLIN_BAND = [SURFACE_Y - 22, SURFACE_Y - 14];
 const MARLIN_SPEED = 5.5;
 const MARLIN_SHY = 11;
+// Radius of its U-turns; tight, since it is a quick fish.
+const MARLIN_TURN = 3;
 const MARLIN_GAP = [12, 25];
 
 function makeMarlin(scene) {
@@ -1238,10 +1240,13 @@ function updateMarlin(fish, dt, t, cx, cy, halfW, sub) {
     fish.position.set(x, u.base, rand(-24, -10));
   }
   const p = fish.position;
-  // Startled by the sub: turn away from it if need be and bolt, easing back to a cruise once clear.
+  // Startled by the sub: turn away from it if need be and bolt, easing back to a cruise once clear. Otherwise it
+  // now and then doubles back on its own.
   if (sub && Math.hypot(sub.x - p.x, sub.y - p.y) < MARLIN_SHY) {
     u.boost = 1;
     u.dir = Math.sign(p.x - sub.x) || u.dir;
+  } else if (Math.abs(p.x - cx) < halfW * 0.6 && Math.random() < dt * 0.04) {
+    u.dir = -u.dir;
   }
   u.boost = Math.max(0, u.boost - dt * 0.25);
   // Smooth wandering: depth and pace follow slow overlapping waves.
@@ -1249,16 +1254,26 @@ function updateMarlin(fish, dt, t, cx, cy, halfW, sub) {
   const want = cruise * (1 + 2.8 * Math.min(1, u.boost * 1.5));
   u.speed = u.speed === undefined ? want : u.speed + (want - u.speed) * (1 - Math.exp(-dt * (want > u.speed ? 4 : 1)));
   const speed = u.speed;
+  // A U-turn swings the heading round at speed / radius, always curving away from the camera, so the fish sweeps a
+  // tight semicircle instead of spinning on the spot.
   const targetYaw = u.dir > 0 ? 0 : Math.PI;
-  u.yaw += (targetYaw - u.yaw) * (1 - Math.exp(-dt * (u.boost > 0 ? 6 : 2)));
+  const left = targetYaw - u.yaw;
+  let omega = 0;
+  if (Math.abs(left) > 1e-3) {
+    omega = Math.sign(left) * Math.min(Math.abs(left) / dt, speed / MARLIN_TURN);
+    u.yaw += omega * dt;
+  }
   const y = u.base + 1.6 * Math.sin(t * 0.33 + u.seed) + 0.6 * Math.sin(t * 0.81 + u.seed * 3);
   const vy = (y - p.y) / Math.max(dt, 1e-3);
   p.x += Math.cos(u.yaw) * speed * dt;
+  p.z = THREE.MathUtils.clamp(p.z - Math.sin(u.yaw) * speed * dt + Math.sin(t * 0.4 + u.seed) * 0.6 * dt, -34, -6);
   p.y = y;
-  p.z += Math.sin(t * 0.4 + u.seed) * 0.6 * dt;
   u.pitch += (Math.atan2(vy, speed) - u.pitch) * (1 - Math.exp(-dt * 3));
-  const yaw = u.yaw + Math.sin(t * 0.4 + u.seed) * 0.08;
-  fish.rotation.set(Math.sin(t * 0.7 + u.seed) * 0.05, yaw, u.pitch);
+  // The body curves into the turn and leans into it a little, easing in and out.
+  u.curve = (u.curve ?? 0) + (THREE.MathUtils.clamp(omega * 0.16, -0.9, 0.9) - (u.curve ?? 0)) * (1 - Math.exp(-dt * 8));
+  u.controls.arch.value = u.curve;
+  const yaw = u.yaw + Math.sin(t * 0.4 + u.seed) * 0.08 * (1 - Math.min(1, Math.abs(u.curve) * 3));
+  fish.rotation.set(Math.sin(t * 0.7 + u.seed) * 0.05 - u.curve * 0.35, yaw, u.pitch);
   // A quicker, slightly stronger beat while it bolts; the whole body still ripples a little with the tail.
   const fleeing = Math.min(1, u.boost * 1.5);
   u.controls.phase.value += (6 + speed * 0.35 + fleeing * 9) * dt;
@@ -1267,6 +1282,8 @@ function updateMarlin(fish, dt, t, cx, cy, halfW, sub) {
   if ((p.x - cx) * u.dir > halfW + MARLIN_LENGTH * 1.2 || !open) {
     u.active = false;
     u.speed = undefined;
+    u.curve = 0;
+    u.controls.arch.value = 0;
     u.wait = rand(MARLIN_GAP[0], MARLIN_GAP[1]);
   }
 }
