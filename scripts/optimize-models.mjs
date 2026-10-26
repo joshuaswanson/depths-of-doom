@@ -28,6 +28,7 @@ const SIMPLIFY = {
   wreck_sub: [0.6, 0.004],
   deep_jelly: [0.7, 0.003],
   manta: [0.35, 0.003],
+  rusted_vessel: [0.5, 0.003],
 };
 
 const io = new NodeIO()
