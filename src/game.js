@@ -308,6 +308,14 @@ function viewportGlow(type) {
 const DESPAWN_DIST = 60;
 const ENEMY_TOP = SURFACE_Y - 1.8;
 const enemyFloor = (x) => seabedAt(x) + 1.8;
+// The lowest an enemy can sit at x without its hull, `halfLength` long either side, dipping into the rock.
+function enemyFloorUnder(x, halfLength, halfHeight) {
+  let floor = enemyFloor(x);
+  for (const t of [-1, -0.6, -0.25, 0.25, 0.6, 1]) {
+    floor = Math.max(floor, seabedAt(x + t * halfLength) + halfHeight * Math.sqrt(1 - t * t) + 0.5);
+  }
+  return floor;
+}
 const DAMAGE = { missile: 12, mine: 22, bullet: 2.2 };
 const GRAVITY = 20;
 const LOOSE_COIN_MAX = 10;
@@ -1354,7 +1362,7 @@ export class Game {
         p.y = ENEMY_TOP;
         e.vel.y = Math.min(e.vel.y, 0);
       }
-      const floor = enemyFloor(p.x);
+      const floor = e.type === 'mine' ? enemyFloor(p.x) : enemyFloorUnder(p.x, e.def.rx, e.def.ry);
       if (p.y < floor) {
         p.y = floor;
         e.vel.y = Math.max(e.vel.y, 0);

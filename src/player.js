@@ -18,6 +18,9 @@ const MAX_PITCH = 1.52;
 const CRUISE_BUILD = 0.32;
 const CRUISE_BOOST = 0.9;
 const MAX_CLIMB = 0.9;
+// Points along the hull, from tail to nose as fractions of its half-length, where it is checked against the rock. The
+// ends reach a little past the hull so its tips stop just short of a cliff face.
+const HULL_SAMPLES = [-1.12, -0.75, -0.45, -0.15, 0.15, 0.45, 0.75, 1.12];
 export const RIG_SCALE = 0.82;
 const WALL_BOUNCE_SPEED = 3;
 const REGEN_DELAY = 5;
@@ -587,6 +590,17 @@ export class Player {
     return dx * dx + dy * dy < 1;
   }
 
+  // How far the rock reaches into the hull's rounded underside with the sub at (x, y), checked along its whole
+  // length; positive means it pokes in by that much.
+  rockDepth(x, y, bottom) {
+    const e = this.extents;
+    let depth = -Infinity;
+    for (const t of HULL_SAMPLES) {
+      depth = Math.max(depth, bottom(x + t * e.hx) + e.hy * Math.sqrt(Math.max(0, 1 - t * t)) - y);
+    }
+    return depth;
+  }
+
   get center() {
     const e = this.extents;
     const a = this.screenTilt;
@@ -655,22 +669,20 @@ export class Player {
     const e = this.extents;
     const dx = this.vel.x * dt;
     const nx = p.x + dx;
-    // Gentle slopes lift the sub as it slides along them; anything steeper is a wall, and so is rock reaching the
-    // nose.
-    const lift = bounds.bottom(nx) + e.hy - p.y;
-    const noseRock = bounds.bottom(nx + Math.sign(dx) * e.hx * 0.8) - p.y;
-    if ((lift > 0 && lift > Math.abs(dx) * MAX_CLIMB) || noseRock > 0) {
+    // Gentle slopes lift the sub as it slides along them; anything steeper is a wall.
+    const lift = this.rockDepth(nx, p.y, bounds.bottom);
+    if (lift > 0 && lift > Math.abs(dx) * MAX_CLIMB) {
       // A real crash bounces off; pressing on into the wall just stops dead, so the speed never flickers.
       this.vel.x = Math.abs(this.vel.x) > WALL_BOUNCE_SPEED ? this.vel.x * -0.25 : 0;
     } else {
       p.x = nx;
     }
     p.y += this.vel.y * dt;
-    const floor = bounds.bottom(p.x) + e.hy;
-    this.onFloor = p.y <= floor + 0.05;
-    if (p.y < floor) {
+    const sunk = this.rockDepth(p.x, p.y, bounds.bottom);
+    this.onFloor = sunk > -0.05;
+    if (sunk > 0) {
       this.impact = Math.max(this.impact ?? 0, -this.vel.y);
-      p.y = floor;
+      p.y += sunk;
       this.vel.y *= -0.2;
     }
     if (bounds.left !== undefined) p.x = THREE.MathUtils.clamp(p.x, bounds.left, bounds.right);
