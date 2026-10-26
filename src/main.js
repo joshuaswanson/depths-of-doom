@@ -257,6 +257,22 @@ function frame() {
   tick(Math.min(rawDt, 1 / 20));
 }
 
+// Browsers stop animation frames in a hidden tab. In co-op that would freeze the game for everyone (the host runs the
+// enemies), so a worker's timer, which isn't throttled the same way, keeps the game ticking until the tab is back.
+let hiddenLast = 0;
+const backgroundTicker = new Worker(URL.createObjectURL(new Blob(['setInterval(() => postMessage(0), 33);'])));
+backgroundTicker.onmessage = () => {
+  if (!document.hidden || !net || state !== 'playing') {
+    hiddenLast = 0;
+    return;
+  }
+  const now = performance.now();
+  const dt = hiddenLast ? Math.min((now - hiddenLast) / 1000, 1 / 10) : 1 / 30;
+  hiddenLast = now;
+  game.update(dt, { x: 0, y: 0 });
+  net.tick(dt);
+};
+
 // Scripted input and fixed-step frames let the trailer capture drive the game frame by frame.
 let scriptedInput = null;
 let cinematic = false;
