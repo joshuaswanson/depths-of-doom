@@ -261,7 +261,8 @@ function addSway(material) {
 // most. The model is one unit long with its head along +X.
 const WHALE_GLSL = /* glsl */ `
   float whaleRear = smoothstep( 0.15, -0.5, transformed.x );
-  float whalePhase = uTime * 1.1 - transformed.x * 5.5;
+  // The head is at +X, so the phase grows with x to send the wave back toward the flukes.
+  float whalePhase = uTime * 1.1 + transformed.x * 5.5;
   transformed.y += sin( whalePhase ) * 0.05 * whaleRear * whaleRear;
   transformed.y += sin( uTime * 1.1 + 1.2 ) * 0.006 * smoothstep( 0.1, 0.4, abs( transformed.z ) );
 `;
