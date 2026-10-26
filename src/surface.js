@@ -289,24 +289,28 @@ function addWhaleSwim(material) {
 
 // A swimming beat for unrigged creatures one unit long with the head along +X. The whole body undulates gently and
 // the tail stock and flukes swing the most, all in one rhythm. `controls` holds per-copy uniforms: `beat` scales the
-// motion (0 stops it, say while airborne) and `phase` offsets its timing.
+// motion (0 stops it, say while airborne), `phase` offsets its timing, and `arch` bows the body into a curve with the
+// nose and tail dipped, as in a leap.
 export function addTailBeat(material, { rate = 6, amount = 0.06, controls = null } = {}) {
   const previous = material.onBeforeCompile;
   const key = material.customProgramCacheKey?.() ?? material.name;
-  const own = controls ?? { beat: { value: 1 }, phase: { value: 0 } };
+  const own = controls ?? { beat: { value: 1 }, phase: { value: 0 }, arch: { value: 0 } };
+  own.arch ??= { value: 0 };
   material.onBeforeCompile = (shader, renderer) => {
     previous?.call(material, shader, renderer);
     shader.uniforms.uTime = SHADER_TIME;
     shader.uniforms.uBeat = own.beat;
     shader.uniforms.uBeatPhase = own.phase;
+    shader.uniforms.uArch = own.arch;
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nuniform float uTime;\nuniform float uBeat;\nuniform float uBeatPhase;')
+      .replace('#include <common>', '#include <common>\nuniform float uTime;\nuniform float uBeat;\nuniform float uBeatPhase;\nuniform float uArch;')
       .replace('#include <begin_vertex>', `#include <begin_vertex>
         float beatA = uTime * ${rate.toFixed(2)} + uBeatPhase;
         // The bend grows steadily from the head back to the flukes, so the whole body rides the same wave.
         float beatAlong = smoothstep( 0.5, -0.5, transformed.x );
         float beatWave = sin( beatA + transformed.x * 2.4 );
-        transformed.y += beatWave * uBeat * ${amount.toFixed(3)} * mix( 0.3, 1.0, pow( beatAlong, 2.0 ) );`);
+        transformed.y += beatWave * uBeat * ${amount.toFixed(3)} * mix( 0.5, 1.0, pow( beatAlong, 1.6 ) );
+        transformed.y -= uArch * 0.09 * pow( transformed.x * 2.0, 2.0 );`);
   };
   material.customProgramCacheKey = () => `${key}-tail${rate}`;
   material.needsUpdate = true;
