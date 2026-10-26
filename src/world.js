@@ -864,10 +864,11 @@ function hazeCap(root) {
   return haze;
 }
 
-// Now and then over a trench a sperm whale cruises into view, tips its nose down and dives into the dark, fading away
-// as it sinks below the light.
+// Down in the darker water of a trench a sperm whale sometimes passes by. Either it rises up out of the darkness
+// below the sub, levels off and dives back down, or it glides in at the sub's depth and dives past into the dark.
+// Either way it fades away as it sinks below the light.
 const SPERM_LENGTH = 26;
-const SPERM_GAP = [50, 80];
+const SPERM_GAP = [45, 75];
 
 function makeSpermWhale() {
   const holder = new THREE.Group();
@@ -889,7 +890,7 @@ function makeSpermWhale() {
       along: `( -( transformed.z - ${centre.toFixed(2)} ) / ${size.toFixed(2)} )` });
   });
   holder.visible = false;
-  holder.userData = { mixer, haze: hazeCap(body), active: false, wait: 25, t: 0 };
+  holder.userData = { mixer, haze: hazeCap(body), active: false, wait: 20, t: 0 };
   return holder;
 }
 
@@ -898,32 +899,40 @@ function updateSpermWhale(whale, dt, cx, cy, humpback, aspect) {
   if (!u.active) {
     whale.visible = false;
     u.wait -= dt;
-    if (u.wait > 0 || cy < -50 || deepBelow(cx) < 80) return;
+    if (u.wait > 0 || cy > -40 || cy < -175 || deepBelow(cx) < 80) return;
     u.active = true;
     u.t = 0;
     // Come in from off screen on the side away from the humpback, so the two never cross.
     const away = humpback.userData.active ? Math.sign(cx - humpback.position.x) || 1 : (Math.random() < 0.5 ? -1 : 1);
     u.dir = -away;
-    u.pitch = 0;
+    u.rising = Math.random() < 0.5;
+    u.pitch = u.rising ? 0.55 : 0;
+    u.levelAt = 0;
     const z = rand(-56, -50);
-    whale.position.set(cx + away * (halfWidthAt(z, aspect) + SPERM_LENGTH * 0.6), cy + rand(-2, 5), z);
+    const y = u.rising ? cy - rand(30, 38) : cy + rand(-2, 4);
+    whale.position.set(cx + away * (halfWidthAt(z, aspect) + SPERM_LENGTH * (u.rising ? 0.2 : 0.6)), y, z);
   }
   u.t += dt;
   u.mixer.update(dt);
-  // Cruise in level for a few seconds, then tip over and dive.
-  const want = u.t < 6 ? 0 : -0.95;
-  u.pitch += (want - u.pitch) * (1 - Math.exp(-dt * 0.5));
-  const speed = 4.5 + Math.max(0, u.t - 6) * 0.3;
   const p = whale.position;
+  // Rising: climb out of the dark until near the sub's depth, cruise level a few seconds, then dive.
+  if (u.rising && !u.levelAt && (p.y > cy - 3 || u.t > 12)) u.levelAt = u.t;
+  let want;
+  if (u.rising) want = !u.levelAt ? 0.55 : (u.t - u.levelAt < 3.5 ? 0 : -0.95);
+  else want = u.t < 6 ? 0 : -0.95;
+  u.pitch += (want - u.pitch) * (1 - Math.exp(-dt * 0.5));
+  const diving = u.pitch < -0.2;
+  const speed = 4.5 + (diving ? Math.min(3, (-u.pitch - 0.2) * 3) : 0);
   p.x += Math.cos(u.pitch) * u.dir * speed * dt;
   p.y += Math.sin(u.pitch) * speed * dt;
   whale.rotation.set(0, u.dir > 0 ? 0 : Math.PI, u.pitch);
-  // Fade in on arrival, and into the dark water as it sinks below the camera.
+  // Faint far below in the dark, clearer near the sub's depth, and gone again as it dives back down.
   const arrive = Math.min(1, u.t / 3);
   const sunk = THREE.MathUtils.smoothstep(cy - p.y, 6, 40);
   u.haze.value = THREE.MathUtils.lerp(1, 0.5, arrive * (1 - sunk));
   whale.visible = u.haze.value < 0.995;
-  if (sunk >= 1 || Math.abs(p.x - cx) > 120) {
+  const gone = diving && sunk >= 1;
+  if (gone || Math.abs(p.x - cx) > 120 || u.t > 40) {
     u.active = false;
     u.wait = rand(SPERM_GAP[0], SPERM_GAP[1]);
   }
