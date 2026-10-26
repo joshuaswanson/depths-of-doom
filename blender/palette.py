@@ -21,7 +21,6 @@ def palette():
         "green": mat("green", "#3E9A3A", rough=0.4),
         "green_dark": mat("green_dark", "#2D6B2E", rough=0.5),
         "olive": mat("olive", "#5F7A35", rough=0.6),
-        "torpedo_tip": mat("torpedo_tip", "#E8FF6A", rough=0.3, emit=1.6, emit_color="#DFFF4A"),
         "blue": mat("blue", "#2F6FC9", rough=0.4),
         "blue_dark": mat("blue_dark", "#1F4A8C", rough=0.45),
         "shield_glow": mat("shield_glow", "#5FD2FF", rough=0.1, emit=2.2, emit_color="#4FC3FF"),

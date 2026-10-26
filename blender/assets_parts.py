@@ -23,14 +23,14 @@ def chunky_fins(part, material, x0, x1, reach, m, count=4, start=math.pi / 4, th
 
 
 def torpedo_shape(part, P, loc=(0, 0, 0), length=1.1, radius=0.22):
-    """A chubby cartoon torpedo: a fat green capsule with a glowing dome nose and oversized fins."""
+    """A chubby cartoon torpedo: a fat green capsule with a steel dome nose and oversized fins."""
     x, y, z = loc
     h = length / 2
     r = radius
     m = trs((0, y, z))
     body = [(x - h, 0.0), (x - h, r * 0.5), (x - h * 0.82, r * 0.86), (x - h * 0.55, r), (x + h * 0.3, r)]
     part.lathe(P["green"], body + [(x + h * 0.3, 0.0)], matrix=m, segs=28)
-    part.lathe(P["torpedo_tip"], [(x + h * 0.28, 0.0)] + dome(x + h * 0.28, r * 0.98, r * 1.05), matrix=m, segs=28)
+    part.lathe(P["steel"], [(x + h * 0.28, 0.0)] + dome(x + h * 0.28, r * 0.98, r * 1.05), matrix=m, segs=28)
     for bx, mat in ((x - h * 0.2, "green_dark"), (x + h * 0.05, "white"), (x + h * 0.22, "green_dark")):
         part.lathe(P[mat], [(bx - 0.025, r * 0.9), (bx - 0.025, r * 1.04), (bx + 0.025, r * 1.04),
                             (bx + 0.025, r * 0.9)], matrix=m, segs=28, loop=True)
