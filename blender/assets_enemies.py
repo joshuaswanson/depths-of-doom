@@ -129,16 +129,19 @@ def enemy_sub(P, name="enemy_sub", length=3.4, radius=0.85, tower=True, skull_ma
             for dx in (0.0, 0.28, 0.56):
                 red_light(part, P, frame(Vector((tx + dx * r, 0.255 * r * side, tz + t_h * 0.5)),
                                          Vector((0, side, 0))), radius=0.06 * r)
+        # The player's periscope, mirrored to face the nose and scaled by `scope`, rising from the top of the tower.
         def grow(dx, dz):
-            """Periscope point, scaled up from where the periscope leaves the tower."""
-            return (tx + 0.15 + (dx - 0.15) * scope, 0, tz + t_h * (0.8 + (dz - 0.8) * scope))
+            return (tx + 0.15 - dx * scope, 0, tz + t_h * 1.12 + dz * scope)
 
-        pipe = [grow(0.15, 0.8), grow(0.15, 1.35), grow(0.08, 1.45), grow(-0.02, 1.45)]
-        part.tube(P["gunmetal"], pipe, radius=0.1 * radius * scope, segs=14)
-        part.cylinder(P["gunmetal"], loc=grow(-0.09, 1.45), radius=0.15 * radius * scope, depth=0.2 * scope,
-                      rot=(0, math.pi / 2, 0), bevel=0.03)
-        part.cylinder(P["enemy_light"], loc=grow(-0.2, 1.45), radius=0.1 * radius * scope, depth=0.02,
-                      rot=(0, math.pi / 2, 0))
+        pipe = [grow(0, -0.3), grow(0, 0.308), grow(0.042, 0.476), grow(0.21, 0.588), grow(0.378, 0.616)]
+        part.tube(P["gunmetal"], pipe, radius=0.12 * scope, segs=18)
+        part.cylinder(P["gunmetal"], loc=grow(0.518, 0.616), radius=0.21 * scope, depth=0.36 * scope,
+                      rot=(0, math.pi / 2, 0), bevel=0.04 * scope)
+        part.torus(P["enemy_red"], loc=grow(0.714, 0.616), major=0.17 * scope, minor=0.05 * scope,
+                   rot=(0, math.pi / 2, 0), segs=28)
+        part.cylinder(P["enemy_light"], loc=grow(0.714, 0.616), radius=0.155 * scope, depth=0.04 * scope,
+                      rot=(0, math.pi / 2, 0), segs=24)
+        part.torus(P["enemy_red"], loc=grow(0, 0.14), major=0.125 * scope, minor=0.035 * scope, segs=24)
 
 
     for i in range(spikes):
@@ -223,15 +226,17 @@ def enemy_sub(P, name="enemy_sub", length=3.4, radius=0.85, tower=True, skull_ma
 
 
 def enemy_scout(P):
-    return enemy_sub(P, "enemy_scout", length=2.3, radius=0.66, scope=1.8)
+    # The game draws the player at 0.82 and scouts at 1.19, so this matches the player's periscope on screen.
+    return enemy_sub(P, "enemy_scout", length=2.3, radius=0.66, scope=0.82 / 1.19)
 
 
 def enemy_gunner(P):
-    return enemy_sub(P, "enemy_gunner", length=3.4, radius=0.85, turret=True)
+    return enemy_sub(P, "enemy_gunner", length=3.4, radius=0.85, turret=True, scope=0.72)
 
 
 def enemy_boss(P):
-    return enemy_sub(P, "enemy_boss", length=5.8, radius=1.45, skull_mark=True, spikes=5, turret=True, gatling=True)
+    return enemy_sub(P, "enemy_boss", length=5.8, radius=1.45, skull_mark=True, spikes=5, turret=True, gatling=True,
+                     scope=1.2)
 
 
 def mine(P):
