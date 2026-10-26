@@ -287,22 +287,25 @@ function addWhaleSwim(material) {
   material.needsUpdate = true;
 }
 
-// A tail beat for unrigged swimmers one unit long with the head along +X. The body stays fairly stiff and the tail
-// stock flaps up and down from just behind the middle, the flukes swinging the most, with only a slight lag along it.
-// Each copy gets its own timing from its depth in the scene.
-export function addTailBeat(material, { rate = 6, amount = 0.06 } = {}) {
+// A swimming beat for unrigged creatures one unit long with the head along +X. The whole body undulates gently and
+// the tail stock and flukes swing the most, all in one rhythm. `controls` holds per-copy uniforms: `beat` scales the
+// motion (0 stops it, say while airborne) and `phase` offsets its timing.
+export function addTailBeat(material, { rate = 6, amount = 0.06, controls = null } = {}) {
   const previous = material.onBeforeCompile;
   const key = material.customProgramCacheKey?.() ?? material.name;
+  const own = controls ?? { beat: { value: 1 }, phase: { value: 0 } };
   material.onBeforeCompile = (shader, renderer) => {
     previous?.call(material, shader, renderer);
     shader.uniforms.uTime = SHADER_TIME;
+    shader.uniforms.uBeat = own.beat;
+    shader.uniforms.uBeatPhase = own.phase;
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nuniform float uTime;')
+      .replace('#include <common>', '#include <common>\nuniform float uTime;\nuniform float uBeat;\nuniform float uBeatPhase;')
       .replace('#include <begin_vertex>', `#include <begin_vertex>
-        float beatSeed = modelMatrix[ 3 ].z * 7.3;
+        float beatA = uTime * ${rate.toFixed(2)} + uBeatPhase;
         float beatRear = smoothstep( -0.05, -0.5, transformed.x );
-        transformed.y += sin( uTime * ${rate.toFixed(2)} + transformed.x * 1.6 + beatSeed ) * ${amount.toFixed(3)} * beatRear * beatRear * beatRear;
-        transformed.y -= sin( uTime * ${rate.toFixed(2)} + beatSeed ) * ${(amount * 0.08).toFixed(4)} * smoothstep( 0.0, 0.5, transformed.x );`);
+        float beatWave = sin( beatA + transformed.x * 2.4 );
+        transformed.y += beatWave * uBeat * ( ${(amount * 0.16).toFixed(4)} + ${amount.toFixed(3)} * beatRear * beatRear * beatRear );`);
   };
   material.customProgramCacheKey = () => `${key}-tail${rate}`;
   material.needsUpdate = true;

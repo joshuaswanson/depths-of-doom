@@ -915,21 +915,24 @@ const DOLPHIN_LENGTH = 4.6;
 const POD_GAP = [25, 45];
 const DOLPHIN_SPEED = 8.5;
 const LEAP_GRAVITY = 11;
+const DOLPHIN_LANES = [-5.5, -7.6, -9.7, -11.8, -13.9];
 
 function makeDolphins(scene) {
   const pod = Array.from({ length: POD_SIZE }, () => {
     const d = spawn('dolphin');
     d.scale.setScalar(DOLPHIN_LENGTH);
     d.visible = false;
+    // Each dolphin gets its own materials so its tail can rest while it is airborne and keep its own timing.
+    const controls = { beat: { value: 1 }, phase: { value: rand(0, Math.PI * 2) } };
+    d.traverse((o) => {
+      if (!o.isMesh) return;
+      o.material = o.material.clone();
+      addTailBeat(o.material, { rate: 9, amount: 0.12, controls });
+      addWaterline(o.material, { ripple: 0.85, topOnly: true });
+    });
+    d.userData.controls = controls;
     scene.add(d);
     return d;
-  });
-  pod[0].traverse((o) => {
-    if (o.isMesh && !o.material.userData.tail) {
-      addTailBeat(o.material, { rate: 9, amount: 0.13 });
-      addWaterline(o.material, { ripple: 0.85, topOnly: true });
-      o.material.userData.tail = true;
-    }
   });
   return { pod, active: false, wait: 20, dir: 1, members: [] };
 }
@@ -943,8 +946,10 @@ function updateDolphins(world, dt, t, cx, cy, halfW, sub) {
     if (dolphins.wait > 0 || !near) return;
     dolphins.active = true;
     dolphins.dir = Math.random() < 0.5 ? -1 : 1;
+    // Each swims in its own depth lane, far enough apart that they never pass through each other.
+    const lanes = DOLPHIN_LANES.slice().sort(() => Math.random() - 0.5);
     dolphins.members = dolphins.pod.map((d, i) => ({
-      d, x: cx - dolphins.dir * (halfW + 8 + i * 3.6 + rand(0, 2)), base: SURFACE_Y - rand(3, 4.2), z: rand(-13, -6),
+      d, x: cx - dolphins.dir * (halfW + 8 + i * 3.6 + rand(0, 2)), base: SURFACE_Y - rand(3, 4.2), z: lanes[i],
       phase: rand(0, Math.PI * 2), rate: rand(1.5, 1.9), amp: rand(0.9, 1.3), leap: null, nextLeap: rand(1.5, 5),
     }));
   }
@@ -960,7 +965,8 @@ function updateDolphins(world, dt, t, cx, cy, halfW, sub) {
       m.leap.y += m.leap.vy * dt;
       y = m.leap.y;
       vy = m.leap.vy;
-      if (wasAbove !== y > SURFACE_Y) world.effects?.splash({ x: m.x, y: SURFACE_Y, z: m.z }, 0.7);
+      if (wasAbove && y <= SURFACE_Y) world.effects?.bigSplash({ x: m.x, y: SURFACE_Y, z: m.z }, 1.25, 1.4);
+      else if (!wasAbove && y > SURFACE_Y) world.effects?.splash({ x: m.x, y: SURFACE_Y, z: m.z }, 0.8);
       if (vy < 0 && y < m.base) {
         // Pick the swim arc back up exactly where it lands, heading down, so it carries on without a jump.
         m.leap = null;
@@ -977,6 +983,9 @@ function updateDolphins(world, dt, t, cx, cy, halfW, sub) {
       if (m.nextLeap <= 0 && vy > 0.5 && Math.sin(a) > 0.2) m.leap = { y, vy: rand(11.5, 13) };
     }
     m.d.position.set(m.x, y, m.z);
+    // The tail rests while it flies through the air.
+    const ctl = m.d.userData.controls;
+    ctl.beat.value += ((y > SURFACE_Y - 0.5 && m.leap ? 0 : 1) - ctl.beat.value) * (1 - Math.exp(-dt * 8));
     // Ease the nose toward the direction of travel, so launching into or landing from a leap doesn't jerk it.
     const pitch = Math.atan2(vy, DOLPHIN_SPEED);
     m.pitch = m.pitch === undefined ? pitch : m.pitch + (pitch - m.pitch) * (1 - Math.exp(-dt * 5));
