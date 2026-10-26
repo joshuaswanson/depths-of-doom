@@ -18,7 +18,9 @@ import { Game } from './game.js';
 import { Hud } from './hud.js';
 import { Net } from './net.js';
 import { Player } from './player.js';
-import { CAMERA_FOV, CAMERA_Z, SURFACE_Y, installWaterFog } from './water.js';
+import {
+  CAMERA_FOV, CAMERA_Z, SHADOW_FAR, SHADOW_NEAR, SHADOW_SPAN, SURFACE_Y, installWaterFog,
+} from './water.js';
 import { World } from './world.js';
 
 installWaterFog();
@@ -33,7 +35,7 @@ renderer.setPixelRatio(pixelRatio);
 renderer.toneMapping = THREE.NeutralToneMapping;
 renderer.toneMappingExposure = 1.0;
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFShadowMap;
+renderer.shadowMap.type = THREE.VSMShadowMap;
 
 const scene = new THREE.Scene();
 scene.fog = new THREE.Fog(0xffffff, 20, 125);
@@ -44,7 +46,7 @@ scene.environmentIntensity = 0.7;
 const camera = new THREE.PerspectiveCamera(CAMERA_FOV, 1, 0.5, 400);
 camera.position.set(0, 0, CAMERA_Z);
 
-const hemi = new THREE.HemisphereLight('#9fe2ff', '#163f4a', 1.0);
+const hemi = new THREE.HemisphereLight('#9fe2ff', '#163f4a', 1.25);
 scene.add(hemi);
 const sun = new THREE.DirectionalLight('#fff1d6', 2.1);
 sun.position.set(-6, 14, 10);
@@ -53,17 +55,17 @@ scene.add(sun);
 // to the right and toward the camera, where the side-on view can see them on the seabed.
 const overhead = new THREE.DirectionalLight('#e8fbff', 0.6);
 const OVERHEAD_OFFSET = new THREE.Vector3(-5, 20, -8).normalize().multiplyScalar(60);
-const SHADOW_SPAN = 30;
 const SHADOW_MAP = 2048;
 overhead.position.copy(OVERHEAD_OFFSET);
 overhead.castShadow = true;
 overhead.shadow.mapSize.set(SHADOW_MAP, SHADOW_MAP);
 Object.assign(overhead.shadow.camera, { left: -SHADOW_SPAN, right: SHADOW_SPAN, top: SHADOW_SPAN,
-  bottom: -SHADOW_SPAN, near: 1, far: 140 });
+  bottom: -SHADOW_SPAN, near: SHADOW_NEAR, far: SHADOW_FAR });
 overhead.shadow.camera.updateProjectionMatrix();
 overhead.shadow.bias = -0.0004;
 overhead.shadow.normalBias = 0.04;
-overhead.shadow.radius = 3;
+overhead.shadow.radius = 6;
+overhead.shadow.blurSamples = 12;
 scene.add(overhead, overhead.target);
 const rim = new THREE.DirectionalLight('#7fdcff', 2.2);
 rim.position.set(4, 6, -12);
@@ -71,7 +73,7 @@ scene.add(rim);
 const under = new THREE.DirectionalLight('#3fb8c8', 0.6);
 under.position.set(0, -10, 6);
 scene.add(under);
-const SUNLIGHT = [[hemi, 1.0], [sun, 2.1], [overhead, 0.6], [rim, 2.2], [under, 0.6]];
+const SUNLIGHT = [[hemi, 1.25], [sun, 2.1], [overhead, 0.6], [rim, 2.2], [under, 0.6]];
 
 function lightForDepth(dark) {
   for (const [light, base] of SUNLIGHT) light.intensity = base * (1 - dark * 0.975);

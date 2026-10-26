@@ -6,6 +6,10 @@ export const TAN_HALF_FOV = Math.tan(THREE.MathUtils.degToRad(CAMERA_FOV / 2));
 export const SURFACE_Y = 26;
 export const SHELF_Y = -7.6;
 export const ABYSS_Y = -210;
+// The overhead sunlight's shadow box: half its width, and the depth range it covers along the light.
+export const SHADOW_SPAN = 30;
+export const SHADOW_NEAR = 1;
+export const SHADOW_FAR = 140;
 
 export function depthShift(cameraY) {
   const d = THREE.MathUtils.clamp((cameraY - SHELF_Y) / (SURFACE_Y - SHELF_Y), -1, 1);

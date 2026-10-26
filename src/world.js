@@ -4,7 +4,8 @@ import { animationsOf, findNode, plainMaterials, spawn, spawnSkinned, tint } fro
 import { sfx } from './audio.js';
 import { CURRENT_MATERIALS, NOISE_GLSL, SHADER_TIME, WHALE_BEND, addTailBeat, addWaterline, addWingFlap } from './surface.js';
 import {
-  ABYSS_Y, CAMERA_Z, SHELF_Y, SURFACE_Y, TAN_HALF_FOV, WATER_GRADIENT_GLSL, darkness, depthShift,
+  ABYSS_Y, CAMERA_Z, SHADOW_FAR, SHADOW_NEAR, SHADOW_SPAN, SHELF_Y, SURFACE_Y, TAN_HALF_FOV, WATER_GRADIENT_GLSL,
+  darkness, depthShift,
 } from './water.js';
 
 const TILE_W = 80;
@@ -394,6 +395,8 @@ const REEF_LAGOON = new THREE.Color('#86e6f2');
 const DEEP_COLORS = ['#1a2430', '#252f3d', '#2d3644', '#151b26'].map((c) => new THREE.Color(c));
 
 const SEABED_TINT = new THREE.Color('#9fb5b4');
+// How far a shadow edge wanders, per unit the caster floats above the floor.
+const SHADOW_WOBBLE = 0.07;
 const paintScratch = new THREE.Color();
 const painted = { y: 0, glow: 0 };
 
@@ -525,8 +528,8 @@ function makeSeabedMaterial(uniforms) {
         diffuseColor.rgb = mix( diffuseColor.rgb, diffuseColor.rgb * 0.55, sPebble * 0.6 );
         diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.2, 0.22, 0.26 ) * ( 0.7 + sPatch * 0.6 ), sSteep * 0.8 );`)
       .replace('#include <aomap_fragment>', /* glsl */ `#include <aomap_fragment>
-        reflectedLight.directDiffuse *= mix( 0.4, 1.0, sunShadow );
-        reflectedLight.indirectDiffuse *= mix( 0.5, 1.0, sunShadow );`)
+        reflectedLight.directDiffuse *= mix( 0.5, 1.0, sunShadow );
+        reflectedLight.indirectDiffuse *= mix( 0.65, 1.0, sunShadow );`)
       .replace('#include <normal_fragment_maps>', /* glsl */ `#include <normal_fragment_maps>
         float sHeight = sRipple * 0.4 * ( 1.0 - sSteep ) + sPebble * 0.8 + dNoise( sp * 7.0 ) * 0.25 + sPatch * sSteep * 1.2;
         normal = dPerturb( - vViewPosition, normal, vec2( dFdx( sHeight ), dFdy( sHeight ) ) * 0.25, faceDirection );`)
@@ -534,9 +537,22 @@ function makeSeabedMaterial(uniforms) {
         // In shadow the floor loses its caustics and much of its light, all of which is sunlight.
         float sunShadow = 1.0;
         #if defined( USE_SHADOWMAP ) && NUM_DIR_LIGHT_SHADOWS > 0
+          // Light reaches the floor through a moving, wavy surface, so shadow edges ripple with the caustics, and
+          // the further the caster floats above the floor the more they wander. The shadow map holds the mean depth
+          // of whatever blocks the light, which gives that height.
+          vec4 sCoord = vDirectionalShadowCoord[ 0 ];
+          float sLift = 0.0;
+          #ifdef SHADOWMAP_TYPE_VSM
+            float sOccluder = texture2D( directionalShadowMap[ 0 ], sCoord.xy ).x;
+            sLift = clamp( ( sCoord.z - sOccluder ) * ${(SHADOW_FAR - SHADOW_NEAR).toFixed(1)}, 0.0, 10.0 );
+          #endif
+          vec2 sWobble = vec2(
+            sin( vSeaWorld.x * 0.9 + uTime * 1.4 + 1.5 * sin( vSeaWorld.z * 0.6 - uTime * 0.8 ) ),
+            sin( vSeaWorld.z * 0.8 - uTime * 1.1 + 1.5 * sin( vSeaWorld.x * 0.5 + uTime * 0.9 ) ) );
+          sCoord.xy += sWobble * sLift * ${(SHADOW_WOBBLE / (2 * SHADOW_SPAN)).toFixed(5)};
           sunShadow = getShadow( directionalShadowMap[ 0 ], directionalLightShadows[ 0 ].shadowMapSize,
             directionalLightShadows[ 0 ].shadowIntensity, directionalLightShadows[ 0 ].shadowBias,
-            directionalLightShadows[ 0 ].shadowRadius, vDirectionalShadowCoord[ 0 ] );
+            directionalLightShadows[ 0 ].shadowRadius, sCoord );
         #endif
         // Two drifting layers of caustics at different scales, so the sunlit floor ripples with light.
         float fadeC = smoothstep( -90.0, -4.0, vSeaWorld.z ) * smoothstep( -32.0, -6.0, vSeaWorld.y );
@@ -1569,7 +1585,6 @@ function mergeCluster(pieces) {
     const mesh = new THREE.Mesh(merged, material);
     mesh.renderOrder = order;
     mesh.castShadow = !material.transparent;
-    mesh.receiveShadow = true;
     cluster.add(mesh);
   }
   return cluster;
@@ -1740,8 +1755,13 @@ export class World {
       prop.obj = spawn(name);
       prop.obj.userData.model = name;
       if (layer.plain) plainMaterials(prop.obj);
-      if (layer.tint) tint(prop.obj, layer.tint[0], layer.tint[1]);
-      else if (deep) tint(prop.obj, '#1c2233', 0.45);
+      // The dark foreground layer stands between the play area and the camera; its shadows would land right in
+      // front of the lens.
+      if (layer.tint) {
+        tint(prop.obj, layer.tint[0], layer.tint[1]);
+        prop.obj.traverse((o) => { o.castShadow = false; });
+      }
+      if (!layer.tint && deep) tint(prop.obj, '#1c2233', 0.45);
       prop.size = rand(layer.scale[0], layer.scale[1]);
       prop.obj.scale.setScalar(prop.size);
       prop.kind = want;
