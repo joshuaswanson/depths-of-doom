@@ -1420,12 +1420,16 @@ function updateMantas(world, dt, t, cx, cy, aspect) {
     u.anchor = anchor;
     const count = Math.random() < 0.45 ? 2 : 1;
     const dir = Math.random() < 0.5 ? -1 : 1;
+    // A pair circles at one shared turning rate, half a lap apart, so they never close on each other.
+    u.angle = rand(0, Math.PI * 2);
     school.forEach((ray, i) => {
       const r = ray.userData;
       r.active = i < count;
       ray.visible = r.active;
       r.radius = rand(MANTA_RADIUS[0], MANTA_RADIUS[1]);
-      r.angle = rand(0, Math.PI * 2) + i * Math.PI;
+      r.offset = i * Math.PI;
+      r.controls.phase.value = rand(0, Math.PI * 2);
+      r.beat = rand(0.85, 1.15);
       r.dir = dir;
       r.lift = rand(MANTA_LIFT[0], MANTA_LIFT[1]);
       r.seed = rand(0, 100);
@@ -1433,11 +1437,11 @@ function updateMantas(world, dt, t, cx, cy, aspect) {
     });
   }
   const floor = seabedAt(u.anchor, MANTA_Z);
+  u.angle += school[0].userData.dir * (MANTA_SPEED / MANTA_RADIUS[1]) * (1 + 0.15 * Math.sin(t * 0.3)) * dt;
   for (const ray of school) {
     const r = ray.userData;
     if (!r.active) continue;
-    const speed = MANTA_SPEED * (1 + 0.15 * Math.sin(t * 0.3 + r.seed));
-    r.angle += r.dir * (speed / r.radius) * dt;
+    r.angle = u.angle + r.offset;
     const p = ray.position;
     p.x = u.anchor + Math.cos(r.angle) * r.radius;
     p.z = r.z + Math.sin(r.angle) * r.radius;
@@ -1447,7 +1451,7 @@ function updateMantas(world, dt, t, cx, cy, aspect) {
     ray.rotation.set(-r.dir * 0.22, yaw, 0.06 * Math.cos(t * 0.4 + r.seed));
     // Long slow wingbeats with a glide between bursts.
     const glide = 0.7 + 0.3 * Math.sin(t * 0.21 + r.seed);
-    r.controls.phase.value += (1.5 + glide * 0.6) * dt;
+    r.controls.phase.value += (1.5 + glide * 0.6) * r.beat * dt;
     r.controls.flap.value = glide;
   }
 }
