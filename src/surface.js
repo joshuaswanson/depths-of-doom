@@ -309,7 +309,7 @@ export function addTailBeat(material, { rate = 6, amount = 0.06, controls = null
         // The bend grows steadily from the head back to the flukes, so the whole body rides the same wave.
         float beatAlong = smoothstep( 0.5, -0.5, transformed.x );
         float beatWave = sin( beatA + transformed.x * 2.4 );
-        transformed.y += beatWave * uBeat * ${amount.toFixed(3)} * mix( 0.5, 1.0, pow( beatAlong, 1.6 ) );
+        transformed.y += beatWave * uBeat * ${amount.toFixed(3)} * mix( 0.6, 1.0, pow( beatAlong, 1.4 ) );
         transformed.y -= uArch * 0.18 * pow( transformed.x * 2.0, 2.0 );`);
   };
   material.customProgramCacheKey = () => `${key}-tail${rate}`;

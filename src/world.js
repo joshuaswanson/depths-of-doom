@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { animationsOf, findNode, plainMaterials, spawn, spawnSkinned, tint } from './assets.js';
 import { sfx } from './audio.js';
-import { CURRENT_MATERIALS, NOISE_GLSL, WHALE_BEND, addTailBeat, addWaterline } from './surface.js';
+import { CURRENT_MATERIALS, NOISE_GLSL, SHADER_TIME, WHALE_BEND, addTailBeat, addWaterline } from './surface.js';
 import {
   ABYSS_Y, CAMERA_Z, SHELF_Y, SURFACE_Y, TAN_HALF_FOV, WATER_GRADIENT_GLSL, darkness, depthShift,
 } from './water.js';
@@ -916,6 +916,7 @@ const POD_GAP = [25, 45];
 const DOLPHIN_SPEED = 8.5;
 const LEAP_GRAVITY = 11;
 const LEAP_SPACING = 0.9;
+const DOLPHIN_BEAT_RATE = 9;
 const DOLPHIN_LANES = [-5.5, -7.6, -9.7, -11.8, -13.9];
 
 function makeDolphins(scene) {
@@ -928,7 +929,7 @@ function makeDolphins(scene) {
     d.traverse((o) => {
       if (!o.isMesh) return;
       o.material = o.material.clone();
-      addTailBeat(o.material, { rate: 9, amount: 0.15, controls });
+      addTailBeat(o.material, { rate: DOLPHIN_BEAT_RATE, amount: 0.2, controls });
       addWaterline(o.material, { ripple: 0.85, topOnly: true });
     });
     d.userData.controls = controls;
@@ -993,11 +994,17 @@ function updateDolphins(world, dt, t, cx, cy, halfW, sub) {
       }
     }
     m.d.position.set(m.x, y, m.z);
-    // In the air the tail rests and the body bows into an arch, straightening again back in the water.
+    // In the air the tail rests and the body bows into an arch. Back under the surface it straightens and starts
+    // stroking again straight away, the first stroke swinging the tail up against the dive's curve.
     const ctl = m.d.userData.controls;
-    const flying = m.leap && y > SURFACE_Y - 0.5 ? 1 : 0;
-    ctl.beat.value += (1 - flying - ctl.beat.value) * (1 - Math.exp(-dt * 8));
-    ctl.arch.value += (flying - ctl.arch.value) * (1 - Math.exp(-dt * 5));
+    const flying = m.leap && y > SURFACE_Y - 0.3 ? 1 : 0;
+    if (m.flying && !flying) {
+      const tailUp = Math.PI / 2 + 1.2 - SHADER_TIME.value * DOLPHIN_BEAT_RATE;
+      ctl.phase.value = ((tailUp % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+    }
+    m.flying = flying;
+    ctl.beat.value += (1 - flying - ctl.beat.value) * (1 - Math.exp(-dt * (flying ? 8 : 12)));
+    ctl.arch.value += (flying - ctl.arch.value) * (1 - Math.exp(-dt * (flying ? 4 : 9)));
     // Ease the nose toward the direction of travel, so launching into or landing from a leap doesn't jerk it.
     const pitch = Math.atan2(vy, DOLPHIN_SPEED);
     m.pitch = m.pitch === undefined ? pitch : m.pitch + (pitch - m.pitch) * (1 - Math.exp(-dt * 5));
