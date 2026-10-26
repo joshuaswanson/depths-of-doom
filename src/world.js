@@ -1058,7 +1058,9 @@ function makeDolphins(scene) {
     d.scale.setScalar(DOLPHIN_LENGTH);
     d.visible = false;
     // Each dolphin gets its own materials so its tail can rest while it is airborne and keep its own timing.
-    const controls = { beat: { value: 1 }, phase: { value: rand(0, Math.PI * 2) }, arch: { value: 0 } };
+    // Each beats at its own slightly different pace, so the pod never strokes in step.
+    const controls = { beat: { value: 1 }, phase: { value: rand(0, Math.PI * 2) }, arch: { value: 0 },
+      rate: { value: DOLPHIN_BEAT_RATE * rand(0.86, 1.14) } };
     d.traverse((o) => {
       if (!o.isMesh) return;
       o.material = o.material.clone();
@@ -1087,7 +1089,7 @@ function updateDolphins(world, dt, t, cx, cy, halfW, sub) {
     const lanes = DOLPHIN_LANES.slice().sort(() => Math.random() - 0.5);
     dolphins.members = dolphins.pod.map((d, i) => ({
       d, x: cx - dolphins.dir * (halfW + 8 + i * 3.6 + rand(0, 2)), base: SURFACE_Y - rand(3, 4.2), z: lanes[i],
-      phase: rand(0, Math.PI * 2), rate: rand(1.5, 1.9), amp: rand(0.07, 0.11), leap: null, nextLeap: rand(1, 6),
+      phase: rand(0, Math.PI * 2), wobble: rand(0, 6.3), rate: rand(1.5, 1.9), amp: rand(0.07, 0.11), leap: null, nextLeap: rand(1, 6),
     }));
   }
   let anyInView = false;
@@ -1149,9 +1151,11 @@ function updateDolphins(world, dt, t, cx, cy, halfW, sub) {
     const ctl = m.d.userData.controls;
     const flying = m.leap && y > SURFACE_Y - 0.3 ? 1 : 0;
     if (m.flying && !flying) {
-      const tailUp = Math.PI / 2 + 1.2 - SHADER_TIME.value * DOLPHIN_BEAT_RATE;
+      const tailUp = Math.PI / 2 + 1.2 + rand(-0.5, 0.5) - SHADER_TIME.value * ctl.rate.value;
       ctl.phase.value = ((tailUp % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
     }
+    // A slow wander in each one's rhythm keeps the strokes from ever lining up.
+    ctl.phase.value += Math.sin(t * 0.37 + m.wobble) * 0.35 * dt;
     m.flying = flying;
     ctl.beat.value += (1 - flying - ctl.beat.value) * (1 - Math.exp(-dt * (flying ? 8 : 12)));
     ctl.arch.value += (flying - ctl.arch.value) * (1 - Math.exp(-dt * (flying ? 4 : 9)));

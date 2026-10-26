@@ -300,16 +300,18 @@ export function addTailBeat(material, { rate = 6, amount = 0.06, controls = null
   const key = material.customProgramCacheKey?.() ?? material.name;
   const own = controls ?? { beat: { value: 1 }, phase: { value: 0 }, arch: { value: 0 } };
   own.arch ??= { value: 0 };
+  own.rate ??= { value: rate };
   material.onBeforeCompile = (shader, renderer) => {
     previous?.call(material, shader, renderer);
     shader.uniforms.uTime = SHADER_TIME;
     shader.uniforms.uBeat = own.beat;
     shader.uniforms.uBeatPhase = own.phase;
     shader.uniforms.uArch = own.arch;
+    shader.uniforms.uBeatRate = own.rate;
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nuniform float uTime;\nuniform float uBeat;\nuniform float uBeatPhase;\nuniform float uArch;')
+      .replace('#include <common>', '#include <common>\nuniform float uTime;\nuniform float uBeat;\nuniform float uBeatPhase;\nuniform float uArch;\nuniform float uBeatRate;')
       .replace('#include <begin_vertex>', `#include <begin_vertex>
-        float beatA = uTime * ${rate.toFixed(2)} + uBeatPhase;
+        float beatA = uTime * uBeatRate + uBeatPhase;
         // The bend grows steadily from the head back to the flukes, so the whole body rides the same wave.
         float beatX = ${along};
         float beatAlong = smoothstep( 0.5, -0.5, beatX );
@@ -317,7 +319,7 @@ export function addTailBeat(material, { rate = 6, amount = 0.06, controls = null
         transformed.y += beatWave * uBeat * ${(amount * size).toFixed(4)} * mix( ${front.toFixed(2)}, 1.0, pow( beatAlong, 1.4 ) );
         transformed.y -= uArch * ${(0.23 * size).toFixed(4)} * pow( beatX * 2.0, 2.0 );`);
   };
-  material.customProgramCacheKey = () => `${key}-tail${rate}-${along}-${front}`;
+  material.customProgramCacheKey = () => `${key}-tail-${along}-${front}`;
   material.needsUpdate = true;
 }
 
