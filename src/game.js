@@ -1207,26 +1207,27 @@ export class Game {
     for (const part of pl.partsOf('torpedo')) {
       part.timer -= dt;
       if (part.timer > 0 || !active) continue;
-      part.timer = 2.3 - 0.12 * pl.levels.torpedo + rand(0, 0.4);
+      part.timer = 3.0 - 0.18 * pl.levels.torpedo + rand(0, 0.5);
       part.muzzle.getWorldPosition(this.tmp);
       const obj = spawn('proj_torpedo');
       obj.scale.setScalar(0.8);
       obj.position.copy(this.tmp);
       this.scene.add(obj);
-      this.torpedoes.push({ obj, vel: fwd.clone().multiplyScalar(3), life: 6, trail: 0, owner: pl });
+      this.torpedoes.push({ obj, vel: fwd.clone().multiplyScalar(3), life: 6, trail: 0, age: 0, owner: pl });
       sfx.torpedo();
     }
     for (const part of pl.partsOf('missile')) {
       part.timer -= dt;
       if (part.timer > 0 || !active) continue;
-      part.timer = 3.0 - 0.18 * pl.levels.missile + rand(0, 0.5);
+      part.timer = 2.3 - 0.12 * pl.levels.missile + rand(0, 0.4);
       part.muzzle.getWorldPosition(this.tmp);
       const obj = spawn('proj_player_missile');
       obj.scale.setScalar(0.85);
       obj.position.copy(this.tmp);
       this.scene.add(obj);
       const up = this.tmp.y > pl.center.y ? 1 : -1;
-      this.missiles.push({ obj, vx: fwd.x * 2, vy: 6 * up, life: 5, trail: 0, age: 0, owner: pl });
+      this.missiles.push({ obj, vx: fwd.x * 2, vy: 6 * up, life: 5, trail: 0, age: 0, owner: pl,
+        heading: Math.atan2(fwd.y, fwd.x) });
       this.effects.muzzle(this.tmp);
       sfx.missile();
     }
@@ -1949,15 +1950,20 @@ export class Game {
 
     for (const t of this.torpedoes) {
       t.life -= dt;
+      t.age += dt;
       const p = t.obj.position;
       const airborne = p.y > SURFACE_Y;
       if (airborne) {
         t.vel.y -= GRAVITY * dt;
         if (Math.random() < 0.5) this.effects.smokeTrail(p, 0.5);
       } else {
-        // Torpedoes run straight along their launch line, picking up speed; they hit hard but can miss.
-        const speed = Math.min(18, t.vel.length() + dt * 16);
-        t.vel.setLength(speed);
+        // Torpedoes listen for the nearest enemy and steer after it, picking up speed as they go.
+        const speed = Math.min(14, Math.hypot(t.vel.x, t.vel.y) + dt * 12);
+        let a = Math.atan2(t.vel.y, t.vel.x);
+        const target = t.age > 0.3 ? this.nearestEnemy(p.x, p.y) : null;
+        if (target) a = angleLerp(a, Math.atan2(target.obj.position.y - p.y, target.obj.position.x - p.x), dt * 4);
+        t.vel.x = Math.cos(a) * speed;
+        t.vel.y = Math.sin(a) * speed;
         t.trail -= dt;
         if (t.trail <= 0) {
           t.trail = 0.025;
@@ -1973,14 +1979,9 @@ export class Game {
       const hitE = this.enemies.find((e) => !e.dead && this.enemyHit(e, p.x, p.y, 0.2));
       const floor = seabedAt(p.x);
       if (hitE || t.life <= 0 || p.y < floor) {
-        if (hitE) {
-          this.damageEnemy(hitE, 7, t.owner);
-          for (const e of this.enemies) {
-            if (e !== hitE && !e.dead && e.obj.position.distanceTo(p) < 2.4) this.damageEnemy(e, 3, t.owner);
-          }
-        }
+        if (hitE) this.damageEnemy(hitE, 4, t.owner);
         if (hitE || p.y < floor) {
-          this.effects.explosion(p, 0.7);
+          this.effects.explosion(p, hitE ? 0.6 : 0.45);
           sfx.boom();
         }
         t.dead = true;
@@ -1997,10 +1998,10 @@ export class Game {
       if (above) {
         mi.vy -= GRAVITY * dt;
       } else if (mi.age > 0.3) {
-        const target = this.nearestEnemy(p.x, p.y);
-        const speed = Math.min(15, Math.hypot(mi.vx, mi.vy) + dt * 16);
-        let a = Math.atan2(mi.vy, mi.vx);
-        if (target) a = angleLerp(a, Math.atan2(target.obj.position.y - p.y, target.obj.position.x - p.x), dt * 5);
+        // Missiles swing onto the line the sub was facing at launch and streak straight along it; they hit hard but
+        // can miss.
+        const speed = Math.min(24, Math.hypot(mi.vx, mi.vy) + dt * 30);
+        const a = angleLerp(Math.atan2(mi.vy, mi.vx), mi.heading, dt * 8);
         mi.vx = Math.cos(a) * speed;
         mi.vy = Math.sin(a) * speed;
       } else {
@@ -2027,8 +2028,11 @@ export class Game {
           sfx.boom();
         }
         if (hitE) {
-          this.damageEnemy(hitE, 4, mi.owner);
-          this.effects.explosion(p, 0.6);
+          this.damageEnemy(hitE, 7, mi.owner);
+          for (const e of this.enemies) {
+            if (e !== hitE && !e.dead && e.obj.position.distanceTo(p) < 2.4) this.damageEnemy(e, 3, mi.owner);
+          }
+          this.effects.explosion(p, 0.7);
           sfx.boom();
         }
         mi.dead = true;
