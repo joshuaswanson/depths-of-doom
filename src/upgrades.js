@@ -13,8 +13,8 @@ export const UPGRADES = [
     blurb: 'A claw that grabs nearby coins and pinches enemies in reach. Reaches further each level.' },
   { id: 'sonar', name: 'Sonar', icon: 'sonar', start: 0, max: 4, base: 50, growth: 1.8,
     blurb: 'Extends your radar range and makes all your weapons hit harder.' },
-  { id: 'propulsion', name: 'Propulsion', icon: 'propulsion', start: 1, max: 5, base: 40, growth: 1.7,
-    blurb: 'Adds a thruster to raise your top speed.' },
+  { id: 'propulsion', name: 'Propeller', icon: 'propulsion', start: 1, max: 5, base: 40, growth: 1.7,
+    blurb: 'Adds a propeller to raise your top speed.' },
   { id: 'spotlight', name: 'Spotlight', icon: 'spotlight', start: 0, max: 4, base: 45, growth: 1.7,
     blurb: 'Adds a searchlight to see in the deep. Enemies caught in the beam slow down and fire less.' },
 ];
