@@ -237,6 +237,7 @@ function startGame() {
 const hintPoint = new THREE.Vector3();
 function placeHints() {
   if (!hud.hints) return;
+  hud.hints.hidden = state !== 'playing';
   const move = readInput();
   if (state === 'playing' && (move.x || move.y)) {
     hud.dismissHints();
@@ -250,7 +251,7 @@ function placeHints() {
   const x = (centre.x * 0.5 + 0.5) * w;
   const y = (0.5 - centre.y * 0.5) * h;
   const edge = hintPoint.set(cx + player.bodyHalf.hx, cy, z).project(camera);
-  hud.placeHints(x, y, Math.abs((edge.x * 0.5 + 0.5) * w - x) + w * 0.03);
+  hud.placeHints(x, y, Math.abs((edge.x * 0.5 + 0.5) * w - x) + w * 0.07);
 }
 
 function pause() {
