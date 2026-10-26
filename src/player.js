@@ -356,7 +356,7 @@ export class Player {
     this.hullModel = name;
     this.hullPivot.add(this.hull);
     for (const m of ownMaterials(this.hull)) {
-      addWaterline(m);
+      addWaterline(m, { topOnly: true });
       this.mats.push({ m, e: m.emissive.clone(), hull: true });
     }
     this.propeller = findNode(this.hull, 'propeller');
@@ -421,7 +421,7 @@ export class Player {
     const obj = spawn(model);
     pivot.add(obj);
     for (const m of ownMaterials(obj)) {
-      addWaterline(m);
+      addWaterline(m, { topOnly: true });
       this.mats.push({ m, e: m.emissive.clone() });
     }
     const { rotX } = this.socketTransform(0, angle);

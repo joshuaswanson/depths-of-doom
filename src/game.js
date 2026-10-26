@@ -738,7 +738,7 @@ export class Game {
       if (o.name.startsWith('side_detail')) o.visible = !skulled;
     });
     const mats = ownMaterials(model).map((m) => {
-      addWaterline(m);
+      addWaterline(m, { topOnly: true });
       return { m, e: m.emissive.clone(), c: m.color.clone() };
     });
     const hpMult = 1 + 0.17 * (this.wave - 1);
