@@ -1209,7 +1209,8 @@ export class World {
     const bu = this.backdrop.material.uniforms;
     bu.uShift.value = shift;
     bu.uDark.value = this.dark;
-    bu.uLine.value = 0.5 + 0.5 * (SURFACE_Y - cy) / (camera.position.z * TAN_HALF_FOV);
+    // A free camera can swing behind the play plane; the horizon maths needs a positive distance.
+    bu.uLine.value = 0.5 + 0.5 * (SURFACE_Y - cy) / (Math.max(camera.position.z, 2) * TAN_HALF_FOV);
     this.scene.fog.color.setRGB(shift, this.dark, 0);
     // The play area sits about 20 units from the camera; fog starts behind it so darkness in the depths comes from
     // missing light, and whatever a lamp hits still shows.

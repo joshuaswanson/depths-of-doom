@@ -29,16 +29,16 @@
       "file": "below_the_pressure.m4a",
       "at": 52.46,
       "from": 0,
-      "to": 15.11,
+      "to": 28.6,
       "fadeIn": 1.6,
-      "fadeOut": 1.2
+      "fadeOut": 3.5
     },
     {
       "file": "shadows_in_the_trench.m4a",
-      "at": 67.57,
-      "from": 31.72,
+      "at": 77.97,
+      "from": 42.12,
       "to": 70.6,
-      "fadeIn": 0.2,
+      "fadeIn": 3.6,
       "fadeOut": 3.0
     }
   ],

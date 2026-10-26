@@ -108,8 +108,69 @@
   // In the deep the fight is deadly serious: no comic bumps, and enemy subs keep their distance.
   const bump = G.bump.bind(G);
   G.bump = (e) => {
-    if (!state.serious) bump(e);
+    if (!state.serious && !state.depth) bump(e);
   };
+
+  // Depth for the fights. The game plays on one flat plane; for the trailer the sub and every enemy weave toward and
+  // away from the camera, and each shot glides from its shooter's depth to its target's, so hits still connect.
+  let depthTime = 0;
+  const gameUpdate = G.update.bind(G);
+  G.update = (dt, input) => {
+    gameUpdate(dt, input);
+    depthPass(dt);
+  };
+  function nearestEnemyZ(x, y, fallback) {
+    let best = fallback;
+    let bd = 400;
+    for (const e of G.enemies) {
+      if (e.dead || e.type === 'mine') continue;
+      const p = e.obj.position;
+      const d = (p.x - x) ** 2 + (p.y - y) ** 2;
+      if (d < bd) {
+        bd = d;
+        best = p.z;
+      }
+    }
+    return best;
+  }
+  function depthPass(dt) {
+    depthTime += dt;
+    const k = (rate) => 1 - Math.exp(-dt * rate);
+    const on = !!state.depth;
+    const sz = on ? Math.sin(depthTime * 1.1) * 2.6 + Math.sin(depthTime * 2.3 + 1) * 0.8 : 0;
+    P.group.position.z += (sz - P.group.position.z) * k(on ? 4 : 2);
+    const subZ = P.group.position.z;
+    for (const e of G.enemies) {
+      if (e.dead || e.type === 'mine') continue;
+      e.depth ??= on ? rand(-6.5, 5) : 0;
+      const ez = on ? e.depth + Math.sin(depthTime * 0.9 + e.t) * 0.9 : 0;
+      e.obj.position.z += (ez - e.obj.position.z) * k(3);
+    }
+    for (const b of G.bullets) b.z += (nearestEnemyZ(b.x, b.y, b.z) - b.z) * k(5);
+    for (const list of [G.torpedoes, G.missiles]) {
+      for (const m of list) {
+        const p = m.obj.position;
+        p.z += (nearestEnemyZ(p.x, p.y, p.z) - p.z) * k(3);
+      }
+    }
+    for (const m of G.enemyMissiles) {
+      m.dz ??= m.obj.position.z;
+      m.dz += (subZ - m.dz) * k(2.5);
+      m.obj.position.z = m.dz;
+    }
+  }
+
+  // Slides the whole battle along x, at a hard cut, so the fight never runs into a trench wall.
+  function shiftAll(dx) {
+    P.group.position.x += dx;
+    G.cam.x += dx;
+    for (const e of G.enemies) {
+      e.obj.position.x += dx;
+      if (e.anchor) e.anchor.x += dx;
+    }
+    for (const b of G.bullets) b.x += dx;
+    for (const list of [G.torpedoes, G.missiles, G.enemyMissiles, G.coinsList]) for (const m of list) m.obj.position.x += dx;
+  }
   function keepAway(min) {
     const c = P.center;
     for (const e of G.enemies) {
@@ -155,7 +216,10 @@
     // A banking dart, never a loop: the nose tips at most about 30 degrees.
     P.pitch = Math.max(-0.55, Math.min(0.55, P.pitch));
     P.pitchVel *= 0.8;
-    return { x: fwd + 0.25 * Math.sin(t * 2.7), y: (state.dodgeDir || 1) * 0.45 };
+    const ahead = G.bounds.bottom(P.center.x + 12 * P.facingSign);
+    const blocked = ahead > P.center.y - 4;
+    if (blocked) P.vel.x *= 0.9;
+    return { x: blocked ? -0.15 * P.facingSign : fwd + 0.25 * Math.sin(t * 2.7), y: (state.dodgeDir || 1) * 0.45 };
   }
 
   function onBeats(t, beat, from, fn) {
@@ -324,6 +388,7 @@
           enemy('scout', 35, 7.5, { calm: true })];
         state.holdFire = true;
         state.beatIndex = -1;
+        state.depth = true;
       },
       frame(t) {
         D.input = t < 1.6 ? { x: t < 1.2 ? 0.4 : 0.12, y: 0 } : evade(t - 1.6, { beat: 0.534, fwd: 0.25, kick: 5 });
@@ -388,6 +453,7 @@
       // Bursting out of the surface in a spray of water as the gulls scatter.
       start: CUT.breach, setup() {
         setHud(false);
+        state.depth = false;
         freshSub(KIT_SIMPLE);
         place(70, 19, 1);
         P.vel.set(6, 14);
@@ -406,6 +472,7 @@
       // A whole wave closes in and goes up in flames.
       start: CUT.finale, setup() {
         clearBattle();
+        state.depth = true;
         place(40, 6, 1);
         snapCamera(42.5, 6.4);
         state.wave = [];
@@ -427,6 +494,7 @@
       // The battle won, the music settles back to the reef theme as the sub cruises through the kelp toward the edge.
       start: CUT.aftermath, setup() {
         clearBattle();
+        state.depth = false;
         for (const w of G.wrecks) w.gone = true;
         freshSub(KIT_DEEP);
         place(84, -1.5, 1);
@@ -517,6 +585,7 @@
         state.eyes = [];
         state.nextEye = 0;
         state.holdFire = true;
+        state.depth = true;
       },
       frame(t) {
         D.input = { x: 0.12, y: 0 };
@@ -533,6 +602,7 @@
     {
       // The drop: everything opens fire.
       start: CUT.drop, setup() {
+        if (P.center.x > 225) shiftAll(205 - P.center.x);
         for (const e of state.eyes) if (e) e.fire = rand(0.2, 1.2);
         state.holdFire = false;
         for (const a of W.anglers) a.scale.setScalar(1e-4);
@@ -543,7 +613,7 @@
         state.more = [enemy('scout', c.x + 17, c.y + 6), enemy('gunner', c.x - 18, c.y + 5), enemy('scout', c.x + 20, c.y - 6)];
       },
       frame(t) {
-        D.input = evade(t, { beat: 0.441, fwd: 0.45 });
+        D.input = evade(t, { beat: 0.441, fwd: 0.3 });
         keepAway(6);
         fireOnBeats(t);
         onBeats(t, 0.441, 0, (k) => volley(k % 2 ? 2 : 3));
@@ -559,7 +629,7 @@
         state.beatIndex = -1;
       },
       frame(t) {
-        D.input = evade(t, { beat: 0.441, fwd: 0.45 });
+        D.input = evade(t, { beat: 0.441, fwd: 0.3 });
         keepAway(6);
         fireOnBeats(t);
         onBeats(t, 0.441, 0, (k) => volley(k % 2 ? 3 : 4, 0.3));
@@ -569,6 +639,7 @@
       // Chaos: torpedoes, shields flaring, wrecks spinning down.
       start: CUT.chaos, setup() {
         const c = P.center;
+        if (P.center.x > 235) shiftAll(210 - P.center.x);
         // Hard cut into the finale: the full arsenal at last.
         const at = P.group.position.clone();
         const vel = P.vel.clone();
@@ -584,7 +655,7 @@
         state.beatIndex = -1;
       },
       frame(t) {
-        D.input = evade(t, { beat: 0.441, fwd: 0.5, kick: 5.5 });
+        D.input = evade(t, { beat: 0.441, fwd: 0.3, kick: 5.5 });
         keepAway(6);
         fireOnBeats(t);
         onBeats(t, 0.441, 0, () => volley(6, 0.45));
@@ -603,7 +674,7 @@
         for (const [dx, dy] of [[-17, 6], [19, -5], [-20, -6], [24, 5]]) enemy('scout', c.x + dx, c.y + dy);
       },
       frame(t) {
-        D.input = evade(t, { beat: 0.441, fwd: 0.45 });
+        D.input = evade(t, { beat: 0.441, fwd: 0.3 });
         keepAway(6);
         onBeats(t, 0.441, 0, (k) => k < 10 && volley(7, 0.5));
         const c = P.center;
@@ -658,7 +729,7 @@
   // look point. Targets ease along so moves stay smooth; `hand` adds handheld drift, `roll` tilts the horizon.
   const sub = (dx = 0, dy = 0, dz = 0) => {
     const c = P.center;
-    return [c.x + dx * P.facingSign, c.y + dy, dz];
+    return [c.x + dx * P.facingSign, c.y + dy, P.group.position.z + dz];
   };
   const lerp = (a, b, k) => a + (b - a) * k;
   const ease = (t, a, b) => smooth(clamp01((t - a) / (b - a)));
@@ -725,25 +796,25 @@
       [0, (t) => ({ target: sub(0.5, 1.2), yaw: lerp(0.65, 0.2, ease(t, 0, 2.5)), pitch: -0.4, dist: 11, fov: 54 })],
       [2.49, (t) => ({ target: sub(1.5, 0.3), yaw: -0.95, pitch: 0.1, dist: lerp(10, 12, ease(t, 0, 2.1)), fov: 42 })],
     ] },
-    // Not alone: the sub's face, then the reverse angle from behind the enemies as they open fire, then the face
-    // again with missiles streaking in.
+    // Not alone: the sub's face, then the reverse angle from behind the enemies, spread out in depth as they open
+    // fire, then a chase cam behind the sub as the missiles come at it.
     { cuts: [
       [0, (t) => ({ target: sub(0.3, 0.3), yaw: 1.3, pitch: 0.02, dist: lerp(7.5, 6.3, ease(t, 0, 1.6)), fov: 38 })],
-      [1.6, (t) => ({ target: sub(5, 0.6), yaw: 1.22, pitch: 0.06, dist: lerp(26, 24, ease(t, 0, 1.6)), fov: 38 })],
-      [3.2, (t) => ({ target: sub(1, 0.3), yaw: 1.05, pitch: 0.0, dist: lerp(9, 7.5, ease(t, 0, 1.1)), fov: 42, hand: 1.2 })],
+      [1.6, (t) => ({ target: sub(6, 0.6), yaw: 1.25, pitch: 0.07, dist: lerp(26, 23, ease(t, 0, 1.6)), fov: 40 })],
+      [3.2, () => ({ target: sub(5, 0.6), yaw: -1.25, pitch: 0.17, dist: 14, fov: 56, hand: 1.2, rate: 7 })],
     ] },
-    // The drop: wide and rolling, a low front angle, overhead, then a chase from behind.
+    // The drop: head-on into the fire, a sweep round the sub, a chase cam diving through the enemies, a low wide.
     { cuts: [
-      [0, () => ({ target: sub(3, 0.5), yaw: 0.3, dist: 17, fov: 42, roll: 0.07, hand: 1.2 })],
-      [1.07, () => ({ target: sub(1, 0.5), yaw: 0.95, pitch: -0.1, dist: 11, fov: 46, hand: 1 })],
-      [2.13, () => ({ target: sub(2, 0), yaw: 0.2, pitch: 0.95, dist: 19, fov: 44, roll: 0.1 })],
-      [3.2, () => ({ target: sub(4, 0.3), yaw: -1.0, pitch: 0.08, dist: 11, fov: 44, hand: 1 })],
+      [0, () => ({ target: sub(-1, 0.3), yaw: 1.35, pitch: 0.04, dist: 10, fov: 56, hand: 1.3, rate: 7 })],
+      [1.07, (t) => ({ target: sub(2, 0.4), yaw: lerp(-1.3, -0.35, ease(t, 0, 1.07)), pitch: 0.1, dist: 10, fov: 50, rate: 7 })],
+      [2.13, () => ({ target: sub(5, 0.6), yaw: -1.25, pitch: 0.17, dist: 14, fov: 56, hand: 1.2, rate: 7 })],
+      [3.2, (t) => ({ target: sub(1, 0.6), yaw: lerp(0.7, 1.1, ease(t, 0, 1.07)), pitch: -0.2, dist: 10, fov: 60, rate: 7 })],
     ] },
-    // Torpedoes away, seen from behind; then head-on into the gunfire; then a low angle.
+    // Torpedoes streak away into the distance from a chase cam, then a sweep across the front, then overhead.
     { cuts: [
-      [0, () => ({ target: sub(5, 0.3), yaw: -1.08, pitch: 0.08, dist: 11, fov: 44, hand: 1 })],
-      [2.13, () => ({ target: sub(0, 0.3), yaw: 1.25, pitch: 0.02, dist: 11, fov: 42, hand: 1.2 })],
-      [3.2, () => ({ target: sub(1, 1), yaw: 0.6, pitch: -0.32, dist: 12, fov: 50, roll: -0.05 })],
+      [0, () => ({ target: sub(6, 0.4), yaw: -1.25, pitch: 0.15, dist: 14.5, fov: 56, hand: 1.2, rate: 7 })],
+      [2.13, (t) => ({ target: sub(1, 0.4), yaw: lerp(1.4, 0.55, ease(t, 0, 1.07)), pitch: 0.03, dist: 11, fov: 52, rate: 7 })],
+      [3.2, () => ({ target: sub(3, 0), yaw: 0.2, pitch: 0.95, dist: 19, fov: 46, roll: -0.06 })],
     ] },
     // Upgrade montage: one long orbit, from the side round to the nose, as part after part bolts on.
     { cuts: [
@@ -758,11 +829,12 @@
       ],
       timeScale: (t) => (t > 0.35 && t < 2.6 ? 0.36 : 1),
     },
-    // Sink the fleet: wide push-in, a close front angle in the middle of the blasts, then overhead on the last wave.
+    // Sink the fleet: a wide sweep over the enemy line, head-on in the blasts, then a high chase cam.
     { cuts: [
-      [0, (t) => ({ target: sub(4, 0.5), yaw: -0.35, pitch: 0.06, dist: lerp(20, 16, ease(t, 0, 2.1)), fov: 40, hand: 1 })],
-      [2.14, () => ({ target: sub(1.5, 0.3), yaw: 1.0, pitch: -0.04, dist: 9.5, fov: 44, hand: 1.4 })],
-      [3.73, () => ({ target: sub(3, 0), yaw: 0.15, pitch: 1.0, dist: 21, fov: 44, roll: -0.08 })],
+      [0, (t) => ({ target: sub(5, 0.5), yaw: lerp(-1.0, -0.25, ease(t, 0, 2.14)), pitch: 0.1, dist: lerp(20, 16, ease(t, 0, 2.14)),
+        fov: 44, hand: 1 })],
+      [2.14, () => ({ target: sub(-1, 0.3), yaw: 1.32, pitch: 0.03, dist: 8.5, fov: 56, hand: 1.4, rate: 7 })],
+      [3.73, () => ({ target: sub(5, 0), yaw: -1.2, pitch: 0.38, dist: 15, fov: 56, rate: 7 })],
     ] },
     // Aftermath: a slow tracking shot past the kelp, then the nose easing toward the drop.
     { cuts: [
@@ -772,9 +844,9 @@
     // Over the edge: looking straight down the cliff as the sub drops off it, then from below, a silhouette
     // against the last of the light.
     { cuts: [
-      [0, (t) => ({ target: sub(1, -1), yaw: lerp(0.35, 0.1, ease(t, 0, 3.8)), pitch: 0.8, dist: lerp(15, 18, ease(t, 0, 3.8)),
-        fov: 46, rate: 3 })],
-      [3.81, (t) => ({ target: sub(0.5, 0.6), yaw: 0.3, pitch: -0.55, dist: lerp(11, 13, ease(t, 0, 3.9)), fov: 56, rate: 3 })],
+      [0, (t) => ({ target: sub(0.5, -0.4), yaw: lerp(0.35, 0.1, ease(t, 0, 3.8)), pitch: 0.7, dist: lerp(16, 19, ease(t, 0, 3.8)),
+        fov: 46, rate: 8 })],
+      [3.81, (t) => ({ target: sub(0.3, 0.2), yaw: 0.3, pitch: -0.5, dist: lerp(13, 15, ease(t, 0, 3.9)), fov: 54, rate: 8 })],
     ] },
     // Through the jellies: a front three-quarter with jellies drifting past the lens, then up from below.
     { cuts: [
@@ -797,29 +869,30 @@
       [0, (t) => ({ target: sub(0.3, 0.3), yaw: 1.3, pitch: 0.03, dist: lerp(8, 6.5, ease(t, 0, 2.75)), fov: 38 })],
       [2.75, (t) => ({ target: sub(3.5, 0.5), yaw: -0.85, pitch: 0.08, dist: lerp(14, 12.5, ease(t, 0, 2.9)), fov: 42 })],
     ] },
-    // The drop in the deep: wide and rolling, then low in front.
+    // The drop in the deep: a chase cam into the red lights, then a low sweep across the front.
     { cuts: [
-      [0, () => ({ target: sub(2, 0.5), yaw: -0.3, pitch: 0.05, dist: 18, fov: 42, roll: 0.07, hand: 1.4 })],
-      [1.76, () => ({ target: sub(1, 0.6), yaw: 1.0, pitch: -0.1, dist: 10, fov: 48, hand: 1.2 })],
+      [0, () => ({ target: sub(5, 0.6), yaw: -1.25, pitch: 0.17, dist: 14, fov: 56, hand: 1.4, rate: 7 })],
+      [1.76, (t) => ({ target: sub(1, 0.6), yaw: lerp(1.4, 0.5, ease(t, 0, 1.77)), pitch: -0.12, dist: 11, fov: 54, rate: 7 })],
     ] },
     // The boss: from below and behind the sub looking up at it, then from behind the boss down onto the sub.
     { cuts: [
       [0, () => {
         const b = state.boss.obj.position;
         const c = P.center;
-        return { pos: [c.x - 6 * P.facingSign, c.y - 3.5, 7.5], look: [(b.x + c.x) / 2 + 1.5, b.y + 1, b.z], fov: 50,
+        return { pos: [c.x - 6 * P.facingSign, c.y - 3.5, P.group.position.z + 7.5], look: [(b.x + c.x) / 2 + 1.5, b.y + 1, b.z], fov: 50,
           hand: 1, rate: 4 };
       }],
       [1.76, () => {
         const b = state.boss.obj.position;
         const c = P.center;
-        return { pos: [b.x + 4.5 * P.facingSign, b.y + 1.6, 5.5], look: [c.x, c.y, 0], fov: 40, hand: 1.2, rate: 5 };
+        return { pos: [b.x + 4.5 * P.facingSign, b.y + 1.6, b.z + 5.5], look: [c.x, c.y, P.group.position.z], fov: 40, hand: 1.2,
+          rate: 5 };
       }],
     ] },
     // Chaos: hard cuts every two beats between a chase, the nose, overhead and a rolling wide.
     { cuts: [
-      [0, () => ({ target: sub(4, 0.3), yaw: -1.0, pitch: 0.08, dist: 12, fov: 46, hand: 1.4 })],
-      [0.88, () => ({ target: sub(0, 0.3), yaw: 1.25, pitch: 0.02, dist: 10, fov: 44, hand: 1.4 })],
+      [0, () => ({ target: sub(5, 0.5), yaw: -1.25, pitch: 0.17, dist: 14, fov: 56, hand: 1.4, rate: 7 })],
+      [0.88, () => ({ target: sub(-1, 0.3), yaw: 1.35, pitch: 0.03, dist: 10, fov: 56, hand: 1.4, rate: 7 })],
       [1.76, () => ({ target: sub(2, 0), yaw: 0.25, pitch: 1.05, dist: 24, fov: 46, roll: 0.12 })],
       [2.65, () => ({ target: sub(2, 0.5), yaw: -0.45, pitch: 0.04, dist: 20, fov: 46, roll: -0.08, hand: 1.6 })],
     ] },
