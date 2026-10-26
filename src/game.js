@@ -28,6 +28,7 @@ const FIRST_WAVE_DELAY = 22;
 // Co-op: how far a sub may stray from the group's centre, and how long a sunk sub waits to come back.
 const LEASH = 12;
 const RESPAWN_TIME = 5;
+const FRIEND_DRIFT = 3;
 const COMBAT_HOLD = 2;
 const DEEP_COMBAT_LEAD = 4;
 // Breathing room between waves, long enough for the calm music to come back.
@@ -1127,7 +1128,15 @@ export class Game {
   respawn() {
     const pl = this.localPlayer;
     const others = this.remotePlayers.filter((r) => r.alive);
-    const x = others.length ? others[0].group.position.x : pl.group.position.x;
+    let x = others.length ? others[0].group.position.x : pl.group.position.x;
+    // Pick the first spot beside the others that is clear of every sub.
+    for (const step of [6, -6, 12, -12, 18]) {
+      const at = x + step;
+      if (others.every((r) => Math.abs(r.group.position.x - at) > 5)) {
+        x = at;
+        break;
+      }
+    }
     pl.group.position.set(x, Math.max(seabedAt(x) + 4, Math.min(pl.group.position.y + 6, SURFACE_Y - 3)), 0);
     pl.vel.set(0, 0);
     pl.hp = pl.maxHp;
@@ -1676,9 +1685,16 @@ export class Game {
       const mine = pl.mass * 1.3;
       const theirs = other.mass * 1.3;
       const approach = new THREE.Vector2().subVectors(pl.vel, other.vel).dot(n);
-      const j = Math.max(2.5, -(1 + BUMP_BOUNCE) * Math.min(approach, 0)) / (1 / mine + 1 / theirs);
+      // Overlapping without actually ramming (arriving or respawning in the same spot): drift apart gently, with no
+      // shove and no clank, so nobody gets launched.
+      if (approach > -0.6) {
+        pl.group.position.x += n.x * FRIEND_DRIFT * this.lastDt;
+        pl.group.position.y += n.y * FRIEND_DRIFT * this.lastDt;
+        continue;
+      }
+      const j = Math.max(2.5, -(1 + BUMP_BOUNCE) * approach) / (1 / mine + 1 / theirs);
       pl.vel.addScaledVector(n, j / mine);
-      for (let i = 0; i < 60 && touching(); i++) {
+      for (let i = 0; i < 20 && touching(); i++) {
         pl.group.position.x += n.x * 0.02;
         pl.group.position.y += n.y * 0.02;
       }

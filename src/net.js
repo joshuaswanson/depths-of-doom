@@ -206,7 +206,7 @@ export class Net {
       for (const id of msg.others) this.addRemote(id);
       tintSub(game.localPlayer, msg.you);
       // Arrive beside the host, not on top of them.
-      game.localPlayer.group.position.x += 3.5 * (msg.you - 1);
+      game.localPlayer.group.position.x += 6 * (msg.you - 1);
     } else if (msg.t === 'snap') {
       game.wave = msg.wave;
       // Events first, so a sub that was sunk this snapshot explodes before the enemy list drops it.
