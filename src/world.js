@@ -1174,6 +1174,96 @@ function updateDolphins(world, dt, t, cx, cy, halfW, sub) {
   }
 }
 
+// A couple of marlin cruise the open blue above the trenches, near the surface: wandering, now and then putting on
+// a burst of speed, and wheeling round before they reach the shelves. They come and go off screen.
+const MARLIN_COUNT = 2;
+const MARLIN_LENGTH = 6.5;
+const MARLIN_BAND = [SURFACE_Y - 18, SURFACE_Y - 4];
+
+function makeMarlins(scene) {
+  return Array.from({ length: MARLIN_COUNT }, () => {
+    const fish = spawn('marlin');
+    fish.scale.setScalar(MARLIN_LENGTH);
+    fish.rotation.order = 'YXZ';
+    const controls = { beat: { value: 1 }, phase: { value: rand(0, Math.PI * 2) }, arch: { value: 0 },
+      rate: { value: rand(7, 8.5) } };
+    fish.traverse((o) => {
+      if (!o.isMesh) return;
+      o.material = o.material.clone();
+      addTailBeat(o.material, { rate: 7.5, amount: 0.07, front: 0.15, sideways: true, controls });
+      addWaterline(o.material, { ripple: 0.85, topOnly: true });
+    });
+    fish.visible = false;
+    fish.userData = { controls, active: false, wait: rand(4, 16) };
+    scene.add(fish);
+    return fish;
+  });
+}
+
+function updateMarlin(fish, dt, t, cx, cy, halfW) {
+  const u = fish.userData;
+  const open = cy > SURFACE_Y - 40;
+  if (!u.active) {
+    fish.visible = false;
+    u.wait -= dt;
+    if (u.wait > 0 || !open) return;
+    const side = Math.random() < 0.5 ? -1 : 1;
+    const x = cx + side * (halfW + 10);
+    if (deepBelow(x) < 60 || deepBelow(cx) < 40) {
+      u.wait = 2;
+      return;
+    }
+    u.active = true;
+    u.dir = -side;
+    u.yaw = u.dir > 0 ? 0 : Math.PI;
+    u.speed = rand(5, 7);
+    u.cruise = u.speed;
+    u.y = rand(MARLIN_BAND[0], MARLIN_BAND[1]);
+    u.targetY = u.y;
+    u.burst = 0;
+    u.nextBurst = rand(2, 6);
+    u.nextWander = 0;
+    fish.position.set(x, u.y, rand(-26, -9));
+  }
+  const p = fish.position;
+  // Wander up and down within the band, and now and then dart forward.
+  u.nextWander -= dt;
+  if (u.nextWander <= 0) {
+    u.nextWander = rand(2, 4);
+    u.targetY = rand(MARLIN_BAND[0], MARLIN_BAND[1]);
+  }
+  u.nextBurst -= dt;
+  if (u.nextBurst <= 0) {
+    u.burst = 1.2;
+    u.nextBurst = rand(4, 9);
+  }
+  u.burst = Math.max(0, u.burst - dt);
+  const want = u.cruise * (u.burst > 0 ? 2.2 : 1);
+  u.speed += (want - u.speed) * (1 - Math.exp(-dt * 2.5));
+  // Wheel round before the floor rises toward a shelf, or once well past the camera.
+  const ahead = p.x + u.dir * 25;
+  if (u.turning === undefined && (deepBelow(ahead) < 45 || (p.x - cx) * u.dir > halfW + 30 && Math.random() < dt * 0.5)) {
+    u.dir = -u.dir;
+    u.turning = true;
+  }
+  const targetYaw = u.dir > 0 ? 0 : Math.PI;
+  const turn = THREE.MathUtils.clamp(targetYaw - u.yaw, -dt * 1.6, dt * 1.6);
+  u.yaw += turn;
+  if (Math.abs(targetYaw - u.yaw) < 0.01) u.turning = undefined;
+  const vy = (u.targetY - p.y) * 0.6;
+  p.x += Math.cos(u.yaw) * u.speed * dt;
+  p.z = THREE.MathUtils.clamp(p.z - Math.sin(u.yaw) * u.speed * dt * 0.5, -30, -6);
+  p.y += vy * dt;
+  fish.rotation.set(Math.sign(turn) * -0.35, u.yaw, Math.atan2(vy, u.speed));
+  u.controls.rate.value = (7 + u.speed * 0.25) * (u.burst > 0 ? 1.4 : 1);
+  fish.visible = true;
+  if (!open || Math.abs(p.x - cx) > halfW + 60 || deepBelow(p.x) < 25) {
+    u.active = false;
+    u.turning = undefined;
+    u.wait = rand(8, 20);
+  }
+}
+
 // Jellies gather in one glowing layer in the dark trenches, with a few stragglers drifting deeper.
 const JELLY_CEILING = 96;
 const JELLY_LAYER = [-122, -100];
@@ -1373,6 +1463,7 @@ export class World {
     this.spermWhale = makeSpermWhale();
     scene.add(this.spermWhale);
     this.dolphins = makeDolphins(scene);
+    this.marlins = makeMarlins(scene);
     this.anglers = Array.from({ length: 3 }, (_, i) => {
       const a = makeAngler();
       a.position.set(-36 + i * 36 + rand(-5, 5), -200, rand(-20, -4));
@@ -1658,6 +1749,7 @@ export class World {
     updateWhale(this.whale, dt, this.time, cx, cy, this.aspect);
     updateSpermWhale(this.spermWhale, dt, cx, cy, this.whale, this.aspect);
     updateDolphins(this, dt, this.time, cx, cy, halfWidthAt(-10, this.aspect), sub);
+    for (const fish of this.marlins) updateMarlin(fish, dt, this.time, cx, cy, halfWidthAt(-18, this.aspect));
     const t = this.time;
     this.uniforms.uTime.value = t;
     const shift = depthShift(cy);

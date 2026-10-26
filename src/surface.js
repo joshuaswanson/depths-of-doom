@@ -294,8 +294,9 @@ function addWhaleSwim(material) {
 // `along` maps a vertex to its place on the body (0.5 at the nose, -0.5 at the flukes) and `size` is the body length
 // in the mesh's own units, for meshes not already one unit long with the head along +X.
 // `front` is how much the head end moves compared with the flukes.
+// `sideways` swings the tail left and right, as a fish does, in place of a whale or dolphin's up-and-down stroke.
 export function addTailBeat(material, { rate = 6, amount = 0.06, controls = null, along = 'transformed.x', size = 1,
-  front = 0.6 } = {}) {
+  front = 0.6, sideways = false } = {}) {
   const previous = material.onBeforeCompile;
   const key = material.customProgramCacheKey?.() ?? material.name;
   const own = controls ?? { beat: { value: 1 }, phase: { value: 0 }, arch: { value: 0 } };
@@ -316,10 +317,10 @@ export function addTailBeat(material, { rate = 6, amount = 0.06, controls = null
         float beatX = ${along};
         float beatAlong = smoothstep( 0.5, -0.5, beatX );
         float beatWave = sin( beatA + beatX * 2.4 );
-        transformed.y += beatWave * uBeat * ${(amount * size).toFixed(4)} * mix( ${front.toFixed(2)}, 1.0, pow( beatAlong, 1.4 ) );
+        transformed.${sideways ? 'z' : 'y'} += beatWave * uBeat * ${(amount * size).toFixed(4)} * mix( ${front.toFixed(2)}, 1.0, pow( beatAlong, 1.4 ) );
         transformed.y -= uArch * ${(0.23 * size).toFixed(4)} * pow( beatX * 2.0, 2.0 );`);
   };
-  material.customProgramCacheKey = () => `${key}-tail-${along}-${front}`;
+  material.customProgramCacheKey = () => `${key}-tail-${along}-${front}-${sideways}`;
   material.needsUpdate = true;
 }
 

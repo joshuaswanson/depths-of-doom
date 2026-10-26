@@ -13,7 +13,7 @@ const MODEL_NAMES = [
   'mine', 'ruin_pillar_a', 'ruin_pillar_b', 'ruin_arch', 'ruin_wall', 'ruin_pier', 'ruin_tower', 'anchor', 'chain',
   'coral_brain', 'rock_a', 'rock_b', 'deep_jelly', 'kelp_tall', 'kelp_short', 'coral_staghorn', 'coral_fan',
   'coral_table', 'sponge_cluster', 'anemone_patch', 'reef_small', 'reef_large',
-  'wreck_sub', 'anglerfish', 'seagull', 'humpback', 'sperm_whale', 'dolphin',
+  'wreck_sub', 'anglerfish', 'seagull', 'humpback', 'sperm_whale', 'dolphin', 'marlin',
 ];
 
 const models = {};
