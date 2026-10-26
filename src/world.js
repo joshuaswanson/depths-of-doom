@@ -19,9 +19,43 @@ function halfWidthAt(z, aspect) {
 }
 
 // Seabed depth along the world: sunlit ruin shelves broken up by trenches that fall into the abyss.
+const rawDepth = (x) => 0.5 + 0.5 * (0.6 * Math.sin(x * 0.011 - 1.2) + 0.4 * Math.sin(x * 0.027 + 2.0));
+const FILL_REACH = 110;
+// Below this the raw signal is sunlit shelf, which is never filled.
+const SHELF_DEPTH = 0.36;
+const FILL_CELL = 2;
+const fillCache = new Map();
+
+// The raw depth signal can dip partway back up between two deep stretches, leaving an odd plateau in mid-trench.
+// Where there is deep water on both sides of a dip, fill it so the trench runs on unbroken; shelves are untouched
+// because a shelf always has shallow water on at least one side.
+function filledDepth(cell) {
+  let n = fillCache.get(cell);
+  if (n !== undefined) return n;
+  const x = cell * FILL_CELL;
+  let left = 0;
+  let right = 0;
+  for (let d = 0; d <= FILL_REACH; d += 5) {
+    left = Math.max(left, rawDepth(x - d));
+    right = Math.max(right, rawDepth(x + d));
+  }
+  const fill = Math.min(left, right);
+  n = rawDepth(x);
+  if (n > SHELF_DEPTH && fill > 0.5) n = Math.max(n, fill);
+  fillCache.set(cell, n);
+  if (fillCache.size > 6000) fillCache.delete(fillCache.keys().next().value);
+  return n;
+}
+
+function depthAt(x) {
+  const c = Math.floor(x / FILL_CELL);
+  const t = x / FILL_CELL - c;
+  return filledDepth(c) * (1 - t) + filledDepth(c + 1) * t;
+}
+
 export function floorY(x) {
-  const n = 0.5 + 0.5 * (0.6 * Math.sin(x * 0.011 - 1.2) + 0.4 * Math.sin(x * 0.027 + 2.0));
-  const deepness = THREE.MathUtils.smoothstep(n, 0.36, 0.68);
+  const n = depthAt(x);
+  const deepness = THREE.MathUtils.smoothstep(n, SHELF_DEPTH, 0.68);
   // Step the descent into three cliff-and-ledge tiers.
   const tiers = 3;
   const k = Math.min(Math.floor(deepness * tiers), tiers - 1);
