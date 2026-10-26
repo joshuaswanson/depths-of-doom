@@ -926,8 +926,8 @@ function makeDolphins(scene) {
   });
   pod[0].traverse((o) => {
     if (o.isMesh && !o.material.userData.tail) {
-      addTailBeat(o.material, { rate: 7, amount: 0.05 });
-      addWaterline(o.material, { ripple: 0.85 });
+      addTailBeat(o.material, { rate: 12, amount: 0.12 });
+      addWaterline(o.material, { ripple: 0.85, topOnly: true });
       o.material.userData.tail = true;
     }
   });
@@ -976,8 +976,10 @@ function updateDolphins(world, dt, t, cx, cy, halfW, sub) {
       if (m.nextLeap <= 0 && vy > 0.5 && Math.sin(a) > 0.2) m.leap = { y, vy: rand(7.5, 9) };
     }
     m.d.position.set(m.x, y, m.z);
+    // Ease the nose toward the direction of travel, so launching into or landing from a leap doesn't jerk it.
     const pitch = Math.atan2(vy, DOLPHIN_SPEED);
-    m.d.rotation.set(0, dolphins.dir > 0 ? 0 : Math.PI, pitch);
+    m.pitch = m.pitch === undefined ? pitch : m.pitch + (pitch - m.pitch) * (1 - Math.exp(-dt * 5));
+    m.d.rotation.set(0, dolphins.dir > 0 ? 0 : Math.PI, m.pitch);
     m.d.visible = true;
     if (dolphins.dir * (m.x - cx) < halfW + 12) anyInView = true;
   }

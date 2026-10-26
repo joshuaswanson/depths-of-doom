@@ -298,7 +298,7 @@ export function addTailBeat(material, { rate = 6, amount = 0.06 } = {}) {
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nuniform float uTime;')
       .replace('#include <begin_vertex>', `#include <begin_vertex>
-        float beatSeed = modelMatrix[ 3 ].x * 0.7 + modelMatrix[ 3 ].z * 1.3;
+        float beatSeed = modelMatrix[ 3 ].z * 7.3;
         float beatRear = smoothstep( 0.1, -0.5, transformed.x );
         transformed.y += sin( uTime * ${rate.toFixed(2)} + transformed.x * 6.0 + beatSeed ) * ${amount.toFixed(3)} * beatRear * beatRear;`);
   };
