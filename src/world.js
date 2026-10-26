@@ -254,10 +254,12 @@ function modelHeight(name, obj) {
 const WATERLINE_Z = 3.5;
 // Rough ground radius of each seafloor piece, used to find clear spots for sinking wrecks.
 const FOOTPRINT = {
-  reef_large: 2.4, reef_small: 1.5, kelp_tall: 0.8, kelp_short: 0.7, coral_staghorn: 0.9, coral_fan: 0.7,
-  coral_table: 1.1, sponge_cluster: 0.6, anemone_patch: 0.8, coral_brain: 0.8, rock_a: 1.5, rock_b: 0.9,
+  reef_large: 2.9, reef_small: 2.6, kelp_tall: 0.8, kelp_short: 0.7, coral_staghorn: 0.85, coral_fan: 1.0,
+  coral_table: 1.5, sponge_cluster: 0.55, anemone_patch: 0.95, coral_brain: 1.05, rock_a: 1.5, rock_b: 0.9,
   ruin_pillar_a: 1.0, ruin_pillar_b: 1.0, ruin_arch: 2.8, ruin_wall: 2.8, ruin_pier: 7, ruin_tower: 1.6, anchor: 1.0,
 };
+// How far two corals' footprints may overlap: they touch at 1, and below it their outer branches interleave.
+const CORAL_PACK = 0.85;
 const CORALS = ['coral_staghorn', 'coral_fan', 'coral_table', 'sponge_cluster', 'anemone_patch', 'coral_brain'];
 // Fixed resting places for sunken enemy subs: one in the murk near the western cliff, one on a trench floor.
 const WRECKS = [{ x: -150, z: -16, yaw: 0.5, roll: 0.18 }, { x: 236, z: -12, yaw: -0.4, roll: -0.12 }];
@@ -1857,6 +1859,22 @@ export class World {
     };
     const pieces = new THREE.Group();
     const footprints = [];
+    // Packs a coral in as close to (x, z) as it fits: it tries spots spiralling out in small steps and takes the
+    // first that keeps clear of everything placed so far. Footprints may overlap a little, so branches still mesh.
+    const nestle = (name, x, z, scale) => {
+      const reach = (FOOTPRINT[name] ?? 1) * scale;
+      const fits = (px, pz) => footprints.every((f) => Math.hypot(f.x - px, f.z - pz) >= (f.r + reach) * CORAL_PACK);
+      for (let k = 0; k < 40; k++) {
+        const a = k * 2.39996;
+        const d = 0.45 * Math.sqrt(k);
+        const px = x + Math.cos(a) * d;
+        const pz = z + Math.sin(a) * d;
+        if (fits(px, pz)) {
+          place(name, px, pz, scale);
+          return;
+        }
+      }
+    };
     const place = (name, x, z, scale) => {
       if (SHELF_ONLY.test(name) && !onFlatShelf(x)) return;
       footprints.push({ x, z, r: (FOOTPRINT[name] ?? 1) * scale });
@@ -1883,7 +1901,7 @@ export class World {
       for (let i = 0; i < corals; i++) {
         const a = r() * Math.PI * 2;
         const d = Math.sqrt(r()) * m.width * 0.95 * spread;
-        place(CORALS[Math.floor(r() * CORALS.length)], m.x + Math.cos(a) * d, MOUND_Z + 1 + Math.sin(a) * d * 0.7,
+        nestle(CORALS[Math.floor(r() * CORALS.length)], m.x + Math.cos(a) * d, MOUND_Z + 1 + Math.sin(a) * d * 0.7,
           1.0 + r() * 0.7);
       }
     } else if (m.murk > 0.5) {
