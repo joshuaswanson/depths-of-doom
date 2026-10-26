@@ -2190,6 +2190,12 @@ export class Game {
     this.camFloor = THREE.MathUtils.lerp(this.camFloor ?? lowest, lowest, 1 - Math.exp(-dt * 1.5));
     const floorLimit = Math.min(this.camFloor + this.halfH - 3, pc.y + 1.5 - this.halfH * share);
     this.cam.y = THREE.MathUtils.clamp(this.cam.y, floorLimit, SURFACE_Y + 1);
+    // Leading the sub along a cliff can carry the camera over the rock and inside it; pull it back toward the sub.
+    const step = Math.sign(pc.x - this.cam.x) * 0.2;
+    for (let i = 0; i < 25 && step && seabedAt(this.cam.x, CAMERA_Z) > this.cam.y - 1.5; i++) {
+      if (Math.abs(pc.x - this.cam.x) <= Math.abs(step)) break;
+      this.cam.x += step;
+    }
   }
 
   // Diving into a dark trench without a lamp suggests buying one, once per descent.
