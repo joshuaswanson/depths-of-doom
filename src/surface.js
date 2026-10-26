@@ -331,6 +331,8 @@ export function applySurfaceDetail(root) {
     }
     if (name.startsWith('whale_') && !swaying.has(o.material)) {
       addWhaleSwim(o.material);
+      // The same rippling sunlight the subs catch underwater.
+      addWaterline(o.material);
       swaying.add(o.material);
     }
     if (CURRENT_MATERIALS.has(name) && !swaying.has(o.material)) {
