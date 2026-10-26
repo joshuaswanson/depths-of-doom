@@ -29,6 +29,9 @@ export async function loadModels(onProgress) {
       if (!o.isMesh) return;
       o.material.envMapIntensity = 0.55;
       o.castShadow = !o.material.transparent;
+      // The sub and its parts are closed shapes, so their front faces alone cast the shadow. That keeps them on the
+      // shadow shader everything else already uses, so their first shadow never stalls a frame.
+      if (/^(player_|part_)/.test(name)) o.material.shadowSide = THREE.FrontSide;
     });
     applySurfaceDetail(gltf.scene);
     models[name] = gltf.scene;
@@ -94,6 +97,17 @@ export async function warmUp(renderer, scene, camera, target) {
   const previous = renderer.getRenderTarget();
   renderer.setRenderTarget(target);
   await renderer.compileAsync(scene, camera);
+  // Compiling alone leaves each shader's first use, and the stall that comes with it, for the first frame that draws
+  // it; draw everything once now, including what lies outside the view.
+  const culled = [];
+  scene.traverse((o) => {
+    if (o.frustumCulled) {
+      o.frustumCulled = false;
+      culled.push(o);
+    }
+  });
+  renderer.render(scene, camera);
+  for (const o of culled) o.frustumCulled = true;
   renderer.setRenderTarget(previous);
   scene.remove(holder);
 }

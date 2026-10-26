@@ -34,6 +34,8 @@ let pixelRatio = MAX_PIXEL_RATIO;
 renderer.setPixelRatio(pixelRatio);
 renderer.toneMapping = THREE.NeutralToneMapping;
 renderer.toneMappingExposure = 1.0;
+// Checking each shader for errors on its first draw stalls until the driver finishes linking it.
+renderer.debug.checkShaderErrors = !import.meta.env.PROD;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.VSMShadowMap;
 
@@ -273,9 +275,13 @@ async function boot() {
   game = new Game({ scene, camera, world, effects, player, hud });
   resize();
   const cleanup = game.prewarm();
-  const hidden = world.jellies.filter((j) => !j.visible);
+  // Creatures stay hidden until they appear, and hidden objects are skipped by the warm-up; show them for it.
+  const hidden = [...world.jellies, ...world.anglers, world.whale, world.spermWhale, ...world.dolphins.pod, world.marlin,
+    ...world.mantas].filter((j) => !j.visible);
   for (const j of hidden) j.visible = true;
   await warmUp(renderer, scene, camera, composer.readBuffer);
+  // Draw a real frame, shadows and bloom included, so every shader's first use happens behind the loading screen.
+  composer.render();
   for (const j of hidden) j.visible = false;
   cleanup();
   state = 'title';

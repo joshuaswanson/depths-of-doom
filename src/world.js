@@ -1604,6 +1604,15 @@ function mergeCluster(pieces) {
   return cluster;
 }
 
+// Scenery that stays put skips the per-frame matrix update; it is recomputed here whenever it is moved.
+function freeze(obj) {
+  obj.traverse((o) => {
+    o.matrixAutoUpdate = false;
+    o.updateMatrix();
+  });
+  obj.updateMatrixWorld(true);
+}
+
 function wrap(value, center, half) {
   const span = half * 2;
   return center + ((((value - center + half) % span) + span) % span) - half;
@@ -1795,6 +1804,7 @@ export class World {
     prop.obj.visible = !SHELF_ONLY.test(prop.obj.userData.model) || onFlatShelf(x);
     prop.obj.rotation.set(0, rand(-0.5, 0.5), 0);
     if (prop.obj.userData.model === 'anchor') settleAnchor(prop.obj);
+    freeze(prop.obj);
   }
 
   populate(layer) {
@@ -1845,7 +1855,10 @@ export class World {
     for (let cell = lo; cell <= hi; cell++) {
       if (!this.clusters.has(cell)) {
         const objs = this.buildCluster(moundOf(cell));
-        for (const o of objs) this.scene.add(o);
+        for (const o of objs) {
+          this.scene.add(o);
+          freeze(o);
+        }
         this.clusters.set(cell, objs);
       }
     }
@@ -1921,12 +1934,14 @@ export class World {
 
   spawnChain(x) {
     const group = new THREE.Group();
-    const links = 7;
-    for (let i = 1; i <= links; i++) {
+    const links = new THREE.Group();
+    for (let i = 1; i <= 7; i++) {
       const link = spawn('chain');
       link.position.y = -i * 5.04;
-      group.add(link);
+      links.add(link);
     }
+    // One mesh per material for the whole mooring, in place of a draw per link.
+    group.add(mergeCluster(links));
     const buoy = new THREE.Group();
     const red = new THREE.MeshStandardMaterial({ color: '#c8352b', roughness: 0.6 });
     const white = new THREE.MeshStandardMaterial({ color: '#e8e2d4', roughness: 0.6 });
