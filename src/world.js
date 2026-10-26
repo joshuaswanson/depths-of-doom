@@ -727,9 +727,9 @@ function settleAnchor(obj) {
 // either side). When the floor ahead starts rising toward a shelf it swings round in a wide, banking half-circle, and
 // if it drifts near the shallows it fades away into the water.
 const WHALE_LENGTH = 46;
-const WHALE_Z = { near: -58, centre: -72 };
+const WHALE_Z = { near: -58, centre: -90 };
 const WHALE_SPEED = 2.6;
-const WHALE_TURN_RADIUS = 14;
+const WHALE_TURN_RADIUS = 32;
 const WHALE_GAP = [35, 60];
 const WHALE_ROAM = 60;
 // How much of the water's haze it takes on: a soft veil in open water, all of it near the shallows.
@@ -769,7 +769,7 @@ function whaleHome(cx) {
   let hi = cx;
   while (deepBelow(lo - 5) > 45 && cx - lo < 400) lo -= 5;
   while (deepBelow(hi + 5) > 45 && hi - cx < 400) hi += 5;
-  const roam = Math.min(WHALE_ROAM, (hi - lo) / 2 - 30);
+  const roam = Math.min(WHALE_ROAM, (hi - lo) / 2 - 30 - WHALE_TURN_RADIUS);
   return roam > 15 ? { x: (lo + hi) / 2, roam } : null;
 }
 
@@ -795,7 +795,7 @@ function updateWhale(whale, dt, t, cx, cy) {
     whale.position.set(home.x - dir * home.roam * 0.8, u.baseY, WHALE_Z.near - 3);
   }
   const p = whale.position;
-  const ahead = p.x + Math.cos(u.heading) * 45;
+  const ahead = p.x + Math.cos(u.heading) * (45 + WHALE_TURN_RADIUS);
   // Begin a half-circle when the floor ahead rises toward a shelf or it reaches the edge of its patch, curving toward
   // the middle of its depth band.
   const leaving = (p.x - u.home.x) * Math.cos(u.heading) > 0 && Math.abs(p.x - u.home.x) > u.home.roam;
@@ -813,7 +813,7 @@ function updateWhale(whale, dt, t, cx, cy) {
     u.heading += step;
     u.turn -= step;
     if (Math.abs(u.turn) < 1e-4) u.turn = 0;
-    u.bendTarget = Math.sign(step) * 0.09 * ease;
+    u.bendTarget = Math.sign(step) * 0.06 * ease;
   } else {
     u.bendTarget = 0;
   }
@@ -823,7 +823,7 @@ function updateWhale(whale, dt, t, cx, cy) {
   p.x += Math.cos(u.heading) * WHALE_SPEED * dt;
   p.z = Math.min(WHALE_Z.near, p.z + Math.sin(u.heading) * WHALE_SPEED * dt);
   p.y = u.baseY + Math.sin(t * 0.25 + u.phase) * 1.2;
-  const bank = u.turn === 0 ? 0 : -Math.sign(u.turn) * 0.16;
+  const bank = u.turn === 0 ? 0 : -Math.sign(u.turn) * 0.1;
   whale.rotation.set(THREE.MathUtils.lerp(whale.rotation.x, bank, 1 - Math.exp(-dt * 0.5)), -u.heading,
     Math.cos(t * 0.25 + u.phase) * 0.05);
   // Fade in on arrival, and out into the haze as the floor below rises toward the shallows.
@@ -831,7 +831,7 @@ function updateWhale(whale, dt, t, cx, cy) {
   const shallow = 1 - THREE.MathUtils.smoothstep(deepBelow(p.x), 25, 60);
   u.haze.value = THREE.MathUtils.lerp(1, WHALE_HAZE, u.fade * (1 - shallow));
   whale.visible = u.haze.value < 0.995;
-  if (Math.abs(p.x - cx) > 170 || shallow > 0.98) {
+  if (Math.abs(p.x - cx) > 320 || shallow > 0.98) {
     u.active = false;
     u.wait = rand(WHALE_GAP[0], WHALE_GAP[1]);
   }
