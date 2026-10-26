@@ -866,32 +866,39 @@ function hazeCap(root) {
 
 // Down in the darker water of a trench a sperm whale sometimes passes by. Either it rises up out of the darkness
 // below the sub, levels off and dives back down, or it glides in at the sub's depth and dives past into the dark.
-// Either way it fades away as it sinks below the light.
-const SPERM_LENGTH = 26;
+// It always swims in toward the middle of the trench, and fades away as it dives or nears the walls and floor.
+const SPERM_LENGTH = 24;
+const SPERM_Z = [-38, -32];
 const SPERM_GAP = [45, 75];
+// The spine from the chest back to the flukes, and how far each joint bends in a stroke (radians).
+const SPERM_TAIL = ['Bone03_03', 'Bone04_04', 'Bone05_05', 'Bone06_06', 'Bone07_07', 'Bone08_08', 'Bone09_09'];
+const SPERM_BEND = [0.03, 0.05, 0.07, 0.1, 0.14, 0.18, 0.22];
+const SPERM_STROKE = 1.7;
 
 function makeSpermWhale() {
   const holder = new THREE.Group();
   const body = spawnSkinned('sperm_whale');
   body.scale.setScalar(SPERM_LENGTH);
   holder.add(body);
-  const mixer = new THREE.AnimationMixer(body);
-  const [clip] = animationsOf('sperm_whale');
-  // Its own swim animation sweeps the tail far too hard; play it at a fraction of its strength.
-  if (clip) mixer.clipAction(clip).setEffectiveWeight(0.14).play();
-  // A slow whole-body undulation on top. The skinned mesh keeps its source axes: head toward -Z, back up +Y.
-  body.traverse((o) => {
-    if (!o.isSkinnedMesh) return;
-    o.geometry.computeBoundingBox();
-    const { min, max } = o.geometry.boundingBox;
-    const size = max.z - min.z;
-    const centre = (max.z + min.z) / 2;
-    addTailBeat(o.material, { rate: 1.6, amount: 0.045, size,
-      along: `( -( transformed.z - ${centre.toFixed(2)} ) / ${size.toFixed(2)} )` });
+  holder.updateMatrixWorld(true);
+  // Each spine joint swings about the whale's side-to-side axis, worked out in its parent's frame at rest.
+  const lateral = new THREE.Vector3(0, 0, 1);
+  const spine = SPERM_TAIL.map((name, i) => {
+    const bone = body.getObjectByName(name);
+    const parentQ = bone.parent.getWorldQuaternion(new THREE.Quaternion()).invert();
+    return { bone, rest: bone.quaternion.clone(), axis: lateral.clone().applyQuaternion(parentQ).normalize(), bend: SPERM_BEND[i] };
   });
   holder.visible = false;
-  holder.userData = { mixer, haze: hazeCap(body), active: false, wait: 20, t: 0 };
+  holder.userData = { spine, haze: hazeCap(body), active: false, wait: 20, t: 0, swing: new THREE.Quaternion() };
   return holder;
+}
+
+function strokeSpermWhale(u, time) {
+  u.spine.forEach((j, i) => {
+    // A wave travelling from the chest to the flukes, the joints toward the tail bending the most.
+    const angle = Math.sin(time * SPERM_STROKE - i * 0.55) * j.bend;
+    j.bone.quaternion.copy(u.swing.setFromAxisAngle(j.axis, angle)).multiply(j.rest);
+  });
 }
 
 function updateSpermWhale(whale, dt, cx, cy, humpback, aspect) {
@@ -899,41 +906,58 @@ function updateSpermWhale(whale, dt, cx, cy, humpback, aspect) {
   if (!u.active) {
     whale.visible = false;
     u.wait -= dt;
-    if (u.wait > 0 || cy > -40 || cy < -175 || deepBelow(cx) < 80) return;
+    if (u.wait > 0 || cy > -40 || cy < -175) return;
+    const home = whaleHome(cx);
+    if (!home) {
+      u.wait = 3;
+      return;
+    }
+    // Swim in from off screen toward the middle of the trench, on the side away from the humpback if it's about.
+    let away = Math.sign(cx - home.x) || 1;
+    if (humpback.userData.active && Math.abs(humpback.position.x - cx) < 80) away = Math.sign(cx - humpback.position.x) || away;
+    const z = rand(SPERM_Z[0], SPERM_Z[1]);
+    const x = cx + away * (halfWidthAt(z, aspect) + SPERM_LENGTH * 0.6);
+    if (deepBelow(x) < 60) {
+      u.wait = 3;
+      return;
+    }
     u.active = true;
     u.t = 0;
-    // Come in from off screen on the side away from the humpback, so the two never cross.
-    const away = humpback.userData.active ? Math.sign(cx - humpback.position.x) || 1 : (Math.random() < 0.5 ? -1 : 1);
     u.dir = -away;
     u.rising = Math.random() < 0.5;
-    u.pitch = u.rising ? 0.55 : 0;
+    u.pitch = u.rising ? 0.5 : 0;
     u.levelAt = 0;
-    const z = rand(-56, -50);
-    const y = u.rising ? cy - rand(30, 38) : cy + rand(-2, 4);
-    whale.position.set(cx + away * (halfWidthAt(z, aspect) + SPERM_LENGTH * (u.rising ? 0.2 : 0.6)), y, z);
+    u.diveFrom = null;
+    const lowest = floorY(x) + 16;
+    whale.position.set(x, Math.max(lowest, u.rising ? cy - rand(26, 32) : cy + rand(-2, 4)), z);
   }
   u.t += dt;
-  u.mixer.update(dt);
+  strokeSpermWhale(u, u.t);
   const p = whale.position;
-  // Rising: climb out of the dark until near the sub's depth, cruise level a few seconds, then dive.
-  if (u.rising && !u.levelAt && (p.y > cy - 3 || u.t > 12)) u.levelAt = u.t;
+  const ahead = floorY(p.x + u.dir * SPERM_LENGTH * 0.8);
+  const wallAhead = ahead > p.y - 10;
+  if (u.rising && !u.levelAt && (p.y > cy - 3 || u.t > 12 || wallAhead)) u.levelAt = u.t;
   let want;
-  if (u.rising) want = !u.levelAt ? 0.55 : (u.t - u.levelAt < 3.5 ? 0 : -0.95);
-  else want = u.t < 6 ? 0 : -0.95;
+  if (u.rising) want = !u.levelAt ? 0.5 : (u.t - u.levelAt < 3.5 ? 0 : -0.9);
+  else want = u.t < 6 ? 0 : -0.9;
   u.pitch += (want - u.pitch) * (1 - Math.exp(-dt * 0.5));
   const diving = u.pitch < -0.2;
-  const speed = 4.5 + (diving ? Math.min(3, (-u.pitch - 0.2) * 3) : 0);
+  if (diving && u.diveFrom === null) u.diveFrom = p.y;
+  const speed = 4 + (diving ? Math.min(2.5, (-u.pitch - 0.2) * 3) : 0);
   p.x += Math.cos(u.pitch) * u.dir * speed * dt;
   p.y += Math.sin(u.pitch) * speed * dt;
   whale.rotation.set(0, u.dir > 0 ? 0 : Math.PI, u.pitch);
-  // Faint far below in the dark, clearer near the sub's depth, and gone again as it dives back down.
-  const arrive = Math.min(1, u.t / 3);
-  const sunk = THREE.MathUtils.smoothstep(cy - p.y, 6, 40);
-  u.haze.value = THREE.MathUtils.lerp(1, 0.5, arrive * (1 - sunk));
+  // Faint when it first comes up out of the dark, and gone again as it dives, nears a wall or nears the floor.
+  const arrive = THREE.MathUtils.smoothstep(u.t, 0, 4);
+  const sunk = u.diveFrom === null ? 0 : THREE.MathUtils.smoothstep(u.diveFrom - p.y, 4, 22);
+  const nearFloor = 1 - THREE.MathUtils.smoothstep(p.y - Math.max(ahead, floorY(p.x)), 5, 14);
+  u.wall = Math.max(u.wall ?? 0, wallAhead ? 1 : 0) * (wallAhead ? 1 : 0.99);
+  const hide = Math.max(sunk, nearFloor, u.wall);
+  u.haze.value = THREE.MathUtils.lerp(1, 0.5, arrive * (1 - hide));
   whale.visible = u.haze.value < 0.995;
-  const gone = diving && sunk >= 1;
-  if (gone || Math.abs(p.x - cx) > 120 || u.t > 40) {
+  if ((u.t > 2 && hide > 0.99) || Math.abs(p.x - cx) > 130 || u.t > 40) {
     u.active = false;
+    u.wall = 0;
     u.wait = rand(SPERM_GAP[0], SPERM_GAP[1]);
   }
 }
