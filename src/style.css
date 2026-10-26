@@ -517,13 +517,28 @@ kbd {
   text-shadow: 0 2px 0 rgba(0, 0, 0, 0.4);
 }
 
+.coop-panel {
+  margin: 3vh auto 0;
+  padding: 1.6vh 1.8vw 1.2vh;
+  width: fit-content;
+  background: rgba(4, 18, 31, 0.45);
+  border: 0.15vw solid rgba(120, 200, 255, 0.25);
+  border-radius: 1.2vw;
+}
+.coop-title {
+  font-size: 1.35vw;
+  font-weight: 700;
+  color: #cdeeff;
+  letter-spacing: 0.04em;
+}
 .coop {
-  margin-top: 2.6vh;
+  margin-top: 1.2vh;
   display: flex;
   gap: 0.8vw;
   justify-content: center;
   align-items: center;
 }
+.coop-or { font-size: 1.05vw; color: #8fb4cf; }
 .coop-btn {
   padding: 0.7vh 1.6vw;
   font-family: inherit;
@@ -537,6 +552,7 @@ kbd {
   cursor: pointer;
 }
 .coop-btn:hover { filter: brightness(1.15); }
+.coop-btn:active { transform: translateY(2px); box-shadow: 0 0.1vw 0 #0d2a42; }
 .coop-code {
   width: 6.5vw;
   padding: 0.7vh 0.6vw;
@@ -552,23 +568,49 @@ kbd {
   border-radius: 0.6vw;
   outline: none;
 }
+.coop-code:focus { border-color: #ffd23a; }
 .coop-status {
   min-height: 2.2vh;
-  margin-top: 1.2vh;
-  font-size: 1.05vw;
-  color: #ffd23a;
+  margin-top: 1vh;
+  font-size: 0.95vw;
+  color: #9cc4de;
 }
+.coop-status.alert { color: #ffd23a; }
 .room-code {
   position: absolute;
   top: 1.4vh;
-  right: 1.4vw;
-  padding: 0.6vh 1vw;
-  font-size: 1.05vw;
+  right: calc(1.4vw + 11.5vw);
+  padding: 0.8vh 1vw;
+  font-size: 1vw;
   font-weight: 600;
   color: #cdeeff;
-  background: rgba(4, 18, 31, 0.55);
-  border-radius: 999px;
+  background: rgba(4, 18, 31, 0.6);
+  border-radius: 0.9vw;
+  pointer-events: auto;
   display: none;
 }
 .room-code.show { display: block; }
-.room-code b { color: #ffd23a; letter-spacing: 0.12em; }
+.room-head { display: flex; align-items: center; gap: 0.7vw; }
+.room-head b { color: #ffd23a; letter-spacing: 0.14em; }
+.room-copy {
+  padding: 0.3vh 0.7vw;
+  font-family: inherit;
+  font-size: 0.85vw;
+  font-weight: 700;
+  color: #e9f6ff;
+  background: #1b4f7a;
+  border: 0.12vw solid #2f7fb8;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.room-copy:hover { filter: brightness(1.2); }
+.room-players { margin-top: 0.6vh; display: flex; gap: 0.5vw; flex-wrap: wrap; }
+.room-player {
+  padding: 0.15vh 0.55vw;
+  font-size: 0.85vw;
+  font-weight: 700;
+  color: #06121c;
+  background: var(--c);
+  border-radius: 999px;
+}
+.room-player.me { box-shadow: 0 0 0 0.15vw #fff; }

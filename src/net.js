@@ -93,7 +93,7 @@ export class Net {
       this.game.localPlayer.netId = 1;
     });
     this.peer.on('connection', (conn) => this.acceptGuest(conn));
-    this.peer.on('error', (err) => this.onStatus(`Connection problem: ${err.type}`));
+    this.peer.on('error', (err) => this.onStatus(`Connection problem: ${err.type}`, true));
   }
 
   join(code) {
@@ -107,7 +107,8 @@ export class Net {
       this.conn.on('close', () => this.onStatus('The host left the game.'));
     });
     this.peer.on('error', (err) => {
-      this.onStatus(err.type === 'peer-unavailable' ? `No game found with code ${this.code}.` : `Connection problem: ${err.type}`);
+      this.onStatus(err.type === 'peer-unavailable' ? `No game found with code ${this.code}.` : `Connection problem: ${err.type}`,
+        true);
     });
   }
 
@@ -192,7 +193,7 @@ export class Net {
   onGuestMessage(msg) {
     const game = this.game;
     if (msg.t === 'full') {
-      this.onStatus('That game is full.');
+      this.onStatus('That game is full.', true);
     } else if (msg.t === 'welcome') {
       this.slot = msg.you;
       // Starting the game resets the local sub, so it comes first and the co-op setup goes on top.

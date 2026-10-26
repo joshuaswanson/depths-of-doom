@@ -104,12 +104,16 @@ export class Hud {
     this.overlay.innerHTML = `<div class="panel">
       ${LOGO}
       <button class="big-btn">Dive!</button>
-      <div class="coop">
-        <button class="coop-btn host">Host co-op</button>
-        <input class="coop-code" maxlength="4" placeholder="CODE" spellcheck="false" autocomplete="off">
-        <button class="coop-btn join">Join</button>
+      <div class="coop-panel">
+        <div class="coop-title">Dive with friends</div>
+        <div class="coop">
+          <button class="coop-btn host">Host a game</button>
+          <span class="coop-or">or</span>
+          <input class="coop-code" maxlength="4" placeholder="CODE" spellcheck="false" autocomplete="off">
+          <button class="coop-btn join">Join</button>
+        </div>
+        <div class="coop-status">Up to 4 subs. Share the code or the invite link.</div>
       </div>
-      <div class="coop-status"></div>
       <div class="controls">
         <div><kbd>WASD</kbd> / <kbd>Arrows</kbd> swim</div>
         <div><kbd>P</kbd> pause &nbsp; <kbd>M</kbd> mute</div>
@@ -127,14 +131,37 @@ export class Hud {
     });
   }
 
-  coopStatus(text) {
-    const box = this.overlay.querySelector('.coop-status');
-    if (box) box.textContent = text;
+  setPlayers(slots) {
+    const box = this.room.querySelector('.room-players');
+    if (!box) return;
+    const key = slots.join(',');
+    if (key === this.lastPlayers) return;
+    this.lastPlayers = key;
+    const colors = ['#ffd23a', '#38c8ff', '#5be37a', '#c77dff'];
+    box.innerHTML = slots.map((n) => `<span class="room-player${n === this.roomSlot ? ' me' : ''}" style="--c:${colors[n - 1]}">
+      P${n}${n === this.roomSlot ? ' (you)' : ''}</span>`).join('');
   }
 
+  coopStatus(text) {
+    const box = this.overlay.querySelector('.coop-status');
+    if (!box) return;
+    box.textContent = text;
+    box.classList.add('alert');
+  }
+
+  // The co-op badge: the room code, a button to copy an invite link, and a dot for each sub in the game.
   showRoom(code, slot) {
-    this.room.innerHTML = `Co-op room <b>${code}</b>${slot ? ` &middot; you are P${slot}` : ''}`;
+    this.roomCode = code;
+    this.room.innerHTML = `<div class="room-head">Room <b>${code}</b><button class="room-copy">Copy invite link</button></div>
+      <div class="room-players"></div>`;
     this.room.classList.add('show');
+    this.room.querySelector('.room-copy').addEventListener('click', (e) => {
+      const link = `${location.origin}${location.pathname}?join=${code}`;
+      navigator.clipboard?.writeText(link).then(() => this.showToast('Invite link copied!'),
+        () => this.showToast(link));
+      e.currentTarget.blur();
+    });
+    this.roomSlot = slot ?? 1;
     // A shared game can't be paused, so its pause button goes.
     this.pauseBtn.style.display = 'none';
   }

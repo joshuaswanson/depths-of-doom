@@ -165,7 +165,14 @@ function startCoop(connect) {
   if (net) return;
   unlockAudio();
   net = new Net(game, {
-    onStatus: (text) => (state === 'playing' ? hud.showToast(text) : hud.coopStatus(text)),
+    onStatus: (text, failed) => {
+      if (state === 'playing') hud.showToast(text);
+      else hud.coopStatus(text);
+      if (failed && state !== 'playing') {
+        net.close();
+        net = null;
+      }
+    },
     onReady: ({ code, slot }) => {
       startGame();
       hud.showRoom(code, slot);
@@ -207,7 +214,14 @@ async function boot() {
   cleanup();
   state = 'title';
   hud.showTitle();
-  if (new URLSearchParams(location.search).has('autostart')) startGame();
+  const params = new URLSearchParams(location.search);
+  if (params.has('autostart')) startGame();
+  // An invite link drops straight into the host's game.
+  const invite = params.get('join');
+  if (invite && /^[a-z]{4}$/i.test(invite)) {
+    hud.coopStatus(`Joining room ${invite.toUpperCase()}...`);
+    startCoop((n) => n.join(invite));
+  }
   window.__game = game;
   window.__debug = { scene, world, bloom, renderer, composer, effects, player, get pixelRatio() { return pixelRatio; },
     lockResolution(r) { fpsWindow.locked = true; pixelRatio = r; renderer.setPixelRatio(r); resize(); },
@@ -252,7 +266,10 @@ function tick(dt) {
   SHADER_TIME.value += dt;
   if (state === 'playing') {
     game.update(dt, scriptedInput ?? readInput());
-    net?.tick(dt);
+    if (net) {
+      net.tick(dt);
+      hud.setPlayers(game.players.map((p) => p.netId ?? 1).sort());
+    }
     if (game.over && game.overTimer <= 0) {
       state = 'gameover';
       hud.showGameOver({ wave: game.wave, kills: game.kills, coins: game.coinsTotal, parts: game.partCount });
