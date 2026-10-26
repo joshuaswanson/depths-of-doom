@@ -1395,7 +1395,8 @@ export class Game {
       if (e.glow) {
         const dark = this.world.dark;
         e.glow.halo.material.opacity = 0.45 + 0.25 * dark + Math.sin(e.t * 3) * 0.1;
-        e.glow.beam.material.uniforms.uStrength.value = 0.02 + 0.16 * dark;
+        // A faint red beam over blue water reads as purple, so it only shows once the water has gone dark.
+        e.glow.beam.material.uniforms.uStrength.value = 0.18 * THREE.MathUtils.smoothstep(dark, 0.5, 0.9);
       }
 
       if (e.flash > 0) {
