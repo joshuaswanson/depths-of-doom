@@ -261,7 +261,10 @@ function addSway(material) {
 
 // The humpback has no rig: a slow wave runs down its body from the chest to the flukes, which beat up and down the
 // most. The model is one unit long with its head along +X.
+// How far the whale's body curves sideways, set each frame by the world: into a C as it turns, a slow sway otherwise.
+export const WHALE_BEND = { value: 0 };
 const WHALE_GLSL = /* glsl */ `
+  transformed.z += uWhaleBend * transformed.x * transformed.x * 4.0;
   float whaleRear = smoothstep( 0.15, -0.5, transformed.x );
   // The head is at +X, so the phase grows with x to send the wave back toward the flukes.
   float whalePhase = uTime * 1.1 + transformed.x * 5.5;
@@ -275,8 +278,9 @@ function addWhaleSwim(material) {
   material.onBeforeCompile = (shader, renderer) => {
     previous?.call(material, shader, renderer);
     shader.uniforms.uTime = SHADER_TIME;
+    shader.uniforms.uWhaleBend = WHALE_BEND;
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nuniform float uTime;')
+      .replace('#include <common>', '#include <common>\nuniform float uTime;\nuniform float uWhaleBend;')
       .replace('#include <begin_vertex>', `#include <begin_vertex>\n${WHALE_GLSL}`);
   };
   material.customProgramCacheKey = () => `${key}-whale`;

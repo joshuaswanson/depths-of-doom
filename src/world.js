@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { animationsOf, findNode, plainMaterials, spawn, spawnSkinned, tint } from './assets.js';
 import { sfx } from './audio.js';
-import { CURRENT_MATERIALS, NOISE_GLSL } from './surface.js';
+import { CURRENT_MATERIALS, NOISE_GLSL, WHALE_BEND } from './surface.js';
 import {
   ABYSS_Y, CAMERA_Z, SHELF_Y, SURFACE_Y, TAN_HALF_FOV, WATER_GRADIENT_GLSL, darkness, depthShift,
 } from './water.js';
@@ -721,26 +721,54 @@ function settleAnchor(obj) {
   }
 }
 
-// Now and then a humpback glides slowly past far behind the action, a huge shape in the blue over the shelves. It
-// swims behind every layer of scenery (the far ruins end about 106 units back, and its flippers reach a quarter of its
-// length to either side), so nothing ever cuts through it.
+// A humpback roams the open water above the trenches, a huge hazy shape far behind the action. It swims behind every
+// layer of scenery (the far ruins end about 106 units back, and its flippers reach a quarter of its length to either
+// side), so nothing ever cuts through it. When the floor ahead starts rising toward a shelf it swings round in a wide,
+// banking half-circle, and if it drifts near the shallows it fades away into the water.
 const WHALE_LENGTH = 85;
-const WHALE_DEPTH = [-136, -130];
+const WHALE_Z = { near: -132, centre: -150 };
 const WHALE_SPEED = 4.2;
-const WHALE_GAP = [45, 75];
+const WHALE_TURN_RADIUS = 26;
+const WHALE_GAP = [35, 60];
+const WHALE_ROAM = 55;
+// How much of the water's haze it takes on: a soft veil in open water, all of it near the shallows.
+const WHALE_HAZE = 0.68;
+const deepBelow = (x) => SHELF_Y - floorY(x);
 
 function makeWhale() {
   const whale = spawn('humpback');
   whale.scale.setScalar(WHALE_LENGTH);
-  // So far back the water fog would swallow it; cap the haze so it reads as a giant shape in the blue.
+  whale.rotation.order = 'YXZ';
+  // So far back the water fog would swallow it, so it gets its own cap on the haze, raised to fade it out.
+  const haze = { value: 1 };
   whale.traverse((o) => {
     if (!o.isMesh) return;
-    o.material.defines = { ...o.material.defines, FOG_CAP: '0.55' };
-    o.material.needsUpdate = true;
+    const m = o.material;
+    const previous = m.onBeforeCompile;
+    const key = m.customProgramCacheKey?.() ?? m.name;
+    m.defines = { ...m.defines, FOG_CAP: 'uWhaleHaze' };
+    m.onBeforeCompile = (shader, renderer) => {
+      previous?.call(m, shader, renderer);
+      shader.uniforms.uWhaleHaze = haze;
+      shader.fragmentShader = `uniform float uWhaleHaze;\n${shader.fragmentShader}`;
+    };
+    m.customProgramCacheKey = () => `${key}-whalehaze`;
+    m.needsUpdate = true;
   });
   whale.visible = false;
-  whale.userData = { active: false, wait: 18, dir: 1, phase: rand(0, 6) };
+  whale.userData = { active: false, wait: 15, heading: 0, turn: 0, haze, fade: 0, phase: rand(0, 6) };
   return whale;
+}
+
+// A spot out of view over deep water to start from, swimming toward the camera's side.
+function whaleStart(cx) {
+  for (const side of Math.random() < 0.5 ? [-1, 1] : [1, -1]) {
+    for (const dx of [80, 100, 60]) {
+      const x = cx + side * dx;
+      if (deepBelow(x) > 60 && deepBelow(x - side * 40) > 40) return { x, dir: -side };
+    }
+  }
+  return null;
 }
 
 function updateWhale(whale, dt, t, cx, cy) {
@@ -748,20 +776,58 @@ function updateWhale(whale, dt, t, cx, cy) {
   if (!u.active) {
     u.wait -= dt;
     whale.visible = false;
-    // Only over the sunlit shelves, never down in the trenches.
-    if (u.wait > 0 || cy < -18) return;
+    if (u.wait > 0) return;
+    const start = deepBelow(cx) > 30 ? whaleStart(cx) : null;
+    if (!start) {
+      u.wait = 2;
+      return;
+    }
     u.active = true;
-    u.dir = Math.random() < 0.5 ? -1 : 1;
+    u.fade = 0;
+    u.heading = start.dir > 0 ? 0 : Math.PI;
+    u.turn = 0;
     // At this size it stands about 20 units tall; keep all of it below the surface.
-    u.baseY = rand(6, 12);
-    whale.position.set(cx - u.dir * 140, u.baseY, rand(WHALE_DEPTH[0], WHALE_DEPTH[1]));
+    u.baseY = rand(-26, 8);
+    whale.position.set(start.x, u.baseY, WHALE_Z.near - 3);
   }
   const p = whale.position;
-  p.x += u.dir * WHALE_SPEED * dt;
+  const ahead = p.x + Math.cos(u.heading) * 45;
+  // Begin a half-circle when the floor ahead rises toward a shelf, or once it has swum well past the player so it
+  // loiters in view, curving toward the middle of its depth band.
+  const leaving = (p.x - cx) * Math.cos(u.heading) > 0 && Math.abs(p.x - cx) > WHALE_ROAM;
+  if (u.turn === 0 && (deepBelow(ahead) < 45 || leaving)) {
+    const vx = Math.cos(u.heading);
+    const towardBack = p.z > WHALE_Z.centre;
+    u.turn = (towardBack ? -1 : 1) * Math.sign(vx || 1) * Math.PI;
+  }
+  if (u.turn !== 0) {
+    // Ease into and out of the turn: slowest at the start and end, widest sweep in the middle.
+    const progress = 1 - Math.abs(u.turn) / Math.PI;
+    const ease = 0.35 + 0.65 * Math.sin(Math.PI * progress);
+    const rate = (WHALE_SPEED / WHALE_TURN_RADIUS) * ease * 1.25 * dt * Math.sign(u.turn);
+    const step = Math.abs(rate) > Math.abs(u.turn) ? u.turn : rate;
+    u.heading += step;
+    u.turn -= step;
+    if (Math.abs(u.turn) < 1e-4) u.turn = 0;
+    u.bendTarget = Math.sign(step) * 0.09 * ease;
+  } else {
+    u.bendTarget = 0;
+  }
+  // Curve the body into the turn (positive bends toward the whale's right), easing in and out, over a slow sway.
+  u.bend = THREE.MathUtils.lerp(u.bend ?? 0, u.bendTarget, 1 - Math.exp(-dt * 0.6));
+  WHALE_BEND.value = u.bend + Math.sin(t * 0.45 + u.phase) * 0.012;
+  p.x += Math.cos(u.heading) * WHALE_SPEED * dt;
+  p.z = Math.min(WHALE_Z.near, p.z + Math.sin(u.heading) * WHALE_SPEED * dt);
   p.y = u.baseY + Math.sin(t * 0.25 + u.phase) * 1.2;
-  whale.rotation.set(0, u.dir > 0 ? 0 : Math.PI, Math.cos(t * 0.25 + u.phase) * 0.06 * u.dir);
-  whale.visible = true;
-  if (Math.abs(p.x - cx) > 150 || cy < -40) {
+  const bank = u.turn === 0 ? 0 : -Math.sign(u.turn) * 0.16;
+  whale.rotation.set(THREE.MathUtils.lerp(whale.rotation.x, bank, 1 - Math.exp(-dt * 0.5)), -u.heading,
+    Math.cos(t * 0.25 + u.phase) * 0.05);
+  // Fade in on arrival, and out into the haze as the floor below rises toward the shallows.
+  u.fade = Math.min(1, u.fade + dt / 4);
+  const shallow = 1 - THREE.MathUtils.smoothstep(deepBelow(p.x), 25, 60);
+  u.haze.value = THREE.MathUtils.lerp(1, WHALE_HAZE, u.fade * (1 - shallow));
+  whale.visible = u.haze.value < 0.995;
+  if (Math.abs(p.x - cx) > 170 || shallow > 0.98) {
     u.active = false;
     u.wait = rand(WHALE_GAP[0], WHALE_GAP[1]);
   }
