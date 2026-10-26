@@ -87,10 +87,14 @@ def staghorn(part, P, matrix, rng, body="coral_pink", tip="coral_pink_tip", size
     def grow(start, direction, length, radius, level):
         end = start + direction * length
         mid = (start + end) / 2 + Vector((rng.uniform(-0.05, 0.05), rng.uniform(-0.05, 0.05), 0))
-        part.tube(P[body], [start, mid, end], radius=lambda t: radius * (1 - 0.35 * t), segs=6, matrix=matrix)
+        # Rings along the whole arm, so the baked shading follows the arm itself and not just its buried ends.
+        arm = [start, (start + mid) / 2, mid, (mid + end) / 2, end]
+        part.tube(P[body], arm, radius=lambda t: radius * (1 - 0.35 * t), segs=6, matrix=matrix)
         if level == 0:
             part.sphere(P[tip], matrix=matrix @ trs(end, scale=radius * 0.85), segs=6, rings=4)
             return
+        # A rounded knuckle where the arm forks, wide enough to swallow the flat ends of the tubes meeting there.
+        part.sphere(P[body], matrix=matrix @ trs(end, scale=radius * 0.78), segs=10, rings=7)
         for _ in range(2 if level < depth else 3):
             d = direction + Vector((rng.uniform(-0.9, 0.9), rng.uniform(-0.5, 0.5), rng.uniform(0.2, 0.7)))
             grow(end, d.normalized(), length * rng.uniform(0.62, 0.8), radius * 0.72, level - 1)
@@ -117,10 +121,12 @@ def sea_fan(part, P, matrix, rng, size=1.0, color="coral_purple"):
     """A flat fan of fine branches spreading in one plane."""
     def grow(start, angle, length, radius, level):
         end = start + Vector((math.cos(angle) * length, 0, math.sin(angle) * length))
-        part.tube(P[color], [start, (start + end) / 2 + Vector((0, rng.uniform(-0.02, 0.02), 0)), end],
+        mid = (start + end) / 2 + Vector((0, rng.uniform(-0.02, 0.02), 0))
+        part.tube(P[color], [start, (start + mid) / 2, mid, (mid + end) / 2, end],
                   radius=lambda t: radius * (1 - 0.3 * t), segs=4, matrix=matrix)
         if level == 0:
             return
+        part.sphere(P[color], matrix=matrix @ trs(end, scale=radius * 0.8), segs=8, rings=6)
         for spread in (-0.35, 0.35):
             grow(end, angle + spread + rng.uniform(-0.12, 0.12), length * 0.78, radius * 0.75, level - 1)
 

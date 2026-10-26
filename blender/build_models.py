@@ -46,8 +46,9 @@ ASSETS = {
 AO_DISTANCE = {"kelp": 0.3, "reef": 0.6, "sponge": 0.4, "anemone": 0.3, "wreck": 1.2, "deep": 0.5, "ruin": 0.7, "rock": 1.2, "coral": 0.5, "seaweed": 0.8, "anchor": 1.0, "chain": 0.3, "enemy": 0.8}
 
 
-# Stacked masonry occludes itself heavily; keep its walls from going black.
-AO_FLOOR = {"ruin": 0.5, "rock": 0.35}
+# Stacked masonry occludes itself heavily, and branching coral buries its joints inside the next branch; keep
+# both from going black.
+AO_FLOOR = {"ruin": 0.5, "rock": 0.35, "coral": 0.5, "reef": 0.5, "sponge": 0.5, "anemone": 0.5}
 
 
 def parse_args():
