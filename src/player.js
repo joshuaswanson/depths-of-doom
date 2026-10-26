@@ -547,12 +547,32 @@ export class Player {
     return { x: lx, y: ly };
   }
 
-  // The hull capsule itself, nose to tail, used for sub-to-sub contact; bolted-on parts may overlap a little.
+  // Half-length and half-height of the hull's ellipse as seen from the camera, turning included. Sub-to-sub contact
+  // uses the hull alone; bolted-on parts may overlap a little.
+  get bodyHalf() {
+    const turn = Math.abs(Math.cos(this.yaw));
+    const hy = 1.0 * this.fat.yz * RIG_SCALE;
+    return { hx: Math.max(2.15 * this.fat.x * RIG_SCALE * turn, hy), hy };
+  }
+
+  // Points around the hull's outline in world space, for testing it against another hull.
+  bodyOutline(count = 12) {
+    const { hx, hy } = this.bodyHalf;
+    const c = this.group.position;
+    const a = this.screenTilt;
+    const pts = [];
+    for (let i = 0; i < count; i++) {
+      const t = (i / count) * Math.PI * 2;
+      const x = Math.cos(t) * hx;
+      const y = Math.sin(t) * hy;
+      pts.push({ x: c.x + x * Math.cos(a) - y * Math.sin(a), y: c.y + x * Math.sin(a) + y * Math.cos(a) });
+    }
+    return pts;
+  }
+
   bodyTest(x, y, r = 0) {
     const p = this.toLocal(x, y);
-    const turn = Math.abs(Math.cos(this.yaw));
-    const hx = Math.max(2.15 * this.fat.x * RIG_SCALE * turn, 1.0 * this.fat.yz * RIG_SCALE);
-    const hy = 1.0 * this.fat.yz * RIG_SCALE;
+    const { hx, hy } = this.bodyHalf;
     const dx = p.x / (hx + r);
     const dy = p.y / (hy + r);
     return dx * dx + dy * dy < 1;

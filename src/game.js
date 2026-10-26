@@ -1653,17 +1653,6 @@ export class Game {
     sfx.bump(strength);
   }
 
-  // Points along a sub's hull: nose, tail, the stretch between, and the tower.
-  subHullPoints(sub) {
-    const c = sub.center;
-    const f = sub.forward;
-    const ext = sub.extents;
-    const along = ext.hx * 0.72;
-    return [{ x: c.x, y: c.y }, { x: c.x + f.x * along, y: c.y + f.y * along }, { x: c.x - f.x * along, y: c.y - f.y * along },
-      { x: c.x + f.x * along * 0.5, y: c.y + f.y * along * 0.5 }, { x: c.x - f.x * along * 0.5, y: c.y - f.y * along * 0.5 },
-      { x: c.x - f.y * ext.hy, y: c.y + f.x * ext.hy }];
-  }
-
   // Friendly subs clank off each other just like they do off enemies, but nobody is ever stunned. Each machine only
   // moves its own sub; the other player's machine bounces theirs.
   bumpFriends() {
@@ -1672,10 +1661,9 @@ export class Game {
     for (const other of this.remotePlayers) {
       if (!other.alive || !other.group.visible) continue;
       other.bumpCooldown = Math.max(0, (other.bumpCooldown ?? 0) - this.lastDt);
-      const touching = () => {
-        const r = other.extents.hy * 0.8;
-        return this.subHullPoints(other).find((q) => pl.bodyTest(q.x, q.y, r)) ?? null;
-      };
+      // The hulls touch once a point on either outline crosses into the other hull.
+      const touching = () => other.bodyOutline().find((q) => pl.bodyTest(q.x, q.y))
+        ?? pl.bodyOutline().find((q) => other.bodyTest(q.x, q.y)) ?? null;
       const contact = touching();
       if (!contact) continue;
       const pc = pl.center;
