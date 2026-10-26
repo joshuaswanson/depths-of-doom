@@ -8,8 +8,9 @@ import {
 } from './water.js';
 
 const TILE_W = 80;
-const TILE_D = 175;
-const TILE_Z0 = 16;
+// Tiles run from just behind the camera to the far haze, so looking along a cliff from a trench never shows an edge.
+const TILE_D = 183;
+const TILE_Z0 = 24;
 
 const rand = (a, b) => a + Math.random() * (b - a);
 const pick = (list) => list[Math.floor(Math.random() * list.length)];
@@ -199,7 +200,7 @@ function baseDetail(x, z) {
   let h = 0.35 * Math.sin(x * 0.157 + z * 0.21) + 0.25 * Math.sin(x * 0.39 - z * 0.37 + 1.3)
     + 0.12 * Math.sin(x * 0.86 + z * 0.9);
   h *= 1 + depth * 0.03;
-  if (z > 4) h += (z - 4) * 0.12;
+  if (z > 4) h += (Math.min(z, 16) - 4) * 0.12;
   return h;
 }
 
@@ -377,7 +378,7 @@ const REEF_LAGOON = new THREE.Color('#86e6f2');
 const DEEP_COLORS = ['#1a2430', '#252f3d', '#2d3644', '#151b26'].map((c) => new THREE.Color(c));
 
 function makeSeabedTile(material) {
-  const geo = new THREE.PlaneGeometry(TILE_W, TILE_D, 80, 90);
+  const geo = new THREE.PlaneGeometry(TILE_W, TILE_D, 80, 94);
   geo.rotateX(-Math.PI / 2);
   geo.translate(0, 0, TILE_Z0 - TILE_D / 2);
   geo.userData.baseX = Float32Array.from({ length: geo.attributes.position.count }, (_, i) => geo.attributes.position.getX(i));
