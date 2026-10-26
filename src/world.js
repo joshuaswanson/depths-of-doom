@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { animationsOf, findNode, plainMaterials, spawn, spawnSkinned, tint } from './assets.js';
 import { sfx } from './audio.js';
-import { CURRENT_MATERIALS, NOISE_GLSL, SHADER_TIME, WHALE_BEND, addTailBeat, addWaterline } from './surface.js';
+import { CURRENT_MATERIALS, NOISE_GLSL, SHADER_TIME, WHALE_BEND, addTailBeat, addWaterline, addWingFlap } from './surface.js';
 import {
   ABYSS_Y, CAMERA_Z, SHELF_Y, SURFACE_Y, TAN_HALF_FOV, WATER_GRADIENT_GLSL, darkness, depthShift,
 } from './water.js';
@@ -1321,6 +1321,97 @@ function updateMarlin(fish, dt, t, cx, cy, halfW, sub) {
   }
 }
 
+// Reef mantas: one or two circle slowly above the coral in the middle of a shelf, the way they hang around a
+// cleaning station, well behind the play area. They belong to the reef and are there whenever the view reaches it.
+const MANTA_LENGTH = 8;
+const MANTA_SPEED = 2.4;
+const MANTA_RADIUS = [6, 9];
+const MANTA_Z = -19;
+const MANTA_LIFT = [10, 13];
+// How far out from the camera to look for the middle of a reef.
+const MANTA_SEARCH = 120;
+
+function makeMantas(scene) {
+  return [0, 1].map(() => {
+    const ray = spawn('manta');
+    ray.scale.setScalar(MANTA_LENGTH);
+    ray.rotation.order = 'YXZ';
+    const controls = { phase: { value: 0 }, flap: { value: 1 } };
+    ray.traverse((o) => {
+      if (!o.isMesh) return;
+      o.material = o.material.clone();
+      addWingFlap(o.material, controls);
+      addWaterline(o.material, { ripple: 0.85, topOnly: true });
+    });
+    ray.visible = false;
+    ray.userData = { controls };
+    scene.add(ray);
+    return ray;
+  });
+}
+
+// The middle of the nearest reef to `cx`, where the shelf is furthest from both cliffs, or null if none is close.
+function nearestReef(cx) {
+  let best = null;
+  for (let x = cx - MANTA_SEARCH; x <= cx + MANTA_SEARCH; x += 4) {
+    const c = shelfCentre(x);
+    if (reefAt(x) < 0.6) continue;
+    const score = c - Math.abs(x - cx) * 0.001;
+    if (!best || score > best.score) best = { x, score };
+  }
+  return best && best.x;
+}
+
+function updateMantas(world, dt, t, cx, cy, aspect) {
+  const school = world.mantas;
+  const u = school.userData ?? (school.userData = { anchor: null, check: 0 });
+  const reach = halfWidthAt(MANTA_Z - MANTA_RADIUS[1], aspect) + MANTA_RADIUS[1] + 6;
+  u.check -= dt;
+  if (u.anchor !== null && (Math.abs(u.anchor - cx) > reach + 40 || cy < SHELF_Y - 30)) {
+    u.anchor = null;
+    for (const ray of school) ray.visible = false;
+  }
+  if (u.anchor === null) {
+    if (u.check > 0 || cy < SHELF_Y - 30) return;
+    u.check = 1;
+    const anchor = nearestReef(cx);
+    // Settle in only while the reef's middle is off screen, so the rays never pop into view.
+    if (anchor === null || (Math.abs(anchor - cx) < reach && world.time > 1)) return;
+    u.anchor = anchor;
+    const count = Math.random() < 0.45 ? 2 : 1;
+    const dir = Math.random() < 0.5 ? -1 : 1;
+    school.forEach((ray, i) => {
+      const r = ray.userData;
+      r.active = i < count;
+      ray.visible = r.active;
+      r.radius = rand(MANTA_RADIUS[0], MANTA_RADIUS[1]);
+      r.angle = rand(0, Math.PI * 2) + i * Math.PI;
+      r.dir = dir;
+      r.lift = rand(MANTA_LIFT[0], MANTA_LIFT[1]);
+      r.seed = rand(0, 100);
+      r.z = MANTA_Z + rand(-2, 2);
+    });
+  }
+  const floor = seabedAt(u.anchor, MANTA_Z);
+  for (const ray of school) {
+    const r = ray.userData;
+    if (!r.active) continue;
+    const speed = MANTA_SPEED * (1 + 0.15 * Math.sin(t * 0.3 + r.seed));
+    r.angle += r.dir * (speed / r.radius) * dt;
+    const p = ray.position;
+    p.x = u.anchor + Math.cos(r.angle) * r.radius;
+    p.z = r.z + Math.sin(r.angle) * r.radius;
+    p.y = floor + r.lift + 0.8 * Math.sin(t * 0.4 + r.seed);
+    // Heading along the circle, banked gently into the turn, nose dipping and rising with the glide.
+    const yaw = Math.atan2(-Math.cos(r.angle) * r.dir, -Math.sin(r.angle) * r.dir);
+    ray.rotation.set(-r.dir * 0.22, yaw, 0.06 * Math.cos(t * 0.4 + r.seed));
+    // Long slow wingbeats with a glide between bursts.
+    const glide = 0.55 + 0.45 * Math.sin(t * 0.21 + r.seed);
+    r.controls.phase.value += (1.5 + glide * 0.6) * dt;
+    r.controls.flap.value = glide;
+  }
+}
+
 // Jellies gather in one glowing layer in the dark trenches, with a few stragglers drifting deeper.
 const JELLY_CEILING = 96;
 const JELLY_LAYER = [-122, -100];
@@ -1523,6 +1614,7 @@ export class World {
     scene.add(this.spermWhale);
     this.dolphins = makeDolphins(scene);
     this.marlin = makeMarlin(scene);
+    this.mantas = makeMantas(scene);
     this.anglers = Array.from({ length: 3 }, (_, i) => {
       const a = makeAngler();
       a.position.set(-36 + i * 36 + rand(-5, 5), -200, rand(-20, -4));
@@ -1809,6 +1901,7 @@ export class World {
     updateSpermWhale(this.spermWhale, dt, cx, cy, this.whale, this.aspect);
     updateDolphins(this, dt, this.time, cx, cy, halfWidthAt(-10, this.aspect), sub);
     updateMarlin(this.marlin, dt, this.time, cx, cy, halfWidthAt(-18, this.aspect), sub);
+    updateMantas(this, dt, this.time, cx, cy, this.aspect);
     const t = this.time;
     this.uniforms.uTime.value = t;
     const shift = depthShift(cy);

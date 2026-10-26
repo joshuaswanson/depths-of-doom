@@ -27,6 +27,7 @@ const SIMPLIFY = {
   anemone_patch: [0.6, 0.004],
   wreck_sub: [0.6, 0.004],
   deep_jelly: [0.7, 0.003],
+  manta: [0.35, 0.003],
 };
 
 const io = new NodeIO()

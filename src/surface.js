@@ -325,6 +325,30 @@ export function addTailBeat(material, { rate = 6, amount = 0.06, controls = null
   material.needsUpdate = true;
 }
 
+// Rays fly on their wings: a slow wave rolls out from the body to each wingtip, so the tips rise and fall most and a
+// beat behind, the body heaves gently against them, and the thin tail trails in a lazy sway. The model's wings run
+// along z with tips at about 0.4, its head toward +x. `controls.phase` drives the stroke and `controls.flap` its depth.
+export function addWingFlap(material, controls) {
+  const previous = material.onBeforeCompile;
+  const key = material.customProgramCacheKey?.() ?? material.name;
+  material.onBeforeCompile = (shader, renderer) => {
+    previous?.call(material, shader, renderer);
+    shader.uniforms.uFlapPhase = controls.phase;
+    shader.uniforms.uFlap = controls.flap;
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nuniform float uFlapPhase;\nuniform float uFlap;')
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+        float flapSpan = abs( transformed.z );
+        float flapReach = smoothstep( 0.04, 0.4, flapSpan ) * flapSpan / 0.4;
+        transformed.y += sin( uFlapPhase - flapSpan * 4.0 ) * uFlap * 0.15 * flapReach;
+        transformed.y -= sin( uFlapPhase ) * uFlap * 0.012;
+        float flapTail = smoothstep( -0.15, -0.5, transformed.x );
+        transformed.z += sin( uFlapPhase * 0.5 - transformed.x * 6.0 ) * 0.025 * flapTail;`);
+  };
+  material.customProgramCacheKey = () => `${key}-wings`;
+  material.needsUpdate = true;
+}
+
 // Kelp and anemone tentacles bend in the current: still at the root, swaying more with height.
 export const CURRENT_MATERIALS = new Set(['kelp_stipe', 'kelp_blade', 'kelp_bladder', 'anemone_tentacle', 'anemone_tip']);
 const CURRENT_GLSL = /* glsl */ `
