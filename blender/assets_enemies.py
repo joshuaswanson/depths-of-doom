@@ -45,14 +45,14 @@ class SharkBody(Body):
 def enemy_tail(part, P, body, x_join, x_end, r_join, accent="enemy_red"):
     part.lathe(P["enemy_plate"], [(x_end + 0.04, 0.0), (x_end, r_join * 0.38), (x_join - 0.2, r_join * 0.8),
                                   (x_join, r_join)], segs=36)
-    span = x_end - x_join
     # The fins grow out of the tapering hull itself, ahead of the tail cone, and sweep back to points past it.
+    span = (x_end - x_join) * 0.8
     lead = span * 0.45
+    back = x_join + span - lead * 0.5
     fin = [(x_join - lead, 0.2 * r_join), (x_join + span * 0.75 - lead * 0.5, 1.75 * r_join),
-           (x_end + span * 0.35 - lead * 0.5, 1.95 * r_join), (x_end + span * 0.05 - lead * 0.5, 1.2 * r_join),
-           (x_end - lead * 0.5, 0.2 * r_join)]
+           (back + span * 0.35, 1.95 * r_join), (back + span * 0.05, 1.2 * r_join), (back, 0.2 * r_join)]
     tip = [(x_join + span * 0.68 - lead * 0.5, 1.55 * r_join), (x_join + span * 0.76 - lead * 0.5, 1.78 * r_join),
-           (x_end + span * 0.36 - lead * 0.5, 1.97 * r_join), (x_end + span * 0.22 - lead * 0.5, 1.6 * r_join)]
+           (back + span * 0.36, 1.97 * r_join), (back + span * 0.22, 1.6 * r_join)]
     for sz in (1, -1):
         for rot in ((math.pi / 2, 0, 0), (0, 0, 0)):
             part.extrude(P["enemy_hull"], [(x, z * sz) for x, z in fin], depth=0.1, rot=rot, bevel=0.03)
