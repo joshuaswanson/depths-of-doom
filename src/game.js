@@ -33,15 +33,15 @@ const COMBAT_HOLD = 2;
 const DEEP_COMBAT_LEAD = 4;
 // Breathing room between waves, long enough for the calm music to come back.
 const WAVE_BREAK = 25;
-// Where an enemy can carry its missile drum, in model space (the nose points to -X): on top in front of the tower,
-// slung underneath fore or aft, or on a flank behind the portholes. A skull is painted on both flanks, so
+// Where an enemy can carry its missile drum, in model space (the nose points to -X): slung underneath fore or aft,
+// or on a flank behind the portholes. The conning tower sits too far forward to leave room on top. A skull is painted on both flanks, so
 // skulled subs never get a flank spot. One spot is picked at random per sub. The drum is drawn at the player's size.
 const POD_MOUNTS = {
-  scout: { spots: [{ x: -0.92, y: 0.32 }, { x: -0.5, y: -0.4, under: true },
+  scout: { spots: [{ x: -0.5, y: -0.4, under: true },
     { x: 0.42, y: -0.38, under: true }, { x: 0.45, z: 0.42, flank: true }] },
-  gunner: { spots: [{ x: -1.2, y: 0.5 }, { x: -0.75, y: -0.56, under: true },
+  gunner: { spots: [{ x: -0.75, y: -0.56, under: true },
     { x: 0.55, y: -0.54, under: true }, { x: 0.66, z: 0.57, flank: true }] },
-  boss: { spots: [{ x: -1.8, y: 1.0 }, { x: -1.3, y: -1.0, under: true },
+  boss: { spots: [{ x: -1.3, y: -1.0, under: true },
     { x: 0.9, y: -0.97, under: true }] },
 };
 const POD_COLORS = { blue: '#2c2e36', blue_dark: '#3a3d47', yellow: '#b8262b', red: '#ff3b30' };
