@@ -11,10 +11,10 @@ def enemy_tail(part, P, body, x_join, x_end, r_join, accent="enemy_red"):
     part.lathe(P["enemy_plate"], [(x_end + 0.04, 0.0), (x_end, r_join * 0.38), (x_join - 0.2, r_join * 0.8),
                                   (x_join, r_join)], segs=36)
     span = x_end - x_join
-    fin = [(x_join + span * 0.1, 0.2 * r_join), (x_join + span * 0.55, 1.45 * r_join),
-           (x_end + span * 0.12, 1.5 * r_join), (x_end + 0.02, 0.2 * r_join)]
-    tip = [(x_join + span * 0.48, 1.3 * r_join), (x_join + span * 0.56, 1.5 * r_join),
-           (x_end + span * 0.14, 1.55 * r_join), (x_end + span * 0.1, 1.3 * r_join)]
+    fin = [(x_join + span * 0.05, 0.2 * r_join), (x_join + span * 0.75, 1.75 * r_join),
+           (x_end + span * 0.35, 1.95 * r_join), (x_end + span * 0.05, 1.2 * r_join), (x_end + 0.02, 0.2 * r_join)]
+    tip = [(x_join + span * 0.68, 1.55 * r_join), (x_join + span * 0.76, 1.78 * r_join),
+           (x_end + span * 0.36, 1.97 * r_join), (x_end + span * 0.22, 1.6 * r_join)]
     for sz in (1, -1):
         for rot in ((math.pi / 2, 0, 0), (0, 0, 0)):
             part.extrude(P["enemy_hull"], [(x, z * sz) for x, z in fin], depth=0.1, rot=rot, bevel=0.03)
@@ -82,14 +82,18 @@ def enemy_sub(P, name="enemy_sub", length=3.4, radius=0.85, tower=True, skull_ma
         tx = -h * 0.05
         tz = b.r(tx)
         t_h = 0.75 * radius
-        part.cylinder(P["enemy_hull"], loc=(tx, 0, tz + t_h * 0.35), radius=0.42 * radius, depth=t_h,
-                      scale=(1.35, 0.8, 1), segs=32, bevel=0.06)
-        part.cylinder(P["enemy_plate"], loc=(tx, 0, tz + t_h * 0.82), radius=0.44 * radius, depth=0.08,
-                      scale=(1.35, 0.8, 1), segs=32)
+        # A swept-back conning tower like a shark's dorsal fin, its leading edge raked toward the tail.
+        r = radius
+        tower = [(tx - 0.3 * r, tz - 0.12), (tx + 0.18 * r, tz + t_h * 1.02), (tx + 0.55 * r, tz + t_h * 1.08),
+                 (tx + 1.1 * r, tz + t_h * 0.38), (tx + 1.05 * r, tz - 0.12)]
+        part.extrude(P["enemy_hull"], tower, depth=0.5 * r, rot=(math.pi / 2, 0, 0), bevel=0.05)
+        cap = [(tx + 0.12 * r, tz + t_h * 0.95), (tx + 0.18 * r, tz + t_h * 1.08), (tx + 0.56 * r, tz + t_h * 1.15),
+               (tx + 0.62 * r, tz + t_h * 1.0)]
+        part.extrude(P["enemy_red"], cap, depth=0.54 * r, rot=(math.pi / 2, 0, 0), bevel=0.03)
         for side in (-1, 1):
-            for dx in (-0.22, 0.05, 0.32):
-                red_light(part, P, frame(Vector((tx + dx * radius, 0.33 * radius * side, tz + t_h * 0.45)),
-                                         Vector((0, side, 0))), radius=0.065 * radius)
+            for dx in (0.0, 0.28, 0.56):
+                red_light(part, P, frame(Vector((tx + dx * r, 0.255 * r * side, tz + t_h * 0.5)),
+                                         Vector((0, side, 0))), radius=0.06 * r)
         def grow(dx, dz):
             """Periscope point, scaled up from where the periscope leaves the tower."""
             return (tx + 0.15 + (dx - 0.15) * scope, 0, tz + t_h * (0.8 + (dz - 0.8) * scope))
@@ -118,6 +122,29 @@ def enemy_sub(P, name="enemy_sub", length=3.4, radius=0.85, tower=True, skull_ma
                           rot=(0, math.pi / 2, 0), segs=12)
             part.cylinder(P["enemy_light"], loc=(tx - 0.76, y, tz + 0.25), radius=0.03, depth=0.01,
                           rot=(0, math.pi / 2, 0), segs=10)
+
+    # A heavy armoured brow hooded down over the viewport, slanting into a frown at the centre.
+    rn = b.r(nose_x)
+    for side in (-1, 1):
+        brow = [(nose_x + 0.75 * rn, rn * 1.42), (nose_x - 0.34 * rn, rn * 1.1), (nose_x - 0.32 * rn, rn * 0.9),
+                (nose_x + 0.75 * rn, rn * 1.16)]
+        part.extrude(P["enemy_plate"], brow, depth=0.7 * rn, loc=(0, side * 0.4 * rn, 0),
+                     rot=(math.pi / 2 + side * 0.35, 0, 0), bevel=0.03)
+    # A serrated ram under the nose, like a jaw full of teeth.
+    jaw = [(nose_x + 1.1 * rn, -rn * 1.0)]
+    teeth = 6
+    for i in range(teeth):
+        x0 = nose_x + 1.1 * rn - (1.55 * rn) * i / teeth
+        x1 = nose_x + 1.1 * rn - (1.55 * rn) * (i + 1) / teeth
+        jaw += [((x0 + x1) / 2, -rn * (1.42 + 0.04 * i)), (x1, -rn * 1.16)]
+    jaw += [(nose_x - 0.47 * rn, -rn * 1.16), (nose_x - 0.4 * rn, -rn * 0.98), (nose_x + 1.1 * rn, -rn * 0.86)]
+    part.extrude(P["steel"], jaw, depth=0.24 * rn, rot=(math.pi / 2, 0, 0), bevel=0.015)
+    # Swept-back hydroplanes low on the flanks, like a shark's pectoral fins.
+    for side in (-1, 1):
+        x0 = -h * 0.42
+        fin = [(x0, 0), (x0 + 0.85 * radius, 0.75 * radius), (x0 + 1.05 * radius, 0.68 * radius), (x0 + 0.7 * radius, 0)]
+        part.extrude(P["gunmetal"], [(x, y * side) for x, y in fin], depth=0.07 * radius,
+                     loc=(0, side * 0.92 * radius, -0.32 * radius), rot=(0.18 * side, 0, 0), bevel=0.02)
 
     k = radius / 0.85
     seam(part, P["enemy_plate"], b, -h * 0.62, h * 0.7, -math.pi / 2, radius=0.016 * k, rivets=14,
