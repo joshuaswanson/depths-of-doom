@@ -46,10 +46,13 @@ def enemy_tail(part, P, body, x_join, x_end, r_join, accent="enemy_red"):
     part.lathe(P["enemy_plate"], [(x_end + 0.04, 0.0), (x_end, r_join * 0.38), (x_join - 0.2, r_join * 0.8),
                                   (x_join, r_join)], segs=36)
     span = x_end - x_join
-    fin = [(x_join + span * 0.05, 0.2 * r_join), (x_join + span * 0.75, 1.75 * r_join),
-           (x_end + span * 0.35, 1.95 * r_join), (x_end + span * 0.05, 1.2 * r_join), (x_end + 0.02, 0.2 * r_join)]
-    tip = [(x_join + span * 0.68, 1.55 * r_join), (x_join + span * 0.76, 1.78 * r_join),
-           (x_end + span * 0.36, 1.97 * r_join), (x_end + span * 0.22, 1.6 * r_join)]
+    # The fins grow out of the tapering hull itself, ahead of the tail cone, and sweep back to points past it.
+    lead = span * 0.45
+    fin = [(x_join - lead, 0.2 * r_join), (x_join + span * 0.75 - lead * 0.5, 1.75 * r_join),
+           (x_end + span * 0.35 - lead * 0.5, 1.95 * r_join), (x_end + span * 0.05 - lead * 0.5, 1.2 * r_join),
+           (x_end - lead * 0.5, 0.2 * r_join)]
+    tip = [(x_join + span * 0.68 - lead * 0.5, 1.55 * r_join), (x_join + span * 0.76 - lead * 0.5, 1.78 * r_join),
+           (x_end + span * 0.36 - lead * 0.5, 1.97 * r_join), (x_end + span * 0.22 - lead * 0.5, 1.6 * r_join)]
     for sz in (1, -1):
         for rot in ((math.pi / 2, 0, 0), (0, 0, 0)):
             part.extrude(P["enemy_hull"], [(x, z * sz) for x, z in fin], depth=0.1, rot=rot, bevel=0.03)
@@ -122,8 +125,8 @@ def enemy_sub(P, name="enemy_sub", length=3.4, radius=0.85, tower=True, skull_ma
         tower = [(tx - 0.3 * r, tz - 0.12), (tx + 0.18 * r, tz + t_h * 1.02), (tx + 0.55 * r, tz + t_h * 1.08),
                  (tx + 1.1 * r, tz + t_h * 0.38), (tx + 1.05 * r, tz - 0.12)]
         part.extrude(P["enemy_hull"], tower, depth=0.5 * r, rot=(math.pi / 2, 0, 0), bevel=0.05)
-        cap = [(tx + 0.12 * r, tz + t_h * 0.95), (tx + 0.18 * r, tz + t_h * 1.08), (tx + 0.56 * r, tz + t_h * 1.15),
-               (tx + 0.62 * r, tz + t_h * 1.0)]
+        cap = [(tx - 0.04 * r, tz + t_h * 0.95), (tx + 0.02 * r, tz + t_h * 1.08), (tx + 0.4 * r, tz + t_h * 1.15),
+               (tx + 0.46 * r, tz + t_h * 1.0)]
         part.extrude(P["enemy_red"], cap, depth=0.54 * r, rot=(math.pi / 2, 0, 0), bevel=0.03)
         for side in (-1, 1):
             for dx in (0.0, 0.28, 0.56):
