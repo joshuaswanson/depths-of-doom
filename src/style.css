@@ -243,12 +243,17 @@ html, body {
   inset: 0;
   z-index: 4;
   pointer-events: none;
-  animation: hints 7.4s ease-in-out forwards;
+  animation: hints-in 0.4s ease-out;
+  transition: opacity 0.8s ease-in;
 }
+.hints.leaving { opacity: 0; }
 .hint {
   position: absolute;
   top: var(--y);
+  left: calc(var(--x) + var(--gap));
   transform: translateY(-50%);
+  display: grid;
+  gap: 1.6vh;
   font-size: 1.4vw;
   font-weight: 700;
   color: #fff;
@@ -256,8 +261,8 @@ html, body {
   paint-order: stroke fill;
   text-shadow: 0 0.2vw 0 #0d1d33;
 }
-.hint-left { right: calc(100% - var(--x) + var(--gap)); text-align: center; }
-.hint-right { left: calc(var(--x) + var(--gap)); display: grid; gap: 0.8vh; }
+.hint-swim { text-align: center; }
+.hint-more { display: grid; gap: 0.8vh; }
 .hint-keys { display: flex; align-items: center; gap: 0.9vw; }
 .hint-or { font-size: 1.1vw; color: #cfe6f7; }
 .hint-label { margin-top: 0.6vh; }
@@ -272,11 +277,8 @@ html, body {
 .key-grid .k-left { grid-area: 2 / 1; }
 .key-grid .k-down { grid-area: 2 / 2; }
 .key-grid .k-right { grid-area: 2 / 3; }
-@keyframes hints {
-  0% { opacity: 0; }
-  5% { opacity: 1; }
-  73% { opacity: 1; }
-  100% { opacity: 0; }
+@keyframes hints-in {
+  from { opacity: 0; }
 }
 
 .upgrade-bar {

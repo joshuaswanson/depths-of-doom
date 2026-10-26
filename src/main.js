@@ -237,6 +237,11 @@ function startGame() {
 const hintPoint = new THREE.Vector3();
 function placeHints() {
   if (!hud.hints) return;
+  const move = readInput();
+  if (state === 'playing' && (move.x || move.y)) {
+    hud.dismissHints();
+    return;
+  }
   const w = window.innerWidth;
   const h = window.innerHeight;
   const { x: cx, y: cy } = player.center;

@@ -207,23 +207,25 @@ export class Hud {
     this.banner.classList.add('show');
   }
 
-  // The controls, shown beside the sub at the start of the first dive: how to swim on its left, pause and mute on
-  // its right. They fade away on their own.
+  // The controls, shown to the right of the sub at the start of the first dive until it first moves.
   showControlHints() {
     this.hints?.remove();
-    this.hints = el('div', 'hints', `<div class="hint hint-left">
-        <div class="hint-keys">${keyCluster('W', 'A', 'S', 'D')}<span class="hint-or">or</span>
-        ${keyCluster('&uarr;', '&larr;', '&darr;', '&rarr;')}</div>
-        <div class="hint-label">swim</div></div>
-      <div class="hint hint-right"><div><kbd>P</kbd> pause</div><div><kbd>M</kbd> mute</div></div>`);
+    this.hints = el('div', 'hints', `<div class="hint">
+        <div class="hint-swim"><div class="hint-keys">${keyCluster('W', 'A', 'S', 'D')}<span class="hint-or">or</span>
+        ${keyCluster('&uarr;', '&larr;', '&darr;', '&rarr;')}</div><div class="hint-label">swim</div></div>
+        <div class="hint-more"><div><kbd>P</kbd> pause</div><div><kbd>M</kbd> mute</div></div></div>`);
     this.root.append(this.hints);
-    this.hints.addEventListener('animationend', () => {
-      this.hints?.remove();
-      this.hints = null;
-    });
   }
 
-  // Keeps the hints either side of the sub, `gap` pixels clear of its centre.
+  dismissHints() {
+    const hints = this.hints;
+    if (!hints) return;
+    this.hints = null;
+    hints.classList.add('leaving');
+    setTimeout(() => hints.remove(), 900);
+  }
+
+  // Keeps the hints beside the sub, `gap` pixels clear of its centre.
   placeHints(x, y, gap) {
     if (!this.hints) return;
     this.hints.style.setProperty('--x', `${x}px`);
