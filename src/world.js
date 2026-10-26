@@ -1020,9 +1020,11 @@ function hazeCap(root) {
 const SPERM_LENGTH = 24;
 const SPERM_Z = [-38, -32];
 const SPERM_GAP = [45, 75];
-// The spine from the chest back to the flukes, and how far each joint bends in a stroke (radians).
-const SPERM_TAIL = ['Bone03_03', 'Bone04_04', 'Bone05_05', 'Bone06_06', 'Bone07_07', 'Bone08_08', 'Bone09_09'];
-const SPERM_BEND = [0.05, 0.08, 0.11, 0.15, 0.2, 0.26, 0.32];
+// The spine from the head back to the flukes, and how far each joint bends in a stroke (radians). The great head
+// nods a little against the stroke, and the bend grows steadily toward the flukes, so the whole body rides the wave.
+const SPERM_TAIL = ['Bone10_010', 'Bone02_02', 'Bone03_03', 'Bone04_04', 'Bone05_05', 'Bone06_06', 'Bone07_07',
+  'Bone08_08', 'Bone09_09'];
+const SPERM_BEND = [-0.035, 0.03, 0.06, 0.09, 0.12, 0.16, 0.2, 0.25, 0.3];
 const SPERM_STROKE = 2.3;
 // The model rests with its tail drooping; this lifts each joint so the stroke centres on a straight body.
 const SPERM_LIFT = -0.045;
@@ -1048,7 +1050,7 @@ function makeSpermWhale() {
 function strokeSpermWhale(u, time) {
   u.spine.forEach((j, i) => {
     // A wave travelling from the chest to the flukes, the joints toward the tail bending the most.
-    const angle = Math.sin(time * SPERM_STROKE - i * 0.55) * j.bend + SPERM_LIFT;
+    const angle = Math.sin(time * SPERM_STROKE - i * 0.5) * j.bend + (i < 2 ? 0 : SPERM_LIFT);
     j.bone.quaternion.copy(u.swing.setFromAxisAngle(j.axis, angle)).multiply(j.rest);
   });
 }
@@ -1098,16 +1100,21 @@ function updateSpermWhale(whale, dt, cx, cy, humpback, aspect) {
   const speed = 4 + (diving ? Math.min(2.5, (-u.pitch - 0.2) * 3) : 0);
   p.x += Math.cos(u.pitch) * u.dir * speed * dt;
   p.y += Math.sin(u.pitch) * speed * dt;
-  whale.rotation.set(0, u.dir > 0 ? 0 : Math.PI, u.pitch);
+  // The body heaves gently with each stroke.
+  const heave = Math.sin(u.t * SPERM_STROKE + 1.2);
+  p.y += heave * 0.25 * dt;
+  whale.rotation.set(0, u.dir > 0 ? 0 : Math.PI, u.pitch + heave * 0.02);
   // Faint when it first comes up out of the dark, and gone again as it dives, nears a wall or nears the floor.
   const arrive = THREE.MathUtils.smoothstep(u.t, 0, 4);
   const sunk = u.diveFrom === null ? 0 : THREE.MathUtils.smoothstep(u.diveFrom - p.y, 4, 22);
   const nearFloor = 1 - THREE.MathUtils.smoothstep(p.y - Math.max(ahead, floorY(p.x)), 5, 14);
-  u.wall = Math.max(u.wall ?? 0, wallAhead ? 1 : 0) * (wallAhead ? 1 : 0.99);
-  const hide = Math.max(sunk, nearFloor, u.wall);
+  // Rock ahead or a long stay both fade it out over a few seconds.
+  u.wall = (u.wall ?? 0) + ((wallAhead ? 1 : 0) - (u.wall ?? 0)) * (1 - Math.exp(-dt * 0.8));
+  const old = THREE.MathUtils.smoothstep(u.t, 34, 40);
+  const hide = Math.max(sunk, nearFloor, u.wall > 0.98 ? 1 : u.wall, old);
   u.haze.value = THREE.MathUtils.lerp(1, 0.5, arrive * (1 - hide));
   whale.visible = u.haze.value < 0.995;
-  if ((u.t > 2 && hide > 0.99) || Math.abs(p.x - cx) > 130 || u.t > 40) {
+  if ((u.t > 2 && hide > 0.99) || Math.abs(p.x - cx) > 130) {
     u.active = false;
     u.wall = 0;
     u.wait = rand(SPERM_GAP[0], SPERM_GAP[1]);
