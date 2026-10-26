@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { cloneMaterial, findNode, ownMaterials, spawn } from './assets.js';
-import { makeBeam } from './player.js';
+import { RIG_SCALE, makeBeam } from './player.js';
 import { WATER, addWaterline } from './surface.js';
 import { sfx } from './audio.js';
 import { UPGRADES, upgradeCost } from './upgrades.js';
@@ -33,17 +33,16 @@ const COMBAT_HOLD = 2;
 const DEEP_COMBAT_LEAD = 4;
 // Breathing room between waves, long enough for the calm music to come back.
 const WAVE_BREAK = 25;
-// Where each enemy hull carries its missile drum, in model space (the nose points to -X).
 // Where an enemy can carry its missile drum, in model space (the nose points to -X): on top in front of the tower,
 // slung underneath fore or aft, or on a flank behind the portholes. A skull is painted on both flanks, so
-// skulled subs never get a flank spot. One spot is picked at random per sub.
+// skulled subs never get a flank spot. One spot is picked at random per sub. The drum is drawn at the player's size.
 const POD_MOUNTS = {
-  scout: { scale: 0.8, spots: [{ x: -0.72, y: 0.44 }, { x: -0.5, y: -0.44, under: true },
-    { x: 0.42, y: -0.42, under: true }, { x: 0.45, z: 0.44, flank: true }] },
-  gunner: { scale: 0.95, spots: [{ x: -1.05, y: 0.6 }, { x: -0.75, y: -0.6, under: true },
-    { x: 0.55, y: -0.58, under: true }, { x: 0.66, z: 0.6, flank: true }] },
-  boss: { scale: 1.4, spots: [{ x: -1.8, y: 1.05 }, { x: -1.3, y: -1.05, under: true },
-    { x: 0.9, y: -1.02, under: true }] },
+  scout: { spots: [{ x: -0.72, y: 0.4 }, { x: -0.5, y: -0.4, under: true },
+    { x: 0.42, y: -0.38, under: true }, { x: 0.45, z: 0.42, flank: true }] },
+  gunner: { spots: [{ x: -1.05, y: 0.56 }, { x: -0.75, y: -0.56, under: true },
+    { x: 0.55, y: -0.54, under: true }, { x: 0.66, z: 0.57, flank: true }] },
+  boss: { spots: [{ x: -1.8, y: 1.0 }, { x: -1.3, y: -1.0, under: true },
+    { x: 0.9, y: -0.97, under: true }] },
 };
 const POD_COLORS = { blue: '#2c2e36', blue_dark: '#3a3d47', yellow: '#b8262b', red: '#ff3b30' };
 let podTemplate = null;
@@ -812,7 +811,7 @@ export class Game {
         launcher.position.set(spot.x, spot.y, 0);
         launcher.rotation.set(spot.under ? Math.PI : 0, Math.PI, 0);
       }
-      launcher.scale.setScalar(mount.scale);
+      launcher.scale.setScalar(RIG_SCALE / type.scale);
       model.add(launcher);
       e.muzzle = findNode(launcher, 'muzzle');
       e.launcher = launcher;

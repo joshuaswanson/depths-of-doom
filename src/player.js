@@ -18,7 +18,7 @@ const MAX_PITCH = 1.52;
 const CRUISE_BUILD = 0.32;
 const CRUISE_BOOST = 0.9;
 const MAX_CLIMB = 0.9;
-const RIG_SCALE = 0.82;
+export const RIG_SCALE = 0.82;
 const REGEN_DELAY = 5;
 // From this hull level the sub gets the long "car" hull with a flat front deck and a deck-mounted gun.
 const BIG_HULL_LEVEL = 4;
