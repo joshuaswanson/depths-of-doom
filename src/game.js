@@ -1632,6 +1632,57 @@ export class Game {
     sfx.bump(strength);
   }
 
+  // Points along a sub's hull: nose, tail, the stretch between, and the tower.
+  subHullPoints(sub) {
+    const c = sub.center;
+    const f = sub.forward;
+    const ext = sub.extents;
+    const along = ext.hx * 0.72;
+    return [{ x: c.x, y: c.y }, { x: c.x + f.x * along, y: c.y + f.y * along }, { x: c.x - f.x * along, y: c.y - f.y * along },
+      { x: c.x + f.x * along * 0.5, y: c.y + f.y * along * 0.5 }, { x: c.x - f.x * along * 0.5, y: c.y - f.y * along * 0.5 },
+      { x: c.x - f.y * ext.hy, y: c.y + f.x * ext.hy }];
+  }
+
+  // Friendly subs clank off each other just like they do off enemies, but nobody is ever stunned. Each machine only
+  // moves its own sub; the other player's machine bounces theirs.
+  bumpFriends() {
+    const pl = this.localPlayer;
+    if (!pl.alive) return;
+    for (const other of this.remotePlayers) {
+      if (!other.alive || !other.group.visible) continue;
+      other.bumpCooldown = Math.max(0, (other.bumpCooldown ?? 0) - this.lastDt);
+      const touching = () => {
+        const r = other.extents.hy * 0.8;
+        return this.subHullPoints(other).find((q) => pl.bodyTest(q.x, q.y, r)) ?? null;
+      };
+      const contact = touching();
+      if (!contact) continue;
+      const pc = pl.center;
+      // Push apart along the line between the two subs, favouring sideways so a head-on ram bounces back instead
+      // of one sub sliding over the other.
+      const oc = other.center;
+      const n = new THREE.Vector2(pc.x - oc.x, (pc.y - oc.y) * 0.4);
+      if (n.lengthSq() < 1e-4) n.set(pl.facingSign * -1, 0);
+      n.normalize();
+      const mine = pl.mass * 1.3;
+      const theirs = other.mass * 1.3;
+      const approach = new THREE.Vector2().subVectors(pl.vel, other.vel).dot(n);
+      const j = Math.max(2.5, -(1 + BUMP_BOUNCE) * Math.min(approach, 0)) / (1 / mine + 1 / theirs);
+      pl.vel.addScaledVector(n, j / mine);
+      for (let i = 0; i < 60 && touching(); i++) {
+        pl.group.position.x += n.x * 0.02;
+        pl.group.position.y += n.y * 0.02;
+      }
+      if (other.bumpCooldown > 0) continue;
+      other.bumpCooldown = 0.25;
+      const strength = Math.min(1, Math.abs(approach) / 8);
+      const hit = { x: (pc.x + contact.x) / 2, y: (pc.y + contact.y) / 2, z: 0.8 };
+      this.effects.sparkle(hit, '#ffe6a0', 6 + Math.round(10 * strength), 3 + 4 * strength);
+      this.effects.shake = Math.min(1, this.effects.shake + 0.15 + 0.35 * strength);
+      sfx.bump(strength);
+    }
+  }
+
   // Spawn one of everything that brings its own shader (enemies, bars, glows, projectiles) so it all compiles
   // during loading; returns a cleanup that removes them again.
   prewarm() {
@@ -2043,6 +2094,8 @@ export class Game {
     const pl = this.player;
     pl.update(dt, input, this.bounds);
     for (const r of this.remotePlayers) this.net.updateRemote(r, dt);
+    this.lastDt = dt;
+    this.bumpFriends();
     for (const sub of this.players) {
       this.asPlayer(sub, () => {
         this.fireWeapons(dt);
