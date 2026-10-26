@@ -2414,11 +2414,10 @@ export class Game {
     return this.enemies.map((e) => ({ x: e.obj.position.x, y: e.obj.position.y, type: e.type }));
   }
 
-  // The scope pings once per sweep and blips as the sweep line crosses each contact in range.
+  // The scope pings as the sweep line crosses a contact in range, a stronger ping for the boss.
   sonarSounds(from, to) {
     const TAU = Math.PI * 2;
     const span = (to - from + TAU) % TAU;
-    if (to < from) sfx.sonar(1 + this.player.levels.sonar * 0.25);
     const pc = this.player.center;
     const range = this.radarRange;
     let big = null;
@@ -2430,7 +2429,7 @@ export class Game {
       if ((bearing - from + TAU) % TAU >= span) continue;
       big = (big ?? false) || e.type === 'boss';
     }
-    if (big !== null) sfx.blip(big);
+    if (big !== null) sfx.sonar((big ? 1.4 : 1) * (1 + this.player.levels.sonar * 0.25));
   }
 
   // Combat music starts once an enemy sub comes into view, or in the dark of the deep a few seconds before the wave

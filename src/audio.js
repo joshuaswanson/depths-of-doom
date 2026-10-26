@@ -397,7 +397,4 @@ export const sfx = {
       tone({ type: 'sine', freq: 2360, to: 2240, dur: 0.5, vol: vol * 0.25, delay, dry: true });
     });
   },
-  blip(big = false) {
-    tone({ type: 'sine', freq: big ? 1250 : 1900, to: big ? 1150 : 1800, dur: 0.09, vol: 0.035, dry: true });
-  },
 };
