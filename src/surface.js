@@ -303,9 +303,10 @@ export function addTailBeat(material, { rate = 6, amount = 0.06, controls = null
       .replace('#include <common>', '#include <common>\nuniform float uTime;\nuniform float uBeat;\nuniform float uBeatPhase;')
       .replace('#include <begin_vertex>', `#include <begin_vertex>
         float beatA = uTime * ${rate.toFixed(2)} + uBeatPhase;
-        float beatRear = smoothstep( -0.05, -0.5, transformed.x );
+        // The bend grows steadily from the head back to the flukes, so the whole body rides the same wave.
+        float beatAlong = smoothstep( 0.5, -0.5, transformed.x );
         float beatWave = sin( beatA + transformed.x * 2.4 );
-        transformed.y += beatWave * uBeat * ( ${(amount * 0.16).toFixed(4)} + ${amount.toFixed(3)} * beatRear * beatRear * beatRear );`);
+        transformed.y += beatWave * uBeat * ${amount.toFixed(3)} * mix( 0.3, 1.0, pow( beatAlong, 2.0 ) );`);
   };
   material.customProgramCacheKey = () => `${key}-tail${rate}`;
   material.needsUpdate = true;
