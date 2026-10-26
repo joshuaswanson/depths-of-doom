@@ -77,7 +77,18 @@ function detailShader(p, kind) {
   const has = { scratch: p.scratch > 0, crack: p.crack > 0, rust: p.rust > 0, grime: p.grime > 0 };
   const decl = [`vec3 dp = vDetailPos * ${f(p.scale)};`, 'float dMottle = dFbm( dp );'];
   decl.push(has.grime || kind === 'stone' || kind === 'rock' ? 'float dLow = dFbm( dp * 0.35 + 4.0 );' : 'float dLow = 0.0;');
-  if (has.scratch) {
+  if (has.scratch && (kind === 'enemy' || kind === 'enemy_old')) {
+    // Scuffed paint: short, thin, mostly straight marks in patches, most running along the hull and a fainter set
+    // crossing them on the diagonal.
+    decl.push(`float dScratchMask = smoothstep( 0.5, 0.68, dNoise( dp * 0.7 + 11.0 ) );
+      vec3 dAlong = dp * vec3( 1.4, 16.0, 16.0 );
+      vec3 dAcross = vec3( dp.x + dp.y, dp.y - dp.x, dp.z * 1.4 ) * vec3( 1.0, 11.3, 11.3 ) + 31.0;
+      float dLineA = 1.0 - smoothstep( 0.0, 0.025, abs( dNoise( dAlong ) - 0.5 ) );
+      float dLineB = 1.0 - smoothstep( 0.0, 0.025, abs( dNoise( dAcross ) - 0.5 ) );
+      float dCutA = smoothstep( 0.6, 0.72, dNoise( dp * vec3( 3.5, 8.0, 8.0 ) + 3.0 ) );
+      float dCutB = smoothstep( 0.6, 0.72, dNoise( dp * vec3( 3.5, 8.0, 8.0 ) + 17.0 ) );
+      float dScratch = max( dLineA * dCutA, dLineB * dCutB * 0.7 ) * dScratchMask;`);
+  } else if (has.scratch) {
     decl.push(`float dScratchMask = smoothstep( 0.5, 0.68, dNoise( dp * 0.7 + 11.0 ) );
       float dScratch = ( 1.0 - smoothstep( 0.0, 0.035, abs( dNoise( dp * vec3( 9.0, 1.3, 9.0 ) ) - 0.5 ) ) ) * dScratchMask;`);
   } else decl.push('float dScratch = 0.0;');
