@@ -220,9 +220,12 @@ export function addWaterline(material, { ripple = 1, topOnly = false } = {}) {
         float meniscus = smoothstep( uSurface + 0.18, uSurface + 0.02, vWaterPos.y ) * above;
         totalEmissiveRadiance += vec3( 0.55, 0.8, 0.9 ) * meniscus * 0.35 * uWet;
         totalEmissiveRadiance += vec3( 0.7, 0.85, 0.9 ) * max( runs, beads ) * wet * 0.12;
-        vec3 cp = vec3( wp.x * 2.2 + uTime * 0.25, wp.y * 2.2 - uTime * 0.5, wp.z * 2.2 );
-        float ripple = pow( 1.0 - abs( wNoise( cp ) * 2.0 - 1.0 ), 7.0 ) + pow( 1.0 - abs( wNoise( cp * 1.9 + 5.0 ) * 2.0 - 1.0 ), 9.0 ) * 0.6;
-        float shallow = smoothstep( uSurface - 26.0, uSurface - 1.0, wp.y );
+        // Two layers of rippling light drifting different ways, quick enough to shimmer on a hull lying still.
+        vec3 cp = vec3( wp.x * 2.2 + uTime * 0.7, wp.y * 2.2 - uTime * 1.2, wp.z * 2.2 );
+        vec3 cq = vec3( wp.x * 4.2 - uTime * 1.1, wp.y * 4.2 - uTime * 0.8, wp.z * 4.2 + uTime * 0.9 ) + 5.0;
+        float ripple = pow( 1.0 - abs( wNoise( cp ) * 2.0 - 1.0 ), 7.0 ) + pow( 1.0 - abs( wNoise( cq ) * 2.0 - 1.0 ), 9.0 ) * 0.6;
+        // Sunlight ripples all the way down to the shelves, and fades out over the trenches below them.
+        float shallow = smoothstep( uSurface - 62.0, uSurface - 30.0, wp.y );
         float lit = ${topOnly ? 'smoothstep( -0.1, 0.55, inverseTransformDirection( normal, viewMatrix ).y )' : '1.0'};
         totalEmissiveRadiance += vec3( 0.45, 0.85, 0.95 ) * ripple * ( 1.0 - above ) * shallow * lit * ${(0.22 * ripple).toFixed(3)};`);
   };
