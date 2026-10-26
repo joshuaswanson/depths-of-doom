@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { SURFACE_Y } from './water.js';
 
+const WHITE = new THREE.Color('#ffffff');
+
 const rand = (a, b) => a + Math.random() * (b - a);
 
 function canvasTexture(draw, size = 64) {
@@ -357,9 +359,12 @@ export class Effects {
     }
   }
 
-  sandPoof(pos, strength, silt, spread) {
-    const color = silt ? '#5a5f66' : '#d2bf92';
-    const color1 = silt ? '#2c3038' : '#8f7d5a';
+  // `sand` is the seabed's colour where the cloud is thrown up. The puffs are unlit, so they are brightened to match
+  // the sunlit floor.
+  sandPoof(pos, strength, sand, spread) {
+    const color = sand.clone().multiplyScalar(2).lerp(WHITE, 0.1);
+    const color1 = sand.clone().multiplyScalar(1.3);
+    const grit = sand.clone().multiplyScalar(0.9);
     for (let i = 0; i < Math.round(26 * strength) + 2; i++) {
       const dir = Math.random() < 0.5 ? -1 : 1;
       const s = rand(1.5, 6) * strength;
@@ -375,7 +380,7 @@ export class Effects {
       this.puffs.emit({
         pos: { x: pos.x + rand(-spread, spread) * 0.6, y: pos.y, z: pos.z },
         vel: { x: Math.cos(a) * s, y: Math.sin(a) * s }, life: rand(0.5, 0.9), size: rand(0.08, 0.16), size1: 0.06,
-        color: silt ? '#3a3e46' : '#6b5a3c', alpha: 1, alpha1: 0.6, drag: 0.6, rise: -14,
+        color: grit, alpha: 1, alpha1: 0.6, drag: 0.6, rise: -14,
       });
     }
     for (let i = 0; i < 8 * strength; i++) this.bubble({ x: pos.x + rand(-spread, spread), y: pos.y + 0.3, z: pos.z });

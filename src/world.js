@@ -377,6 +377,41 @@ const REEF_SAND = new THREE.Color('#2fa9d6');
 const REEF_LAGOON = new THREE.Color('#86e6f2');
 const DEEP_COLORS = ['#1a2430', '#252f3d', '#2d3644', '#151b26'].map((c) => new THREE.Color(c));
 
+const SEABED_TINT = new THREE.Color('#9fb5b4');
+const paintScratch = new THREE.Color();
+const painted = { y: 0, glow: 0 };
+
+// The seabed's height and colour at one point, with the reef glow that brightens the sand there.
+function paintSeabed(x, z, murk, c) {
+  const d = paintScratch;
+  const floor = floorY(x);
+  const shelf = 1 - THREE.MathUtils.smoothstep(SHELF_Y - floor, 2, 10);
+  const raised = shelf > 0 ? (moundHeight(x, z) + reefRise(x, z)) * shelf : 0;
+  const y = floor + baseDetail(x, z) + raised;
+  const n = 0.5 + 0.5 * Math.sin(x * 0.236 + z * 0.13) * Math.cos(x * 0.55 - z * 0.29);
+  const m = 0.5 + 0.5 * Math.sin(x * 1.02 + z * 0.71);
+  c.copy(SHALLOW_COLORS[0]).lerp(SHALLOW_COLORS[1], n).lerp(SHALLOW_COLORS[2], m * 0.35 * n);
+  c.lerp(SHALLOW_COLORS[3], Math.max(0, Math.sin(x * 0.31 - z * 0.5)) * 0.4);
+  d.copy(DEEP_COLORS[0]).lerp(DEEP_COLORS[1], n).lerp(DEEP_COLORS[2], m * 0.4);
+  c.lerp(SHELF_TEAL, (1 - murk) * 0.4);
+  c.lerp(MURK, murk * 0.6);
+  c.lerp(d, THREE.MathUtils.smoothstep(-y, 18, 45));
+  const glow = shelf > 0 ? reefGlow(x, z) * shelf : 0;
+  const ripple = 0.5 + 0.5 * Math.sin(x * 0.9 + z * 0.4) * Math.sin(x * 0.37 - z * 1.1);
+  c.lerp(RUBBLE, THREE.MathUtils.smoothstep(raised, 0.4, 2.0) * 0.55 * (1 - glow));
+  c.lerp(REEF_SAND, THREE.MathUtils.smoothstep(glow, 0, 0.7) * 0.92);
+  c.lerp(REEF_LAGOON, glow * ripple * 0.4);
+  painted.y = y;
+  painted.glow = glow;
+  return painted;
+}
+
+// The colour of the seabed's surface at a point, as lit sand before shading and caustics.
+export function seabedColor(x, z = 0, out = new THREE.Color()) {
+  paintSeabed(x, z, murkAt(x), out);
+  return out.multiply(SEABED_TINT);
+}
+
 function makeSeabedTile(material) {
   const geo = new THREE.PlaneGeometry(TILE_W, TILE_D, 80, 94);
   geo.rotateX(-Math.PI / 2);
@@ -403,7 +438,6 @@ function shapeTile(tile, target, budget = Infinity) {
   const pos = geo.attributes.position;
   const col = geo.attributes.color;
   const c = new THREE.Color();
-  const d = new THREE.Color();
   const glowAttr = geo.attributes.aReef.array;
   const end = Math.min(pos.count, job.next + budget);
   const x0 = job.x0;
@@ -412,25 +446,8 @@ function shapeTile(tile, target, budget = Infinity) {
     const x = geo.userData.baseX[i] + x0;
     if (!murkOf.has(x)) murkOf.set(x, murkAt(x));
     const murk = murkOf.get(x);
-    const z = pos.getZ(i);
-    const floor = floorY(x);
-    const shelf = 1 - THREE.MathUtils.smoothstep(SHELF_Y - floor, 2, 10);
-    const raised = shelf > 0 ? (moundHeight(x, z) + reefRise(x, z)) * shelf : 0;
-    const y = floor + baseDetail(x, z) + raised;
+    const { y, glow } = paintSeabed(x, pos.getZ(i), murk, c);
     pos.setY(i, y);
-    const n = 0.5 + 0.5 * Math.sin(x * 0.236 + z * 0.13) * Math.cos(x * 0.55 - z * 0.29);
-    const m = 0.5 + 0.5 * Math.sin(x * 1.02 + z * 0.71);
-    c.copy(SHALLOW_COLORS[0]).lerp(SHALLOW_COLORS[1], n).lerp(SHALLOW_COLORS[2], m * 0.35 * n);
-    c.lerp(SHALLOW_COLORS[3], Math.max(0, Math.sin(x * 0.31 - z * 0.5)) * 0.4);
-    d.copy(DEEP_COLORS[0]).lerp(DEEP_COLORS[1], n).lerp(DEEP_COLORS[2], m * 0.4);
-    c.lerp(SHELF_TEAL, (1 - murk) * 0.4);
-    c.lerp(MURK, murk * 0.6);
-    c.lerp(d, THREE.MathUtils.smoothstep(-y, 18, 45));
-    const glow = shelf > 0 ? reefGlow(x, z) * shelf : 0;
-    const ripple = 0.5 + 0.5 * Math.sin(x * 0.9 + z * 0.4) * Math.sin(x * 0.37 - z * 1.1);
-    c.lerp(RUBBLE, THREE.MathUtils.smoothstep(raised, 0.4, 2.0) * 0.55 * (1 - glow));
-    c.lerp(REEF_SAND, THREE.MathUtils.smoothstep(glow, 0, 0.7) * 0.92);
-    c.lerp(REEF_LAGOON, glow * ripple * 0.4);
     glowAttr[i] = glow;
     col.setXYZ(i, c.r, c.g, c.b);
   }
@@ -445,7 +462,7 @@ function shapeTile(tile, target, budget = Infinity) {
 }
 
 function makeSeabedMaterial(uniforms) {
-  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0, color: '#9fb5b4' });
+  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0, color: SEABED_TINT });
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uTime = uniforms.uTime;
     shader.vertexShader = shader.vertexShader

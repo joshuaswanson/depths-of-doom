@@ -5,7 +5,7 @@ import { WATER, addWaterline } from './surface.js';
 import { sfx } from './audio.js';
 import { UPGRADES, upgradeCost } from './upgrades.js';
 import { CAMERA_Z, SHELF_Y, SURFACE_Y, TAN_HALF_FOV } from './water.js';
-import { floorY, murkAt, seabedAt } from './world.js';
+import { floorY, murkAt, seabedAt, seabedColor } from './world.js';
 
 const rand = (a, b) => a + Math.random() * (b - a);
 const WHITE = new THREE.Color(1, 1, 1);
@@ -990,7 +990,7 @@ export class Game {
             w.vy = -w.vy * 0.25;
             w.spinZ *= 0.4;
             w.spinX *= 0.4;
-            this.effects.sandPoof({ x: p.x, y: seabedAt(p.x, p.z) + 0.5, z: p.z + 1 }, 0.6, p.y < -30, e.def.rx);
+            this.effects.sandPoof({ x: p.x, y: seabedAt(p.x, p.z) + 0.5, z: p.z + 1 }, 0.6, seabedColor(p.x, p.z), e.def.rx);
             continue;
           }
           w.settled = true;
@@ -1001,7 +1001,7 @@ export class Game {
           w.restY = rest - e.def.ry * e.def.scale * 0.2;
           w.rv = w.spinZ * 0.5;
           w.lv = w.spinX * 0.5;
-          this.effects.sandPoof({ x: p.x, y: seabedAt(p.x) + 0.5, z: 1.2 }, 0.9, p.y < -30, e.def.rx);
+          this.effects.sandPoof({ x: p.x, y: seabedAt(p.x) + 0.5, z: 1.2 }, 0.9, seabedColor(p.x), e.def.rx);
           sfx.thud(0.8);
         }
         w.leak -= dt;
@@ -2366,14 +2366,14 @@ export class Game {
     pl.impact = 0;
     const pos = pl.group.position;
     const ground = { x: pos.x, y: seabedAt(pos.x) + 0.5, z: 1.2 };
-    const silt = ground.y < -30;
+    const sand = seabedColor(pos.x);
     if (impact > 1.5) {
       const strength = THREE.MathUtils.clamp(impact / 8, 0.35, 1.6);
-      this.effects.sandPoof(ground, strength, silt, pl.extents.hx);
+      this.effects.sandPoof(ground, strength, sand, pl.extents.hx);
       this.effects.shake = Math.min(1.2, this.effects.shake + strength * 0.35);
       sfx.thud(strength);
     } else if (pl.onFloor && Math.abs(pl.vel.x) > 2 && Math.random() < dt * 14) {
-      this.effects.sandPoof({ x: pos.x - Math.sign(pl.vel.x) * pl.extents.hx * 0.5, y: ground.y, z: 0.4 }, 0.15, silt, 0.5);
+      this.effects.sandPoof({ x: pos.x - Math.sign(pl.vel.x) * pl.extents.hx * 0.5, y: ground.y, z: 0.4 }, 0.15, sand, 0.5);
     }
   }
 
