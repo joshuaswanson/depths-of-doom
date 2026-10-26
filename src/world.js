@@ -914,7 +914,7 @@ const POD_SIZE = 5;
 const DOLPHIN_LENGTH = 4.6;
 const POD_GAP = [25, 45];
 const DOLPHIN_SPEED = 8.5;
-const LEAP_GRAVITY = 15;
+const LEAP_GRAVITY = 11;
 
 function makeDolphins(scene) {
   const pod = Array.from({ length: POD_SIZE }, () => {
@@ -926,7 +926,7 @@ function makeDolphins(scene) {
   });
   pod[0].traverse((o) => {
     if (o.isMesh && !o.material.userData.tail) {
-      addTailBeat(o.material, { rate: 12, amount: 0.12 });
+      addTailBeat(o.material, { rate: 9, amount: 0.13 });
       addWaterline(o.material, { ripple: 0.85, topOnly: true });
       o.material.userData.tail = true;
     }
@@ -973,7 +973,8 @@ function updateDolphins(world, dt, t, cx, cy, halfW, sub) {
       vy = Math.cos(a) * m.amp * m.rate;
       m.nextLeap -= dt;
       // Leap from the top of a rising arc.
-      if (m.nextLeap <= 0 && vy > 0.5 && Math.sin(a) > 0.2) m.leap = { y, vy: rand(7.5, 9) };
+      // Launch hard enough to clear the surface by a few metres: rise = vy² / 2g.
+      if (m.nextLeap <= 0 && vy > 0.5 && Math.sin(a) > 0.2) m.leap = { y, vy: rand(11.5, 13) };
     }
     m.d.position.set(m.x, y, m.z);
     // Ease the nose toward the direction of travel, so launching into or landing from a leap doesn't jerk it.

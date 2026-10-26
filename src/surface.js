@@ -287,8 +287,9 @@ function addWhaleSwim(material) {
   material.needsUpdate = true;
 }
 
-// A tail beat for unrigged swimmers one unit long with the head along +X: a wave runs back from the chest and the
-// flukes beat up and down the most. Each copy gets its own timing from where it sits in the world.
+// A tail beat for unrigged swimmers one unit long with the head along +X. The body stays fairly stiff and the tail
+// stock flaps up and down from just behind the middle, the flukes swinging the most, with only a slight lag along it.
+// Each copy gets its own timing from its depth in the scene.
 export function addTailBeat(material, { rate = 6, amount = 0.06 } = {}) {
   const previous = material.onBeforeCompile;
   const key = material.customProgramCacheKey?.() ?? material.name;
@@ -299,8 +300,9 @@ export function addTailBeat(material, { rate = 6, amount = 0.06 } = {}) {
       .replace('#include <common>', '#include <common>\nuniform float uTime;')
       .replace('#include <begin_vertex>', `#include <begin_vertex>
         float beatSeed = modelMatrix[ 3 ].z * 7.3;
-        float beatRear = smoothstep( 0.1, -0.5, transformed.x );
-        transformed.y += sin( uTime * ${rate.toFixed(2)} + transformed.x * 6.0 + beatSeed ) * ${amount.toFixed(3)} * beatRear * beatRear;`);
+        float beatRear = smoothstep( -0.05, -0.5, transformed.x );
+        transformed.y += sin( uTime * ${rate.toFixed(2)} + transformed.x * 1.6 + beatSeed ) * ${amount.toFixed(3)} * beatRear * beatRear * beatRear;
+        transformed.y -= sin( uTime * ${rate.toFixed(2)} + beatSeed ) * ${(amount * 0.08).toFixed(4)} * smoothstep( 0.0, 0.5, transformed.x );`);
   };
   material.customProgramCacheKey = () => `${key}-tail${rate}`;
   material.needsUpdate = true;
