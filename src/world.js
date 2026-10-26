@@ -1121,7 +1121,7 @@ const POD_GAP = [25, 45];
 const DOLPHIN_SPEED = 7.2;
 // The same pull the sub feels when it breaches; water slows a dolphin quickly once it is back in.
 const LEAP_GRAVITY = 18;
-const SPLASH_LEAD = 0.5;
+const SPLASH_LEAD = 1.1;
 const WATER_DRAG = 3.5;
 const LEAP_SPACING = 0.9;
 const DOLPHIN_BEAT_RATE = 9;
