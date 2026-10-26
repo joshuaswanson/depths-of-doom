@@ -982,7 +982,8 @@ function updateWhale(whale, dt, t, cx, cy, aspect, calm) {
   const seen = 1 - (u.haze.value - WHALE_HAZE) / (1 - WHALE_HAZE);
   u.song -= dt;
   // Only in the quiet between waves, never over a fight.
-  if (u.song <= 0 && calm && seen > 0.25 && Math.abs(p.x - cx) < halfWidthAt(p.z, aspect)) {
+  const onScreen = Math.abs(p.x - cx) < halfWidthAt(p.z, aspect) && Math.abs(p.y - cy) < (CAMERA_Z - p.z) * TAN_HALF_FOV;
+  if (u.song <= 0 && calm && seen > 0.25 && onScreen) {
     u.song = rand(7, 14);
     sfx.whaleCall(THREE.MathUtils.clamp((p.x - cx) / halfWidthAt(p.z, aspect), -1, 1), seen);
   }
