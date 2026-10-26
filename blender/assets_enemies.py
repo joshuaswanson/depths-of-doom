@@ -8,29 +8,37 @@ from body import Body
 from kit import Part, empty, frame, trs
 
 class SharkBody(Body):
-    """A predatory hull: deepest just behind the nose (at -X), then a long, tapering run back to a pointed tail."""
+    """A predatory hull: an even, straight-sided midsection, a short firm nose (at -X) and a long straight taper back
+    to a pointed tail, so it reads as long and armoured."""
 
-    def __init__(self, length, radius, nose_share=0.36, p_nose=2.6, p_tail=1.65):
+    def __init__(self, length, radius, nose_share=0.26, tail_share=0.36, p_nose=1.6):
         self.length = length
-        self.nose_half = length * nose_share
-        self.tail_half = length - self.nose_half
-        super().__init__(length, radius, p_front=p_tail, p_back=p_nose, x0=-length / 2 + self.nose_half)
+        self.nose_len = length * nose_share
+        self.tail_len = length * tail_share
+        self.p_nose = p_nose
+        super().__init__(length, radius, x0=0.0)
+        self.start = -length / 2
+        self.end = length / 2
 
     def r(self, x):
-        half = self.tail_half if x > self.x0 else self.nose_half
-        t = (x - self.x0) / half
-        if abs(t) >= 1:
+        if x <= self.start or x >= self.end:
             return 0.0
-        p = self.p_front if t > 0 else self.p_back
-        return self.radius * (1 - abs(t) ** p) ** (1 / p)
+        nose_end = self.start + self.nose_len
+        tail_start = self.end - self.tail_len
+        if x < nose_end:
+            t = (nose_end - x) / self.nose_len
+            return self.radius * (1 - t ** self.p_nose) ** (1 / self.p_nose)
+        if x > tail_start:
+            t = (x - tail_start) / self.tail_len
+            # A straight cone, slightly eased at the shoulder so it doesn't kink.
+            return self.radius * (1 - t) ** 0.85 * (1 - 0.15 * t * (1 - t))
+        return self.radius
 
-    def profile(self, samples=48):
+    def profile(self, samples=64):
         pts = []
         for i in range(samples + 1):
-            s = -1 + 2 * i / samples
-            t = math.copysign(abs(s) ** 0.8, s)
-            half = self.tail_half if t > 0 else self.nose_half
-            pts.append((self.x0 + t * half, self.r(self.x0 + t * half)))
+            x = self.start + (self.end - self.start) * i / samples
+            pts.append((x, self.r(x)))
         return pts
 
 
@@ -81,7 +89,7 @@ def red_light(part, P, matrix, radius=0.07):
 def enemy_sub(P, name="enemy_sub", length=3.4, radius=0.85, tower=True, skull_mark=False, scope=1.0,
               spikes=0, turret=False, gatling=False):
     root = empty(name)
-    b = SharkBody(length=length, radius=radius * 1.08)
+    b = SharkBody(length=length * 1.12, radius=radius * 0.8)
     h = length / 2
     part = Part()
     nose_x = viewport_x(b, sign=-1)

@@ -34,8 +34,8 @@ const DEEP_COMBAT_LEAD = 4;
 // Breathing room between waves, long enough for the calm music to come back.
 const WAVE_BREAK = 25;
 // Where each enemy hull carries its missile drum, in model space (the nose points to -X).
-const POD_MOUNT = { scout: { x: -0.45, y: 0.62, scale: 0.8 }, gunner: { x: -0.6, y: 0.83, scale: 0.95 },
-  boss: { x: -1.1, y: 1.45, scale: 1.4 } };
+const POD_MOUNT = { scout: { x: -0.45, y: 0.44, scale: 0.8 }, gunner: { x: -0.6, y: 0.6, scale: 0.95 },
+  boss: { x: -1.1, y: 1.05, scale: 1.4 } };
 const POD_COLORS = { blue: '#2c2e36', blue_dark: '#3a3d47', yellow: '#b8262b', red: '#ff3b30' };
 let podTemplate = null;
 
@@ -354,9 +354,9 @@ const PANEL_SHARE = 0.17;
 const LOOSE_COIN_RANGE = 70;
 
 const ENEMY_TYPES = {
-  scout: { model: 'enemy_scout', hp: 5, scale: 0.85, rx: 1.25, ry: 0.62, coins: 12, boom: 0.9, speed: 4.2 },
-  gunner: { model: 'enemy_gunner', hp: 16, scale: 0.95, rx: 1.75, ry: 0.9, coins: 30, boom: 1.2, speed: 3.2 },
-  boss: { model: 'enemy_boss', hp: 280, scale: 1.1, rx: 3.35, ry: 1.68, coins: 260, boom: 2.8, speed: 2.4 },
+  scout: { model: 'enemy_scout', hp: 5, scale: 0.85, rx: 1.4, ry: 0.5, coins: 12, boom: 0.9, speed: 4.2 },
+  gunner: { model: 'enemy_gunner', hp: 16, scale: 0.95, rx: 1.95, ry: 0.72, coins: 30, boom: 1.2, speed: 3.2 },
+  boss: { model: 'enemy_boss', hp: 280, scale: 1.1, rx: 3.75, ry: 1.35, coins: 260, boom: 2.8, speed: 2.4 },
   mine: { model: 'mine', hp: 3, scale: 1.05, rx: 0.62, ry: 0.62, coins: 3, boom: 1.0, speed: 1.0 },
 };
 
