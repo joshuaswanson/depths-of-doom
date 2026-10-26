@@ -611,6 +611,9 @@ export class Player {
     const thrust = new THREE.Vector2(input.x, input.y);
     if (thrust.lengthSq() > 1) thrust.normalize();
     const pushing = thrust.lengthSq() > 0.01;
+    // Propellers spin up while a direction is held and wind down to a stop when it is let go.
+    this.drive = THREE.MathUtils.lerp(this.drive ?? 0, pushing && this.alive && !this.airborne ? 1 : 0,
+      1 - Math.exp(-dt * (pushing ? 6 : 2.5)));
     const pushDir = pushing ? thrust.clone().normalize() : null;
     if (!this.alive || this.airborne) thrust.set(0, 0);
     // Holding a steady heading builds up cruising speed; turning or letting go bleeds it away.
@@ -720,10 +723,10 @@ export class Player {
         part.pop = Math.min(1, part.pop + dt * 1.8);
         part.pivot.scale.setScalar(Math.max(0.01, elasticOut(part.pop)));
       }
-      for (const prop of part.props) prop.rotation.x += dt * 18;
+      for (const prop of part.props) prop.rotation.x += dt * 18 * this.drive;
       if (part.dish) part.dish.rotation.y += dt * 2.2;
     }
-    const spin = 8 + this.levels.propulsion * 3 + this.vel.length() * 2 + this.cruise * 25;
+    const spin = (8 + this.levels.propulsion * 3 + this.vel.length() * 2 + this.cruise * 25) * this.drive;
     if (this.propeller) this.propeller.rotation.x -= dt * spin;
 
     if (this.shieldCharges < this.shieldMax) {

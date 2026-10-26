@@ -1844,13 +1844,13 @@ export class Game {
 
     if (pl.alive) {
       const prop = pl.propellerWorld(this.tmp);
-      const rate = 0.5 + pl.vel.length() * 0.25 + pl.levels.propulsion * 0.15 + pl.cruise * 1.5;
+      const rate = (0.5 + pl.vel.length() * 0.25 + pl.levels.propulsion * 0.15 + pl.cruise * 1.5) * pl.drive;
       const back = pl.forward.multiplyScalar(-2);
       for (let n = rate; n > 0; n--) {
         if (Math.random() < n) this.effects.bubble(prop, { spread: 0.25, vel: { x: back.x, y: back.y } });
       }
       for (const part of pl.partsOf('propulsion')) {
-        if (Math.random() < 0.35 && part.props[0]) {
+        if (Math.random() < 0.35 * pl.drive && part.props[0]) {
           part.props[0].getWorldPosition(this.tmp);
           this.effects.bubble(this.tmp, { spread: 0.12, size: [0.08, 0.2], vel: { x: back.x, y: back.y } });
         }
