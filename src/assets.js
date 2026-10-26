@@ -26,7 +26,9 @@ export async function loadModels(onProgress) {
   await Promise.all(MODEL_NAMES.map(async (name) => {
     const gltf = await loader.loadAsync(`${import.meta.env.BASE_URL}models/${name}.glb`);
     gltf.scene.traverse((o) => {
-      if (o.isMesh) o.material.envMapIntensity = 0.55;
+      if (!o.isMesh) return;
+      o.material.envMapIntensity = 0.55;
+      o.castShadow = !o.material.transparent;
     });
     applySurfaceDetail(gltf.scene);
     models[name] = gltf.scene;
@@ -72,6 +74,7 @@ function mergeStatic(root) {
       const mesh = new THREE.Mesh(merged, meshes[0].material);
       mesh.name = meshes[0].name;
       mesh.renderOrder = meshes[0].renderOrder;
+      mesh.castShadow = meshes[0].castShadow;
       group.add(mesh);
       for (const m of meshes) {
         for (const child of [...m.children]) m.parent.attach(child);

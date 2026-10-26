@@ -32,6 +32,8 @@ let pixelRatio = MAX_PIXEL_RATIO;
 renderer.setPixelRatio(pixelRatio);
 renderer.toneMapping = THREE.NeutralToneMapping;
 renderer.toneMappingExposure = 1.0;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFShadowMap;
 
 const scene = new THREE.Scene();
 scene.fog = new THREE.Fog(0xffffff, 20, 125);
@@ -42,23 +44,59 @@ scene.environmentIntensity = 0.7;
 const camera = new THREE.PerspectiveCamera(CAMERA_FOV, 1, 0.5, 400);
 camera.position.set(0, 0, CAMERA_Z);
 
-const hemi = new THREE.HemisphereLight('#9fe2ff', '#163f4a', 1.25);
+const hemi = new THREE.HemisphereLight('#9fe2ff', '#163f4a', 1.0);
 scene.add(hemi);
 const sun = new THREE.DirectionalLight('#fff1d6', 2.1);
 sun.position.set(-6, 14, 10);
 scene.add(sun);
+// Sunlight from nearly straight overhead, the only light that casts shadows: they fall just under each sub and
+// coral, a little toward the camera, where the side-on view can see them on the seabed.
+const overhead = new THREE.DirectionalLight('#e8fbff', 0.6);
+const OVERHEAD_OFFSET = new THREE.Vector3(-2, 20, -4).normalize().multiplyScalar(60);
+const SHADOW_SPAN = 30;
+const SHADOW_MAP = 2048;
+overhead.position.copy(OVERHEAD_OFFSET);
+overhead.castShadow = true;
+overhead.shadow.mapSize.set(SHADOW_MAP, SHADOW_MAP);
+Object.assign(overhead.shadow.camera, { left: -SHADOW_SPAN, right: SHADOW_SPAN, top: SHADOW_SPAN,
+  bottom: -SHADOW_SPAN, near: 1, far: 140 });
+overhead.shadow.camera.updateProjectionMatrix();
+overhead.shadow.bias = -0.0004;
+overhead.shadow.normalBias = 0.04;
+overhead.shadow.radius = 3;
+scene.add(overhead, overhead.target);
 const rim = new THREE.DirectionalLight('#7fdcff', 2.2);
 rim.position.set(4, 6, -12);
 scene.add(rim);
 const under = new THREE.DirectionalLight('#3fb8c8', 0.6);
 under.position.set(0, -10, 6);
 scene.add(under);
-const SUNLIGHT = [[hemi, 1.25], [sun, 2.1], [rim, 2.2], [under, 0.6]];
+const SUNLIGHT = [[hemi, 1.0], [sun, 2.1], [overhead, 0.6], [rim, 2.2], [under, 0.6]];
 
 function lightForDepth(dark) {
   for (const [light, base] of SUNLIGHT) light.intensity = base * (1 - dark * 0.975);
   rim.color.set('#7fdcff').lerp(new THREE.Color('#7a5cff'), dark);
   scene.environmentIntensity = 0.7 * (1 - dark * 0.97);
+  overhead.shadow.intensity = 1 - THREE.MathUtils.smoothstep(dark, 0, 0.5);
+}
+
+// The shadow box follows the view across the floor below it, stepped in whole shadow-map texels so the edges of
+// shadows hold still as the camera glides.
+const sunAxes = (() => {
+  const z = OVERHEAD_OFFSET.clone().normalize();
+  const x = new THREE.Vector3(0, 1, 0).cross(z).normalize();
+  return { x, y: z.clone().cross(x), z };
+})();
+const shadowCentre = new THREE.Vector3();
+function followShadow() {
+  const texel = (2 * SHADOW_SPAN) / SHADOW_MAP;
+  shadowCentre.set(camera.position.x, camera.position.y - 4, -10);
+  const a = Math.round(shadowCentre.dot(sunAxes.x) / texel) * texel;
+  const b = Math.round(shadowCentre.dot(sunAxes.y) / texel) * texel;
+  const c = shadowCentre.dot(sunAxes.z);
+  shadowCentre.copy(sunAxes.x).multiplyScalar(a).addScaledVector(sunAxes.y, b).addScaledVector(sunAxes.z, c);
+  overhead.target.position.copy(shadowCentre);
+  overhead.position.copy(shadowCentre).add(OVERHEAD_OFFSET);
 }
 
 const composer = new EffectComposer(renderer);
@@ -321,6 +359,7 @@ function tick(dt) {
   });
   setMusic(musicMix());
   lightForDepth(world.dark);
+  followShadow();
   player.setDarkness(world.dark);
   if (state === 'playing' || state === 'gameover') {
     hud.update({ player, coins: game.coins, wave: game.wave, boss: game.boss });

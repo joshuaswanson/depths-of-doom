@@ -421,6 +421,7 @@ function makeSeabedTile(material) {
   geo.setAttribute('aReef', new THREE.BufferAttribute(new Float32Array(geo.attributes.position.count), 1));
   const tile = new THREE.Mesh(geo, material);
   tile.frustumCulled = false;
+  tile.receiveShadow = true;
   tile.userData.x0 = null;
   return tile;
 }
@@ -507,10 +508,20 @@ function makeSeabedMaterial(uniforms) {
         diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.12, 0.28, 0.11 ), sGrass * 0.5 );
         diffuseColor.rgb = mix( diffuseColor.rgb, diffuseColor.rgb * 0.55, sPebble * 0.6 );
         diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.2, 0.22, 0.26 ) * ( 0.7 + sPatch * 0.6 ), sSteep * 0.8 );`)
+      .replace('#include <aomap_fragment>', /* glsl */ `#include <aomap_fragment>
+        reflectedLight.directDiffuse *= mix( 0.4, 1.0, sunShadow );
+        reflectedLight.indirectDiffuse *= mix( 0.5, 1.0, sunShadow );`)
       .replace('#include <normal_fragment_maps>', /* glsl */ `#include <normal_fragment_maps>
         float sHeight = sRipple * 0.4 * ( 1.0 - sSteep ) + sPebble * 0.8 + dNoise( sp * 7.0 ) * 0.25 + sPatch * sSteep * 1.2;
         normal = dPerturb( - vViewPosition, normal, vec2( dFdx( sHeight ), dFdy( sHeight ) ) * 0.25, faceDirection );`)
       .replace('#include <emissivemap_fragment>', /* glsl */ `#include <emissivemap_fragment>
+        // In shadow the floor loses its caustics and much of its light, all of which is sunlight.
+        float sunShadow = 1.0;
+        #if defined( USE_SHADOWMAP ) && NUM_DIR_LIGHT_SHADOWS > 0
+          sunShadow = getShadow( directionalShadowMap[ 0 ], directionalLightShadows[ 0 ].shadowMapSize,
+            directionalLightShadows[ 0 ].shadowIntensity, directionalLightShadows[ 0 ].shadowBias,
+            directionalLightShadows[ 0 ].shadowRadius, vDirectionalShadowCoord[ 0 ] );
+        #endif
         // Two drifting layers of caustics at different scales, so the sunlit floor ripples with light.
         float fadeC = smoothstep( -90.0, -4.0, vSeaWorld.z ) * smoothstep( -32.0, -6.0, vSeaWorld.y );
         vec2 cA = vSeaWorld.xz * vec2( 0.42, 0.3 ) + vec2( uTime * 0.05, uTime * 0.03 );
@@ -521,7 +532,7 @@ function makeSeabedMaterial(uniforms) {
         float cFine = caustic( cB, 1.1 );
         float cLight = cNet * cNet * 0.8 + cNet * cFine * 0.6;
         float cBand = 0.35 + 0.9 * dNoise( vec3( vSeaWorld.xz * 0.18 + uTime * 0.08, uTime * 0.15 ) );
-        totalEmissiveRadiance += vec3( 0.5, 0.9, 0.95 ) * cLight * 0.6 * fadeC * cBand * ( 1.0 + vReef * 1.3 );
+        totalEmissiveRadiance += vec3( 0.5, 0.9, 0.95 ) * cLight * 0.6 * fadeC * cBand * ( 1.0 + vReef * 1.3 ) * sunShadow;
         totalEmissiveRadiance += vec3( 0.02, 0.12, 0.2 ) * vReef * fadeC;`);
   };
   return mat;
