@@ -869,7 +869,18 @@ function makeSpermWhale() {
   holder.add(body);
   const mixer = new THREE.AnimationMixer(body);
   const [clip] = animationsOf('sperm_whale');
-  if (clip) mixer.clipAction(clip).play();
+  // Its own swim animation sweeps the tail far too hard; play it at a fraction of its strength.
+  if (clip) mixer.clipAction(clip).setEffectiveWeight(0.14).play();
+  // A slow whole-body undulation on top. The skinned mesh keeps its source axes: head toward -Z, back up +Y.
+  body.traverse((o) => {
+    if (!o.isSkinnedMesh) return;
+    o.geometry.computeBoundingBox();
+    const { min, max } = o.geometry.boundingBox;
+    const size = max.z - min.z;
+    const centre = (max.z + min.z) / 2;
+    addTailBeat(o.material, { rate: 1.6, amount: 0.045, size,
+      along: `( -( transformed.z - ${centre.toFixed(2)} ) / ${size.toFixed(2)} )` });
+  });
   holder.visible = false;
   holder.userData = { mixer, haze: hazeCap(body), active: false, wait: 40, t: 0 };
   return holder;
@@ -914,7 +925,9 @@ const POD_SIZE = 5;
 const DOLPHIN_LENGTH = 4.6;
 const POD_GAP = [25, 45];
 const DOLPHIN_SPEED = 8.5;
-const LEAP_GRAVITY = 11;
+// The same pull the sub feels when it breaches; water slows a dolphin quickly once it is back in.
+const LEAP_GRAVITY = 18;
+const WATER_DRAG = 3.5;
 const LEAP_SPACING = 0.9;
 const DOLPHIN_BEAT_RATE = 9;
 const DOLPHIN_LANES = [-5.5, -7.6, -9.7, -11.8, -13.9];
@@ -962,11 +975,15 @@ function updateDolphins(world, dt, t, cx, cy, halfW, sub) {
     let vy;
     if (m.leap) {
       // Surge up through the water to launch speed, then fly ballistically out and back in, nose following the arc.
-      if (m.leap.launch && m.leap.y < SURFACE_Y) {
-        m.leap.vy += (m.leap.target - m.leap.vy) * (1 - Math.exp(-dt * 6));
-      } else {
+      const inAir = m.leap.y > SURFACE_Y;
+      if (m.leap.launch && !inAir) {
+        m.leap.vy += (m.leap.target - m.leap.vy) * (1 - Math.exp(-dt * 7));
+      } else if (inAir) {
         m.leap.launch = false;
         m.leap.vy -= LEAP_GRAVITY * dt;
+      } else {
+        // Back in the water: drag soaks up the dive and buoyancy roughly cancels gravity.
+        m.leap.vy *= Math.exp(-dt * WATER_DRAG);
       }
       const wasAbove = m.leap.y > SURFACE_Y;
       m.leap.y += m.leap.vy * dt;
@@ -974,7 +991,7 @@ function updateDolphins(world, dt, t, cx, cy, halfW, sub) {
       vy = m.leap.vy;
       if (wasAbove && y <= SURFACE_Y) world.effects?.bigSplash({ x: m.x, y: SURFACE_Y, z: m.z }, 1.25, 1.4);
       else if (!wasAbove && y > SURFACE_Y) world.effects?.splash({ x: m.x, y: SURFACE_Y, z: m.z }, 0.8);
-      if (vy < 0 && y < m.base) {
+      if (!m.leap.launch && y <= SURFACE_Y && (y < m.base || vy > -1.2)) {
         // Pick the swim arc back up exactly where it lands, heading down, so it carries on without a jump.
         m.leap = null;
         m.phase = Math.PI - Math.asin(THREE.MathUtils.clamp((y - m.base) / m.amp, -1, 1)) - t * m.rate;
@@ -989,7 +1006,8 @@ function updateDolphins(world, dt, t, cx, cy, halfW, sub) {
       // Launch hard enough to clear the surface by a few metres (rise = vy² / 2g), never two at once.
       const clear = t - (dolphins.lastLeap ?? -10) > LEAP_SPACING;
       if (m.nextLeap <= 0 && clear && vy > 0.5 && Math.sin(a) > 0.2) {
-        m.leap = { y, vy, target: rand(10.5, 13.5), launch: true };
+        // Clears the surface by rise = vy² / 2g, roughly 3 to 5 units.
+        m.leap = { y, vy, target: rand(12.5, 14.5), launch: true };
         dolphins.lastLeap = t;
       }
     }
@@ -1007,7 +1025,8 @@ function updateDolphins(world, dt, t, cx, cy, halfW, sub) {
     ctl.arch.value += (flying - ctl.arch.value) * (1 - Math.exp(-dt * (flying ? 4 : 9)));
     // Ease the nose toward the direction of travel, so launching into or landing from a leap doesn't jerk it.
     const pitch = Math.atan2(vy, DOLPHIN_SPEED);
-    m.pitch = m.pitch === undefined ? pitch : m.pitch + (pitch - m.pitch) * (1 - Math.exp(-dt * 5));
+    const follow = m.leap && y > SURFACE_Y - 1 ? 14 : 5;
+    m.pitch = m.pitch === undefined ? pitch : m.pitch + (pitch - m.pitch) * (1 - Math.exp(-dt * follow));
     m.d.rotation.set(0, dolphins.dir > 0 ? 0 : Math.PI, m.pitch);
     m.d.visible = true;
     if (dolphins.dir * (m.x - cx) < halfW + 12) anyInView = true;

@@ -291,7 +291,9 @@ function addWhaleSwim(material) {
 // the tail stock and flukes swing the most, all in one rhythm. `controls` holds per-copy uniforms: `beat` scales the
 // motion (0 stops it, say while airborne), `phase` offsets its timing, and `arch` bows the body into a curve with the
 // nose and tail dipped, as in a leap.
-export function addTailBeat(material, { rate = 6, amount = 0.06, controls = null } = {}) {
+// `along` maps a vertex to its place on the body (0.5 at the nose, -0.5 at the flukes) and `size` is the body length
+// in the mesh's own units, for meshes not already one unit long with the head along +X.
+export function addTailBeat(material, { rate = 6, amount = 0.06, controls = null, along = 'transformed.x', size = 1 } = {}) {
   const previous = material.onBeforeCompile;
   const key = material.customProgramCacheKey?.() ?? material.name;
   const own = controls ?? { beat: { value: 1 }, phase: { value: 0 }, arch: { value: 0 } };
@@ -307,12 +309,13 @@ export function addTailBeat(material, { rate = 6, amount = 0.06, controls = null
       .replace('#include <begin_vertex>', `#include <begin_vertex>
         float beatA = uTime * ${rate.toFixed(2)} + uBeatPhase;
         // The bend grows steadily from the head back to the flukes, so the whole body rides the same wave.
-        float beatAlong = smoothstep( 0.5, -0.5, transformed.x );
-        float beatWave = sin( beatA + transformed.x * 2.4 );
-        transformed.y += beatWave * uBeat * ${amount.toFixed(3)} * mix( 0.6, 1.0, pow( beatAlong, 1.4 ) );
-        transformed.y -= uArch * 0.18 * pow( transformed.x * 2.0, 2.0 );`);
+        float beatX = ${along};
+        float beatAlong = smoothstep( 0.5, -0.5, beatX );
+        float beatWave = sin( beatA + beatX * 2.4 );
+        transformed.y += beatWave * uBeat * ${(amount * size).toFixed(4)} * mix( 0.6, 1.0, pow( beatAlong, 1.4 ) );
+        transformed.y -= uArch * ${(0.18 * size).toFixed(4)} * pow( beatX * 2.0, 2.0 );`);
   };
-  material.customProgramCacheKey = () => `${key}-tail${rate}`;
+  material.customProgramCacheKey = () => `${key}-tail${rate}-${along}`;
   material.needsUpdate = true;
 }
 
