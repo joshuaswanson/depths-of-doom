@@ -89,3 +89,31 @@ export function installWaterFog() {
 #endif
 `;
 }
+
+// Every lit pixel runs the full lighting maths once per light. A light that is switched off, a pixel outside a
+// spotlight's cone or beyond a lamp's reach, and a surface facing away from a light all add exactly zero, so those
+// pixels skip the maths and the shadow lookup for that light.
+export function installLightSkips() {
+  const call = 'RE_Direct( directLight, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );';
+  const facing = /* glsl */ `
+		#ifndef TOON
+		directLight.visible = directLight.visible && ( dot( geometryNormal, directLight.direction ) > 0.0
+			#ifdef USE_CLEARCOAT
+			|| dot( geometryClearcoatNormal, directLight.direction ) > 0.0
+			#endif
+			);
+		#endif`;
+  const chunk = THREE.ShaderChunk.lights_fragment_begin;
+  const patched = chunk
+    .split(call).join(`if ( directLight.visible ) ${call}`)
+    .replace('getDirectionalLightInfo( directionalLight, directLight );',
+      `getDirectionalLightInfo( directionalLight, directLight );${facing}`)
+    .replace('getPointLightInfo( pointLight, geometryPosition, directLight );',
+      `getPointLightInfo( pointLight, geometryPosition, directLight );${facing}`)
+    .replace('getSpotLightInfo( spotLight, geometryPosition, directLight );',
+      `getSpotLightInfo( spotLight, geometryPosition, directLight );${facing}`);
+  if (patched.split('if ( directLight.visible )').length !== 5 || patched.split('#ifndef TOON').length !== 4) {
+    throw new Error('lights_fragment_begin changed; update installLightSkips');
+  }
+  THREE.ShaderChunk.lights_fragment_begin = patched;
+}

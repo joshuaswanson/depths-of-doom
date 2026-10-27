@@ -19,11 +19,12 @@ import { Hud } from './hud.js';
 import { Net } from './net.js';
 import { Player } from './player.js';
 import {
-  CAMERA_FOV, CAMERA_Z, SHADOW_FAR, SHADOW_NEAR, SHADOW_SPAN, SURFACE_Y, installWaterFog,
+  CAMERA_FOV, CAMERA_Z, SHADOW_FAR, SHADOW_NEAR, SHADOW_SPAN, SURFACE_Y, installLightSkips, installWaterFog,
 } from './water.js';
 import { World } from './world.js';
 
 installWaterFog();
+installLightSkips();
 WATER.surface.value = SURFACE_Y;
 
 const canvas = document.getElementById('game');
