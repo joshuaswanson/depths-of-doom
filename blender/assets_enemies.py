@@ -117,7 +117,8 @@ def enemy_sub(P, name="enemy_sub", length=3.4, radius=0.85, tower=True, skull_ma
             red_light(part, P, b.frame(x, side(math.radians(-25))), radius=0.06 * radius / 0.85)
 
     if tower:
-        tx = -h * 0.44
+        # Subs with a gun turret carry the tower further forward, leaving the turret room on the straight hull.
+        tx = -h * (0.52 if turret else 0.44)
         tz = b.r(tx)
         r = radius * 0.75
         t_h = 0.75 * r
@@ -157,7 +158,7 @@ def enemy_sub(P, name="enemy_sub", length=3.4, radius=0.85, tower=True, skull_ma
     if turret:
         # A gun turret on the back; its barrels are a separate pivoting part so the game can aim them.
         tk = radius / 0.85
-        tx = h * 0.18
+        tx = h * 0.1
         tz = b.r(tx)
         part.cylinder(P["enemy_plate"], loc=(tx, 0, tz + 0.08 * tk), radius=0.3 * tk, depth=0.2 * tk, segs=24,
                       bevel=0.04)
