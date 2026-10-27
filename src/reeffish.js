@@ -3,14 +3,12 @@ import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { spawn } from './assets.js';
 import { SHADER_TIME } from './surface.js';
 
-// Reef life: schools of blue tang, discus and tigerfish circling the coral, clownfish hovering over their anemones,
+// Reef life: schools of blue tang circling the coral, clownfish hovering over their anemones,
 // pufferfish pottering about, seahorses clinging upright among the corals, starfish on the reef rock, and sheephead
 // nosing through the kelp. Each species is one instanced mesh, every fish beating its tail in its own rhythm.
 // Every model is one unit long with its head along +x (the seahorse stands about twice as tall as it is long).
 const SPECIES = {
   blue_tang: { size: 1.0, count: 48, rate: 11, amount: 0.07 },
-  discus: { size: 0.9, count: 15, rate: 8, amount: 0.05 },
-  tigerfish: { size: 1.15, count: 15, rate: 9, amount: 0.06 },
   clownfish: { size: 0.65, count: 18, rate: 14, amount: 0.08 },
   pufferfish: { size: 1.0, count: 6, rate: 6, amount: 0.04 },
   seahorse: { size: 0.45, count: 9, rate: 3, amount: 0.02 },
@@ -111,8 +109,7 @@ export class ReefFish {
       }
     } else {
       const schools = [['blue_tang', 6 + Math.floor(r(2) * 6)]];
-      if (r(3) < 0.6) schools.push([r(4) < 0.5 ? 'discus' : 'tigerfish', 3 + Math.floor(r(5) * 3)]);
-      if (r(6) < 0.45) schools.push(['blue_tang', 4 + Math.floor(r(7) * 4)]);
+      if (r(6) < 0.7) schools.push(['blue_tang', 4 + Math.floor(r(7) * 4)]);
       schools.forEach(([name, n], k) => {
         add({
           type: 'school', home: reef, phase: r(10 + k) * 6.3, speed: 1.1 + r(20 + k) * 0.6,

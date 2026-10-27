@@ -32,8 +32,6 @@ const SIMPLIFY = {
   polar_bear: [0.5, 0.002],
   penguin: [0.4, 0.0015],
   blue_tang: [0.2, 0.0015],
-  tigerfish: [0.2, 0.0015],
-  discus: [0.2, 0.0015],
   sheephead: [0.25, 0.0015],
   clownfish: [0.4, 0.0015],
   pufferfish: [0.35, 0.0015],
