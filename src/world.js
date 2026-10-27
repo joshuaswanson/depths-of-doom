@@ -1096,10 +1096,13 @@ const SPERM_GAP = [45, 75];
 // nods a little against the stroke, and the bend grows steadily toward the flukes, so the whole body rides the wave.
 const SPERM_TAIL = ['Bone10_010', 'Bone02_02', 'Bone03_03', 'Bone04_04', 'Bone05_05', 'Bone06_06', 'Bone07_07',
   'Bone08_08', 'Bone09_09'];
-const SPERM_BEND = [-0.035, 0.03, 0.06, 0.09, 0.12, 0.16, 0.2, 0.25, 0.3];
+const SPERM_BEND = [-0.045, 0.04, 0.08, 0.12, 0.155, 0.19, 0.225, 0.26, 0.3];
 const SPERM_STROKE = 2.3;
 // The model rests with its tail drooping; this lifts each joint so the stroke centres on a straight body.
 const SPERM_LIFT = -0.045;
+// Pitch eases toward its goal like a heavy body on a spring: it starts turning gently and settles without overshoot.
+const SPERM_TURN = 0.55;
+const SPERM_DIVE = -0.6;
 
 function makeSpermWhale() {
   const holder = new THREE.Group();
@@ -1152,6 +1155,7 @@ function updateSpermWhale(whale, dt, cx, cy, humpback, aspect) {
     u.dir = -away;
     u.rising = Math.random() < 0.5;
     u.pitch = u.rising ? 0.5 : 0;
+    u.pitchVel = 0;
     u.levelAt = 0;
     u.diveFrom = null;
     const lowest = floorY(x) + 16;
@@ -1164,18 +1168,19 @@ function updateSpermWhale(whale, dt, cx, cy, humpback, aspect) {
   const wallAhead = ahead > p.y - 10;
   if (u.rising && !u.levelAt && (p.y > cy - 3 || u.t > 12 || wallAhead)) u.levelAt = u.t;
   let want;
-  if (u.rising) want = !u.levelAt ? 0.5 : (u.t - u.levelAt < 3.5 ? 0 : -0.9);
-  else want = u.t < 6 ? 0 : -0.9;
-  u.pitch += (want - u.pitch) * (1 - Math.exp(-dt * 0.5));
+  if (u.rising) want = !u.levelAt ? 0.5 : (u.t - u.levelAt < 3.5 ? 0 : SPERM_DIVE);
+  else want = u.t < 6 ? 0 : SPERM_DIVE;
+  u.pitchVel += (SPERM_TURN * SPERM_TURN * (want - u.pitch) - 2 * SPERM_TURN * u.pitchVel) * dt;
+  u.pitch += u.pitchVel * dt;
   const diving = u.pitch < -0.2;
   if (diving && u.diveFrom === null) u.diveFrom = p.y;
-  const speed = 4 + (diving ? Math.min(2.5, (-u.pitch - 0.2) * 3) : 0);
+  const speed = 4 + (diving ? Math.min(1, (-u.pitch - 0.2) * 2.5) : 0);
   p.x += Math.cos(u.pitch) * u.dir * speed * dt;
   p.y += Math.sin(u.pitch) * speed * dt;
   // The body heaves gently with each stroke.
   const heave = Math.sin(u.t * SPERM_STROKE + 1.2);
   p.y += heave * 0.25 * dt;
-  whale.rotation.set(0, u.dir > 0 ? 0 : Math.PI, u.pitch + heave * 0.02);
+  whale.rotation.set(0, u.dir > 0 ? 0 : Math.PI, u.pitch + heave * 0.03);
   // Faint when it first comes up out of the dark, and gone again as it dives, nears a wall or nears the floor.
   const arrive = THREE.MathUtils.smoothstep(u.t, 0, 4);
   const sunk = u.diveFrom === null ? 0 : THREE.MathUtils.smoothstep(u.diveFrom - p.y, 4, 22);
