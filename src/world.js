@@ -1827,10 +1827,11 @@ export class World {
   }
 
   // Returns how many gulls just took off, so the game can play one cry for the flock.
-  updateGulls(dt, cx, cy, hull) {
+  updateGulls(dt, cx, cy, hull, camZ) {
     let scared = 0;
     const sub = hull?.center;
-    const visible = Math.abs(cy - SURFACE_Y) < 30;
+    // Floating gulls show once the top of the view nears the surface; flying ones climb up to 24 above it.
+    const visible = cy > SURFACE_Y - Math.max(camZ, 2) * TAN_HALF_FOV - 2 && cy < SURFACE_Y + 30;
     for (const gull of this.gulls) {
       const u = gull.userData;
       gull.visible = visible;
@@ -2045,7 +2046,7 @@ export class World {
     this.time += dt;
     const cx = camera.position.x;
     const cy = camera.position.y;
-    if (this.updateGulls(dt, cx, cy, hull) > 0) sfx.gull();
+    if (this.updateGulls(dt, cx, cy, hull, camera.position.z) > 0) sfx.gull();
     updateWhale(this.whale, dt, this.time, cx, cy, this.aspect, this.calm ?? true);
     updateSpermWhale(this.spermWhale, dt, cx, cy, this.whale, this.aspect);
     updateDolphins(this, dt, this.time, cx, cy, halfWidthAt(-10, this.aspect), sub);
