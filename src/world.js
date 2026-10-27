@@ -160,8 +160,8 @@ function makeMound(cell) {
     centre,
     height: 3.0 + 3.5 * hash(cell, 2),
     width: 4.5 + 3.5 * hash(cell, 3),
-    reef: reefAt(x) > 0.3 && polarAt(x).amount < 0.5,
-    polar: polarAt(x).amount > 0.5,
+    reef: reefAt(x) > 0.3 && !polarAt(x).shelf,
+    polar: polarAt(x).shelf !== null,
     murk: murkAt(x),
   };
 }
@@ -501,7 +501,8 @@ function shapeTile(tile, target, budget = Infinity) {
     const { y, glow } = paintSeabed(x, pos.getZ(i), murk, c);
     pos.setY(i, y);
     glowAttr[i] = glow;
-    polarAttr[i] = polarAt(x).amount;
+    // Polar shelves are bare all the way to their cliffs: no grass, no sunlit ripples.
+    polarAttr[i] = polarAt(x).shelf ? 1 : 0;
     col.setXYZ(i, c.r, c.g, c.b);
   }
   job.next = end;
@@ -605,8 +606,8 @@ function makeSeabedMaterial(uniforms) {
         }
         #endif
         // Two drifting layers of caustics at different scales, so the sunlit floor ripples with light.
-        // The polar ice lets through only a little of the rippling sunlight.
-        float fadeC = smoothstep( -90.0, -4.0, vSeaWorld.z ) * smoothstep( -32.0, -6.0, vSeaWorld.y ) * ( 1.0 - 0.75 * vPolar );
+        // Under the polar overcast there is no rippling sunlight.
+        float fadeC = smoothstep( -90.0, -4.0, vSeaWorld.z ) * smoothstep( -32.0, -6.0, vSeaWorld.y ) * ( 1.0 - vPolar );
         if ( fadeC > 0.0 ) {
         vec2 cA = vSeaWorld.xz * vec2( 0.42, 0.3 ) + vec2( uTime * 0.05, uTime * 0.03 );
         cA += 0.45 * vec2( sin( cA.y * 1.9 + uTime * 0.6 ), cos( cA.x * 1.6 - uTime * 0.5 ) );
@@ -1035,8 +1036,10 @@ function makeWhale() {
 
 // The whale keeps to its own patch of open water over the middle of the trench near the camera, whatever the
 // player does: the trench is found by walking out from the camera until the floor rises.
-// Whales, dolphins, the marlin and the gulls only turn up this far or more from any polar ice.
+// Whales, dolphins, the marlin and the gulls only turn up this far or more from any polar ice, and a pod of dolphins
+// already about turns back before it gets within ICE_SHY of it.
 const OPEN_SEA = 110;
+const ICE_SHY = 70;
 
 function whaleHome(cx) {
   if (deepBelow(cx) < 45) return null;
@@ -1312,6 +1315,7 @@ function updateDolphins(world, dt, t, cx, cy, halfW, sub) {
     if (dolphins.wait > 0 || !near || nearIce(cx, OPEN_SEA)) return;
     dolphins.active = true;
     dolphins.dir = Math.random() < 0.5 ? -1 : 1;
+    dolphins.turned = false;
     // Each swims in its own depth lane, far enough apart that they never pass through each other.
     const lanes = DOLPHIN_LANES.slice().sort(() => Math.random() - 0.5);
     dolphins.members = dolphins.pod.map((d, i) => ({
@@ -1319,9 +1323,18 @@ function updateDolphins(world, dt, t, cx, cy, halfW, sub) {
       phase: rand(0, Math.PI * 2), wobble: rand(0, 6.3), rate: rand(1.5, 1.9), amp: rand(0.07, 0.11), leap: null, nextLeap: rand(1, 6),
     }));
   }
+  // A pod heading for polar water turns back well short of the ice, swinging round in a wide curve.
+  if (!dolphins.turned && dolphins.members.some((m) => nearIce(m.x + dolphins.dir * 25, ICE_SHY))) {
+    dolphins.dir = -dolphins.dir;
+    dolphins.turned = true;
+  }
   let anyInView = false;
   for (const m of dolphins.members) {
-    m.x += dolphins.dir * DOLPHIN_SPEED * dt;
+    m.vel = m.vel === undefined ? dolphins.dir * DOLPHIN_SPEED
+      : m.vel + (dolphins.dir * DOLPHIN_SPEED - m.vel) * (1 - Math.exp(-dt * 1.2));
+    m.x += m.vel * dt;
+    m.yaw = m.yaw === undefined ? (dolphins.dir > 0 ? 0 : Math.PI)
+      : m.yaw + ((dolphins.dir > 0 ? 0 : Math.PI) - m.yaw) * (1 - Math.exp(-dt * 1.8));
     let y;
     let vy;
     if (m.leap) {
@@ -1393,7 +1406,7 @@ function updateDolphins(world, dt, t, cx, cy, halfW, sub) {
     const pitch = Math.atan2(vy, DOLPHIN_SPEED);
     const follow = m.leap && y > SURFACE_Y - 1 ? 14 : 5;
     m.pitch = m.pitch === undefined ? pitch : m.pitch + (pitch - m.pitch) * (1 - Math.exp(-dt * follow));
-    m.d.rotation.set(0, dolphins.dir > 0 ? 0 : Math.PI, m.pitch);
+    m.d.rotation.set(0, m.yaw, m.pitch);
     m.d.visible = true;
     if (dolphins.dir * (m.x - cx) < halfW + 12) anyInView = true;
   }
@@ -2325,7 +2338,7 @@ export class World {
 
     for (const ray of this.rays) {
       ray.material.uniforms.uTime.value = t;
-      ray.material.uniforms.uStrength.value = ray.userData.strength * (1 - this.dark) * (1 - 0.35 * this.polar.cold);
+      ray.material.uniforms.uStrength.value = ray.userData.strength * (1 - this.dark) * (1 - this.polar.cold);
       ray.position.x = wrap(ray.position.x, cx, halfWidthAt(ray.position.z, this.aspect) + 10);
     }
 
