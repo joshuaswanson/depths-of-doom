@@ -123,7 +123,14 @@ for name in PHASE:
     # Hips sit behind and above the hind knees; shoulders above and a little behind the elbows.
     top = np.array([knee[0] - (0.05 if hind else 0.02), knee[1] * 0.85, GROUND + (0.3 if hind else 0.33)])
     legs[name] = dict(side=side, hind=hind, top=Vector(top), knee=Vector(knee), ankle=Vector(ankle), toe=Vector(toe))
-    print(name, {k: tuple(round(x, 3) for x in v) for k, v in legs[name].items() if isinstance(v, Vector)})
+# The rest pose has one leg of each pair set forward, but hips and shoulders sit level across the body.
+for hind in (True, False):
+    pair = [g for g in legs.values() if g["hind"] == hind]
+    x = sum(g["top"].x for g in pair) / 2
+    for g in pair:
+        g["top"].x = x
+for name, g in legs.items():
+    print(name, {k: tuple(round(x, 3) for x in v) for k, v in g.items() if isinstance(v, Vector)})
 
 # The skeleton.
 arm_data = bpy.data.armatures.new("polar_bear_rig")
@@ -162,12 +169,24 @@ for name, g in legs.items():
     bone(f"pole_{name}", g["knee"] + Vector((pole_x, 0, 0)), g["knee"] + Vector((pole_x, 0, 0.05)), "root", deform=False)
 bpy.ops.object.mode_set(mode="POSE")
 pb = rig.pose.bones
+
+
+def pole_angle(upper, lower, pole):
+    """The IK pole angle that leaves a two-bone chain exactly as it lies at rest, bending toward `pole`."""
+    along = upper.tail_local - upper.head_local
+    normal = (lower.tail_local - upper.head_local).cross(pole - upper.head_local)
+    toward = normal.cross(along)
+    x_axis = upper.matrix_local.to_3x3().col[0]
+    angle = x_axis.angle(toward)
+    return -angle if along.dot(x_axis.cross(toward)) < 0 else angle
+
 for name, g in legs.items():
     upper, lower, foot = (("thigh", "shin", "foot") if g["hind"] else ("arm", "forearm", "paw"))
     c = pb[f"{lower}_{name}"].constraints.new("IK")
     c.target, c.subtarget = rig, f"ik_{name}"
     c.pole_target, c.pole_subtarget = rig, f"pole_{name}"
-    c.pole_angle = math.radians(-90)
+    c.pole_angle = pole_angle(rig.data.bones[f"{upper}_{name}"], rig.data.bones[f"{lower}_{name}"],
+                              rig.data.bones[f"pole_{name}"].head_local)
     c.chain_count = 2
     # The paw keeps the heading of its control: flat while planted, tipping as it lifts.
     r = pb[f"{foot}_{name}"].constraints.new("CHILD_OF")
