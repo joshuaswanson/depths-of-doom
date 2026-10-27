@@ -181,12 +181,22 @@ function* layoutIce(s, ice) {
   const reserved = [...fields.map((f) => [f.start - 2, f.end + 2]),
     ...floes.map((f) => [f.x - f.width / 2 - 5, f.x + f.width / 2 + 5])];
   const bergs = [];
-  const place = (b, x) => {
-    Object.assign(b, iceberg(seeded(b.seed), b.width, b.depth, b.top, b.draft, b.lane ? 96 : 112));
-    const box = b.geometry.boundingBox;
-    b.x = x - box.min.x;
-    b.left = b.x + box.min.x;
-    b.right = b.x + box.max.x;
+  // A berg whose keel or rams would reach past `limit` is made again smaller until it fits.
+  const place = (b, x, limit = Infinity) => {
+    for (let tries = 0; ; tries++) {
+      Object.assign(b, iceberg(seeded(b.seed + tries), b.width, b.depth, b.top, b.draft, b.lane ? 96 : 112));
+      const box = b.geometry.boundingBox;
+      if (x + box.max.x - box.min.x <= limit || tries > 6) {
+        b.x = x - box.min.x;
+        b.left = b.x + box.min.x;
+        b.right = b.x + box.max.x;
+        break;
+      }
+      b.geometry.dispose();
+      b.width *= 0.8;
+      b.draft = Math.min(b.draft, b.width * 0.9);
+    }
+    if (b.right > limit) return null;
     bergs.push(b);
     return b.right;
   };
@@ -196,12 +206,16 @@ function* layoutIce(s, ice) {
       x = clash[1];
       continue;
     }
-    const room = (reserved.find(([a]) => a > x)?.[0] ?? to) - x;
+    const room = Math.min(to, ...reserved.filter(([a]) => a > x).map(([a]) => a)) - x;
     // The keel spreads out wider than the berg's top, so the top is sized to leave the whole berg room to fit.
     const width = Math.min(9 + r() * 20, Math.max(3, room / 1.45));
     const right = place({ z: LANE_Z + (r() - 0.5) * 2, width, depth: 6 + r() * 6, top: 1.6 + r() * 3,
-      draft: Math.min(5 + r() * 8, width * 0.9), seed: Math.floor(r() * 1e9), lane: true }, x);
+      draft: Math.min(5 + r() * 8, width * 0.9), seed: Math.floor(r() * 1e9), lane: true }, x, x + room - 0.5);
     yield;
+    if (right === null) {
+      x += room;
+      continue;
+    }
     // Leads of open water between the bergs, where the sub can come up for air.
     x = right + (r() < 0.35 ? 8 + r() * 10 : 1.5 + r() * 3);
   }
@@ -229,7 +243,7 @@ function* layoutIce(s, ice) {
     // The igloo's floe sits just behind the lane, where a sub breaking through comes up beside it.
     const field = fields[0];
     field.home = { x: (field.start + field.end) / 2 + (r() - 0.5) * 4, z: -11, topAt: () => PACK_TOP };
-    animals.push({ type: 'igloo', berg: field.home, dx: -2.2, dz: -0.5 });
+    animals.push({ type: 'igloo', berg: field.home, dx: IGLOO_SPOT.dx, dz: IGLOO_SPOT.dz });
     // The bear paces along the front of the floe, clear of the igloo's tunnel.
     animals.push({ type: 'bear', berg: fields[0].home, dx: 1.5, dz: 3.7 });
     for (const b of roomy) {
@@ -261,8 +275,9 @@ function* layoutIce(s, ice) {
     f.slice = { x0, ...sliceAlong(f.geometry, 0, x0, SLICE_STEP, Math.ceil((f.half * 2 + 2) / SLICE_STEP) + 1) };
     // The floe drifts when rammed, but only as far as the bergs either side of it.
     const lane = bergs.filter((b) => b.lane);
-    f.room = [Math.max(-Infinity, ...lane.filter((b) => b.right <= f.x).map((b) => b.right)) + 0.4,
-      Math.min(Infinity, ...lane.filter((b) => b.left >= f.x).map((b) => b.left)) - 0.4];
+    // Bergs drift a little when bumped, so it keeps a stride clear of them.
+    f.room = [Math.max(-Infinity, ...lane.filter((b) => b.right <= f.x).map((b) => b.right)) + 1.2,
+      Math.min(Infinity, ...lane.filter((b) => b.left >= f.x).map((b) => b.left)) - 1.2];
     const count = 5 + Math.floor(r() * 4);
     f.penguins = Array.from({ length: count }, () => ({ dx: (r() - 0.5) * f.width * 0.5, dz: (r() - 0.5) * f.depth * 0.35,
       yaw: (r() - 0.5) * 1.6 + (r() < 0.5 ? 0 : Math.PI), phase: r() * 6.3 }));
@@ -385,6 +400,8 @@ function snowBlock(point, out, u0, u1, v0, v1, nu, nv, bevel) {
 // The igloo: a dome of snow blocks laid in a rising spiral, with a tunnel of blocks for an entrance. Packed snow shows
 // in the joints between them.
 const IGLOO_RADIUS = 2.2;
+// Where the igloo stands on its floe.
+const IGLOO_SPOT = { dx: -2.2, dz: -0.5 };
 // The entrance tunnel: an arch of blocks, taller than it is wide, with walls a block thick.
 // The dark doorway at its back sits just outside the dome's inner wall.
 const TUNNEL = { width: 0.9, height: 1.2, wall: 0.28, from: 1.5, to: 3.3, back: 2.16 };
@@ -723,7 +740,12 @@ class PackIce {
       start += indices;
       if (s.home && field.home) {
         field.home.topAt = (dx, dz) => block.topAt(field.home.x + dx - cx, field.home.z + dz - cz);
-        field.home.walkable = (dx, dz, margin) => block.walkable(field.home.x + dx - cx, field.home.z + dz - cz, margin);
+        // The igloo and its tunnel stand on this floe too, and nothing walks through them.
+        const clear = (dx, dz, margin) => Math.hypot(dx - IGLOO_SPOT.dx, dz - IGLOO_SPOT.dz) > IGLOO_RADIUS + margin
+          && !(Math.abs(dx - IGLOO_SPOT.dx) < TUNNEL.width + margin && dz > IGLOO_SPOT.dz
+            && dz < IGLOO_SPOT.dz + TUNNEL.to + margin);
+        field.home.walkable = (dx, dz, margin) => clear(dx, dz, margin)
+          && block.walkable(field.home.x + dx - cx, field.home.z + dz - cz, margin);
       }
     }
     const merged = mergeGeometries(parts);
