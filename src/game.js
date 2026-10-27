@@ -6,7 +6,7 @@ import { WATER, addWaterline } from './surface.js';
 import { sfx } from './audio.js';
 import { UPGRADES, upgradeCost } from './upgrades.js';
 import { CAMERA_Z, SHELF_Y, SURFACE_Y, TAN_HALF_FOV } from './water.js';
-import { iceCeiling } from './polar.js';
+import { iceCeiling, iceSpan } from './polar.js';
 import { floorY, murkAt, seabedAt, seabedColor } from './world.js';
 
 const rand = (a, b) => a + Math.random() * (b - a);
@@ -652,7 +652,7 @@ export class Game {
   }
 
   get bounds() {
-    const b = { bottom: (x) => seabedAt(x) + 0.7, ceiling: iceCeiling };
+    const b = { bottom: (x) => seabedAt(x) + 0.7, ice: iceSpan };
     // In co-op the subs stay within a screen or so of each other, so everyone fights the same waves.
     const alive = this.players.filter((pl) => pl.alive);
     if (alive.length > 1) {

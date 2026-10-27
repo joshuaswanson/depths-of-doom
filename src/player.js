@@ -269,7 +269,7 @@ export class Player {
     this.squash = 0;
     this.vel = new THREE.Vector2();
     this.extents = { hx: 2, hy: 1, cx: 0, cy: 0 };
-    this.outline = [{ x: 0, y: 1 }];
+    this.outline = [{ x: 0, y: 1, low: -1 }];
     this.time = 0;
     this.reset();
   }
@@ -525,10 +525,11 @@ export class Player {
     this.shield.scale.setScalar(Math.max(s.x * 0.62, s.z * 0.62, s.y * 0.68));
   }
 
-  // The highest point of the sub's side view in each of a row of slices along its length, so ice can come right down
-  // onto the hull and the parts on it.
+  // The highest and lowest points of the sub's side view in each of a row of slices along its length, so ice can come
+  // right up against the hull and the parts on it.
   measureOutline(parts, toLocal, box) {
     const top = new Array(OUTLINE_SLICES).fill(-Infinity);
+    const bottom = new Array(OUTLINE_SLICES).fill(Infinity);
     const width = box.max.x - box.min.x;
     const v = new THREE.Vector3();
     const m = new THREE.Matrix4();
@@ -541,10 +542,11 @@ export class Player {
           v.fromBufferAttribute(pos, i).applyMatrix4(m);
           const k = Math.min(OUTLINE_SLICES - 1, Math.floor(((v.x - box.min.x) / width) * OUTLINE_SLICES));
           top[k] = Math.max(top[k], v.y);
+          bottom[k] = Math.min(bottom[k], v.y);
         }
       });
     }
-    this.outline = top.map((y, k) => ({ x: box.min.x + ((k + 0.5) / OUTLINE_SLICES) * width, y }))
+    this.outline = top.map((y, k) => ({ x: box.min.x + ((k + 0.5) / OUTLINE_SLICES) * width, y, low: bottom[k] }))
       .filter((p) => p.y > -Infinity);
   }
 
@@ -643,6 +645,29 @@ export class Player {
     return depth;
   }
 
+  // How far the hull overlaps solid floating ice with the sub at (x, y): how far it would have to drop to clear it
+  // below, and how far rise to clear it above. Null when it is clear.
+  iceOverlap(x, y, span) {
+    const facing = Math.cos(this.yaw);
+    const cos = Math.cos(this.screenTilt);
+    const sin = Math.sin(this.screenTilt);
+    let down = 0;
+    let up = 0;
+    let hit = false;
+    for (const p of this.outline) {
+      const px = p.x * facing;
+      const s = span(x + px * cos - ((p.y + p.low) / 2) * sin);
+      if (!s) continue;
+      const top = y + px * sin + p.y * cos;
+      const low = y + px * sin + p.low * cos;
+      if (top <= s.bottom || low >= s.top) continue;
+      hit = true;
+      down = Math.max(down, top - s.bottom);
+      up = Math.max(up, s.top - low);
+    }
+    return hit ? { down, up } : null;
+  }
+
   get center() {
     const e = this.extents;
     const a = this.screenTilt;
@@ -721,21 +746,29 @@ export class Player {
     // Gentle slopes lift the sub as it slides along them; anything steeper is a wall. Floating ice works the same
     // way from above: a sloping keel presses the sub down, a sheer one stops it.
     const lift = this.rockDepth(nx, p.y, bounds.bottom);
-    const press = bounds.ceiling ? this.iceDepth(nx, p.y, bounds.ceiling) : -Infinity;
-    const pressBefore = press > 0 ? this.iceDepth(p.x, p.y, bounds.ceiling) : 0;
-    if ((lift > 0 && lift > Math.abs(dx) * MAX_CLIMB) || (press > 0 && press - Math.max(pressBefore, 0) > Math.abs(dx) * MAX_CLIMB)) {
+    // Floating ice is solid all round: a sub can slide along a gently sloping face, under a keel or over a top, but a
+    // steep one is a wall.
+    const ice = bounds.ice;
+    const deep = (o) => (o ? Math.min(o.down, o.up) : 0);
+    const pressBefore = ice ? deep(this.iceOverlap(p.x, p.y, ice)) : 0;
+    const press = ice ? deep(this.iceOverlap(nx, p.y, ice)) : 0;
+    this.iceBump = null;
+    const walled = press - pressBefore > Math.abs(dx) * MAX_CLIMB;
+    if ((lift > 0 && lift > Math.abs(dx) * MAX_CLIMB) || walled) {
+      if (walled) this.iceBump = { x: nx + Math.sign(dx) * this.extents.hx, vx: this.vel.x, vy: 0 };
       // A real crash bounces off; pressing on into the wall just stops dead, so the speed never flickers.
       this.vel.x = Math.abs(this.vel.x) > WALL_BOUNCE_SPEED ? this.vel.x * -0.25 : 0;
     } else {
       p.x = nx;
     }
     p.y += this.vel.y * dt;
-    if (bounds.ceiling) {
-      const bumped = this.iceDepth(p.x, p.y, bounds.ceiling);
-      if (bumped > 0) {
-        p.y -= bumped;
-        if (this.vel.y > 0) this.vel.y *= -0.2;
-      }
+    const overlap = ice && this.iceOverlap(p.x, p.y, ice);
+    if (overlap) {
+      // Pushed back out the way it came in: rising into ice drops it back under, sinking onto ice sets it on top.
+      const rising = this.vel.y > 0.05 || (this.vel.y > -0.05 && overlap.down <= overlap.up);
+      if (Math.abs(this.vel.y) > 0.5) this.iceBump = { x: p.x, vx: 0, vy: this.vel.y };
+      p.y += rising ? -overlap.down : overlap.up;
+      if (rising ? this.vel.y > 0 : this.vel.y < 0) this.vel.y *= -0.2;
     }
     const sunk = this.rockDepth(p.x, p.y, bounds.bottom);
     this.onFloor = sunk > -0.05;
