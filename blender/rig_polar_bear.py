@@ -10,6 +10,7 @@ it lifts, swings forward in an arc and sets down flat. The animations are baked 
     sniff  head lowered to the snow, nosing about
     scent  head raised into the wind, sniffing the air
 """
+import json
 import math
 import os
 import sys
@@ -22,11 +23,51 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 source = sys.argv[sys.argv.index("--") + 1]
 FPS = 30
 WALK_FRAMES = 32
-WALK_STRIDE = 0.2
+WALK_STRIDE = 0.22
 # Each paw's place in the cycle when it sets down: a four-beat walk, left hind, left fore, right hind, right fore.
 PHASE = {"LH": 0.0, "LF": 0.24, "RH": 0.5, "RF": 0.74}
-DUTY = 0.66
-LIFT = 0.055
+DUTY = 0.65
+# One walk cycle of a dog from motion capture (scripts/dog_walk.py). The bear walks more slowly, so its paws keep
+# their own timing, but each swings forward along the dog's path, lifting as the dog's do, and the body bobs, rolls
+# and sways as the dog's does.
+DOG = json.load(open(os.path.join(ROOT, "blender", "dog_walk.json")))
+
+
+def dog_profiles():
+    frames = DOG["frames"]
+    n = len(frames) - 1
+    legs = {}
+    for leg in PHASE:
+        h = np.array([f["paws"][leg][1] for f in frames])
+        x = np.array([f["paws"][leg][0] for f in frames])
+        down = h < h.min() + 1.5
+        lift_at = next(i for i in range(1, n + 1) if down[i - 1] and not down[i])
+        land_at = next(i for i in range(lift_at, lift_at + n + 1) if down[i % n] and not down[(i - 1) % n])
+        span = range(lift_at - 1, land_at + 1)
+        hs = np.array([h[i % n] for i in span]) - h.min()
+        xs = np.array([x[i % n] for i in span])
+        legs[leg] = {"lift": hs / DOG["hips_height"], "ease": (xs - xs[0]) / (xs[-1] - xs[0])}
+    return legs
+
+
+SWING = dog_profiles()
+
+
+def sample(curve, p):
+    f = p * (len(curve) - 1)
+    i = min(int(f), len(curve) - 2)
+    return curve[i] + (curve[i + 1] - curve[i]) * (f - i)
+
+
+def dog_body(phase):
+    frames = DOG["frames"]
+    f = phase % 1 * (len(frames) - 1)
+    i = min(int(f), len(frames) - 2)
+    t = f - i
+    mix = lambda a, b: [a[k] + (b[k] - a[k]) * t for k in range(len(a))]
+    turn = {k: mix(frames[i]["turn"][k], frames[i + 1]["turn"][k]) for k in frames[i]["turn"]}
+    hips = frames[i]["hips"] + (frames[i + 1]["hips"] - frames[i]["hips"]) * t
+    return turn, (hips - DOG["hips_height"]) / DOG["hips_height"]
 
 bpy.ops.wm.read_factory_settings(use_empty=True)
 bpy.ops.import_scene.gltf(filepath=source)
@@ -195,17 +236,18 @@ def paw(name, phase):
     # Both paws of a pair swing about the same point, between where they stand at rest.
     pair = [l for l in legs.values() if l["hind"] == g["hind"]]
     centre = sum(l["ankle"].x for l in pair) / 2 + (0.015 if g["hind"] else 0.0) - g["ankle"].x
+    reach = WALK_STRIDE * DUTY
     t = (phase - PHASE[name]) % 1
     if t < DUTY:
+        # Planted: the body passes over it at walking pace, and the heel peels up as it is about to lift.
         s = t / DUTY
-        x = centre + WALK_STRIDE * (0.5 - s)
-        heel = max(0.0, (s - 0.8) / 0.2)
-        return Vector((x, 0, 0.018 * heel * heel)), 0.35 * heel * heel
-    s = (t - DUTY) / (1 - DUTY)
-    ease = 0.5 - 0.5 * math.cos(math.pi * s)
-    x = centre + WALK_STRIDE * (ease - 0.5)
-    lift = LIFT * math.sin(math.pi * s) ** 0.8
-    pitch = 0.35 * (1 - s) - 0.15 * math.sin(math.pi * s)
+        heel = max(0.0, (s - 0.82) / 0.18)
+        return Vector((centre + reach * (0.5 - s), 0, 0.012 * heel * heel)), 0.3 * heel * heel
+    p = (t - DUTY) / (1 - DUTY)
+    swing = SWING[name]
+    x = centre - reach / 2 + reach * sample(swing["ease"], p)
+    lift = sample(swing["lift"], p) * (g["top"].z - GROUND)
+    pitch = 0.3 * (1 - p) ** 2 - 0.12 * math.sin(math.pi * p)
     return Vector((x, 0, lift)), pitch
 
 
@@ -225,14 +267,18 @@ def walk_pose(phase, frame):
         offset, pitch = paw(name, phase)
         shift(f"ik_{name}", offset)
         turn(f"ik_{name}", PITCH(pitch))
-    a = 2 * math.pi * phase
-    # The body dips twice a stride, rolls toward the planted hind leg and swings its shoulders the other way.
-    turn("hips", ROLL(0.04 * math.sin(a)) @ YAW(0.05 * math.sin(a)))
-    turn("chest", ROLL(-0.035 * math.sin(a + 1.6)) @ YAW(-0.04 * math.sin(a + 1.6)))
+    body, bob = dog_body(phase)
+    hips = body["Hips"]
+    chest = body["Spine1"]
+    head = body["Head"]
+    # The dog's turns, measured as roll, pitch (nose up) and yaw (to its right), tempered for a heavier animal.
+    turn("hips", ROLL(-hips[0] * 0.6) @ PITCH(-hips[1] * 0.5) @ YAW(-hips[2] * 0.25))
+    turn("chest", ROLL(-chest[0] * 0.5) @ PITCH(-chest[1] * 0.5) @ YAW(-chest[2] * 0.5))
+    turn("neck", YAW(-head[2] * 0.3) @ PITCH(-head[1] * 0.3))
+    turn("head", ROLL(-head[0] * 0.5) @ PITCH(-head[1] * 0.4) @ YAW(-head[2] * 0.4))
+    height = (legs["LH"]["top"].z - GROUND) * bob
     for b in ("hips", "chest"):
-        shift(b, (0, 0, -0.008 * math.cos(2 * a)))
-    turn("neck", YAW(0.04 * math.sin(a)) @ PITCH(0.05 * math.sin(2 * a + 0.8)))
-    turn("head", PITCH(-0.06 * math.sin(2 * a + 1.4)))
+        shift(b, (0, 0, height))
 
 
 def stand_pose():

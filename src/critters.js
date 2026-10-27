@@ -31,7 +31,7 @@ const uniformSet = (names) => Object.fromEntries(names.map((n) => [n, { value: 0
 
 // The polar bear is rigged, with a walk cycle and two idles baked in Blender (blender/rig_polar_bear.py). One walk
 // cycle carries it this far, in model units.
-const BEAR_STRIDE = 0.2;
+const BEAR_STRIDE = 0.22;
 // Walking speed and the radius it turns round in, in world units.
 const BEAR_PACE = 0.7;
 const BEAR_TURN = 0.9;
