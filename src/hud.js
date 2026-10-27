@@ -1,10 +1,18 @@
+import { ACHIEVEMENTS, isUnlocked, unlockedCount } from './achievements.js';
 import { UPGRADES, upgradeCost } from './upgrades.js';
 
 const ICON = (name) => `${import.meta.env.BASE_URL}icons/${name}.webp`;
 const LOGO = `<div class="logo-wrap"><img class="logo-img" src="${import.meta.env.BASE_URL}logo.webp" alt="Depths of Doom">
   <a class="badge" href="https://joshuaswanson.github.io" target="_blank" rel="noopener">
     <img src="${import.meta.env.BASE_URL}badge.webp" alt="by Joshua Swanson"></a></div>`;
-const TITLE_CONTROLS = `<button class="big-btn">Dive!</button>
+const TROPHY = `<svg viewBox="0 0 24 24" class="trophy" aria-hidden="true"><path fill="currentColor" d="M7 3h10v2h3v3a4
+  4 0 0 1-4 4h-.3A5 5 0 0 1 13 14.9V17h3v3H8v-3h3v-2.1A5 5 0 0 1 8.3 12H8a4 4 0 0 1-4-4V5h3V3zm0 4H6v1a2 2 0 0 0 1
+  1.7V7zm10 0v2.7A2 2 0 0 0 18 8V7h-1z"/></svg>`;
+const LOCK = `<svg viewBox="0 0 24 24" class="trophy" aria-hidden="true"><path fill="currentColor" d="M12 2a5 5 0 0 1 5 5v3h1a2
+  2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h1V7a5 5 0 0 1 5-5zm0 2a3 3 0 0 0-3 3v3h6V7a3 3 0 0 0-3-3z"/></svg>`;
+const achievementsButton = () => `<button class="ach-btn">${TROPHY}Achievements
+  <b>${unlockedCount()}/${ACHIEVEMENTS.length}</b></button>`;
+const titleControls = () => `<button class="big-btn">Dive!</button>
   <div class="coop-panel">
     <div class="coop-title">Dive with friends</div>
     <div class="coop">
@@ -14,7 +22,8 @@ const TITLE_CONTROLS = `<button class="big-btn">Dive!</button>
       <button class="coop-btn join">Join</button>
     </div>
     <div class="coop-status">Up to 4 subs. Share the code or the invite link.</div>
-  </div>`;
+  </div>
+  <div class="ach-slot">${achievementsButton()}</div>`;
 // Movement keys laid out as they sit on a keyboard: one key above, three below.
 const keyCluster = (up, left, down, right) => `<div class="key-grid"><kbd class="k-up">${up}</kbd>
   <kbd class="k-left">${left}</kbd><kbd class="k-down">${down}</kbd><kbd class="k-right">${right}</kbd></div>`;
@@ -91,7 +100,9 @@ export class Hud {
     });
 
     this.overlay = el('div', 'overlay');
-    root.append(topLeft, this.pauseBtn, this.radar, this.bossBar, this.banner, this.toast, this.bar, this.overlay);
+    this.achievementPops = el('div', 'ach-pops');
+    root.append(topLeft, this.pauseBtn, this.radar, this.bossBar, this.banner, this.toast, this.bar, this.overlay,
+      this.achievementPops);
     this.onStart = onStart;
     this.onHost = onHost;
     this.onJoin = onJoin;
@@ -114,7 +125,7 @@ export class Hud {
     let fill = this.overlay.querySelector('.loading-fill');
     if (!fill) {
       this.overlay.className = 'overlay show';
-      this.overlay.innerHTML = `<div class="panel">${LOGO}<div class="below"><div class="unseen">${TITLE_CONTROLS}</div>
+      this.overlay.innerHTML = `<div class="panel">${LOGO}<div class="below"><div class="unseen">${titleControls()}</div>
         <div class="loading"><div class="loading-fill"></div></div></div></div>`;
       fill = this.overlay.querySelector('.loading-fill');
     }
@@ -122,11 +133,13 @@ export class Hud {
   }
 
   showTitle() {
+    this.hideAchievements();
     this.overlay.className = 'overlay show';
     const below = this.overlay.querySelector('.below');
-    if (below) below.innerHTML = TITLE_CONTROLS;
-    else this.overlay.innerHTML = `<div class="panel">${LOGO}<div class="below">${TITLE_CONTROLS}</div></div>`;
+    if (below) below.innerHTML = titleControls();
+    else this.overlay.innerHTML = `<div class="panel">${LOGO}<div class="below">${titleControls()}</div></div>`;
     this.overlay.querySelector('.big-btn').addEventListener('click', () => this.onStart());
+    this.addAchievementsButton(this.overlay.querySelector('.ach-slot'));
     const code = this.overlay.querySelector('.coop-code');
     code.addEventListener('keydown', (e) => {
       e.stopPropagation();
@@ -175,14 +188,16 @@ export class Hud {
   }
 
   showGameOver(stats) {
+    this.hideAchievements();
     this.overlay.className = 'overlay show';
     this.overlay.innerHTML = `<div class="panel">
       <div class="logo small">Glub glub...</div>
       <div class="subtitle">Your magnificent tub sank on wave ${stats.wave}</div>
       <div class="stats"><div><b>${stats.kills}</b>subs sunk</div><div><b>${stats.coins}</b>coins found</div>
       <div><b>${stats.parts}</b>things bolted on</div></div>
-      <button class="big-btn">Dive again</button></div>`;
+      <button class="big-btn">Dive again</button><div class="ach-slot"></div></div>`;
     this.overlay.querySelector('.big-btn').addEventListener('click', () => this.onStart());
+    this.addAchievementsButton(this.overlay.querySelector('.ach-slot'));
   }
 
   showPause() {
@@ -193,6 +208,7 @@ export class Hud {
   }
 
   hideOverlay() {
+    this.hideAchievements();
     this.overlay.className = 'overlay';
   }
 
@@ -231,6 +247,50 @@ export class Hud {
     this.hints.style.setProperty('--x', `${x}px`);
     this.hints.style.setProperty('--y', `${y}px`);
     this.hints.style.setProperty('--gap', `${gap}px`);
+  }
+
+  addAchievementsButton(slot) {
+    slot.innerHTML = achievementsButton();
+    slot.querySelector('.ach-btn').addEventListener('click', (e) => {
+      e.currentTarget.blur();
+      this.showAchievements();
+    });
+  }
+
+  get achievementsOpen() {
+    return Boolean(this.achievementList);
+  }
+
+  // Every achievement, earned ones lit in gold, the rest locked with how to earn them.
+  showAchievements() {
+    this.hideAchievements();
+    const cards = ACHIEVEMENTS.map((a) => {
+      const got = isUnlocked(a.id);
+      return `<div class="ach-card${got ? ' got' : ''}"><span class="ach-icon">${got ? TROPHY : LOCK}</span>
+        <span class="ach-text"><b>${a.name}</b><span>${a.desc}</span></span></div>`;
+    }).join('');
+    this.achievementList = el('div', 'ach-list', `<div class="ach-box">
+      <div class="ach-head">${TROPHY}Achievements <b>${unlockedCount()}/${ACHIEVEMENTS.length}</b></div>
+      <div class="ach-grid">${cards}</div><button class="coop-btn ach-close">Back</button></div>`);
+    this.achievementList.querySelector('.ach-close').addEventListener('click', () => this.hideAchievements());
+    this.achievementList.addEventListener('pointerdown', (e) => {
+      if (e.target === this.achievementList) this.hideAchievements();
+    });
+    this.overlay.append(this.achievementList);
+  }
+
+  hideAchievements() {
+    this.achievementList?.remove();
+    this.achievementList = null;
+  }
+
+  // A gold card that drops in under the pause button, with the coins it paid.
+  showAchievement(def, reward) {
+    const pop = el('div', 'ach-pop', `<span class="ach-icon">${TROPHY}</span><span class="ach-text">
+      <small>Achievement unlocked</small><b>${def.name}</b><span>${def.desc}</span></span>
+      <span class="ach-reward"><img src="${ICON('coin')}" alt="">+${reward}</span>`);
+    this.achievementPops.append(pop);
+    setTimeout(() => pop.remove(), 4600);
   }
 
   showToast(text) {

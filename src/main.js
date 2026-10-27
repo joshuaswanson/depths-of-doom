@@ -10,9 +10,10 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 
+import { ACHIEVEMENT_REWARD, onUnlock, setActive, unlock } from './achievements.js';
 import { SHADOW_LAYER, loadModels, warmUp } from './assets.js';
 import { SHADER_TIME, WATER } from './surface.js';
-import { setAmbience, setMusic, toggleMute, unlockAudio } from './audio.js';
+import { setAmbience, setMusic, sfx, toggleMute, unlockAudio } from './audio.js';
 import { Effects } from './effects.js';
 import { Game } from './game.js';
 import { Hud } from './hud.js';
@@ -144,6 +145,10 @@ window.addEventListener('keydown', (e) => {
   keys.add(e.code);
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
   if (e.repeat) return;
+  if (hud.achievementsOpen) {
+    if (e.code === 'Escape') hud.hideAchievements();
+    return;
+  }
   if ((e.code === 'KeyP' || e.code === 'Escape') && !net) {
     if (state === 'playing') pause();
     else if (state === 'paused') resume();
@@ -385,13 +390,24 @@ let scriptedInput = null;
 let cinematic = false;
 let cameraRig = null;
 
+// Each achievement pops up, chimes, and adds a few coins to the dive it was earned in.
+onUnlock((def) => {
+  hud.showAchievement(def, ACHIEVEMENT_REWARD);
+  sfx.achievement();
+  game.coins += ACHIEVEMENT_REWARD;
+  game.coinsTotal += ACHIEVEMENT_REWARD;
+  hud.pulseCoins();
+});
+
 function tick(dt) {
+  setActive(state === 'playing' && !cinematic);
   if (state !== 'paused') SHADER_TIME.value += dt;
   if (state === 'playing') {
     game.update(dt, scriptedInput ?? readInput());
     if (net) {
       net.tick(dt);
       hud.setPlayers(game.players.map((p) => p.netId ?? 1).sort());
+      if (game.players.length > 1) unlock('coop');
     }
     if (game.over && game.overTimer <= 0) {
       state = 'gameover';

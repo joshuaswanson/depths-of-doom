@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { unlock } from './achievements.js';
 import { animationsOf, findNode, plainMaterials, spawn, spawnSkinned, tint } from './assets.js';
 import { sfx } from './audio.js';
 import { CURRENT_MATERIALS, NOISE_GLSL, SHADER_TIME, WHALE_BEND, addTailBeat, addWaterline, addWingFlap } from './surface.js';
@@ -767,6 +768,7 @@ function updateAngler(a, dt, t, cx, sub, world) {
   a.rotation.z = THREE.MathUtils.clamp(Math.atan2(u.vel.y, Math.abs(u.vel.x) + 0.3), -0.35, 0.35) * u.facing * 0.8;
   // Mostly dark: now and then the lure flares for a couple of seconds, lighting the fish up before it vanishes again.
   const near = sub && a.position.distanceTo(sub) < 12 * a.scale.x;
+  if (near && u.glow > 0.5) unlock('angler');
   // A sub swimming up sets the lure off straight away; otherwise it flares now and then on its own.
   if (near && !u.wasNear && u.flash <= 0) u.untilFlash = 0;
   u.wasNear = near;
@@ -1058,6 +1060,7 @@ function updateWhale(whale, dt, t, cx, cy, aspect, canSing) {
   if (u.song <= 0 && canSing && seen > 0.25 && onScreen) {
     u.song = rand(7, 14);
     sfx.whaleCall(THREE.MathUtils.clamp((p.x - cx) / halfWidthAt(p.z, aspect), -1, 1), seen);
+    unlock('whale_song');
   }
   if (Math.abs(p.x - cx) > 320 || shallow > 0.98 || distant > 0.99) {
     u.active = false;
@@ -1191,6 +1194,7 @@ function updateSpermWhale(whale, dt, cx, cy, humpback, aspect) {
   const hide = Math.max(sunk, nearFloor, u.wall > 0.98 ? 1 : u.wall, old);
   u.haze.value = THREE.MathUtils.lerp(1, 0.5, arrive * (1 - hide));
   whale.visible = u.haze.value < 0.995;
+  if (u.haze.value < 0.75 && Math.abs(p.x - cx) < halfWidthAt(p.z, aspect)) unlock('sperm_whale');
   if ((u.t > 2 && hide > 0.99) || Math.abs(p.x - cx) > 130) {
     u.active = false;
     u.wall = 0;
@@ -1916,6 +1920,19 @@ export class World {
     this.vesselSpan = [Math.min(...ends), Math.max(...ends) + 1];
   }
 
+  // Achievements for what the sub reaches or swims beside.
+  checkAchievements(hull) {
+    const c = hull.center;
+    if (hull.airborne) {
+      unlock('flying_sub');
+      if (this.dolphins.active && this.dolphins.members.some((m) => Math.abs(m.x - c.x) < 14)) unlock('dolphin_jump');
+    }
+    const floor = floorY(c.x);
+    if (floor < ANGLER_FLOOR && c.y - hull.extents.hy - seabedAt(c.x) < 1.5) unlock('abyss');
+    const span = this.vesselSpan;
+    if (span && c.x > span[0] - 5 && c.x < span[1] + 5 && c.y < floor + 40) unlock('shipwreck');
+  }
+
   // The lowest an anglerfish at depth z may swim anywhere between x0 and x1: the trench floor, or the top of the
   // rusted boat wherever the fish would otherwise run into the hull.
   anglerFloor(x0, x1, z) {
@@ -2164,7 +2181,11 @@ export class World {
     this.time += dt;
     const cx = camera.position.x;
     const cy = camera.position.y;
-    if (this.updateGulls(dt, cx, cy, hull, camera.position.z) > 0) sfx.gull();
+    if (this.updateGulls(dt, cx, cy, hull, camera.position.z) > 0) {
+      sfx.gull();
+      unlock('gulls');
+    }
+    if (hull) this.checkAchievements(hull);
     // Whale song carries through the water, so it is heard only with the whole sub under the surface.
     const submerged = !hull || hull.top < SURFACE_Y;
     sfx.whaleHeard(submerged);

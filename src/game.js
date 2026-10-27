@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { addStat, unlock } from './achievements.js';
 import { cloneMaterial, findNode, ownMaterials, spawn } from './assets.js';
 import { RIG_SCALE, makeBeam } from './player.js';
 import { WATER, addWaterline } from './surface.js';
@@ -316,6 +317,8 @@ function enemyFloorUnder(x, halfLength, halfHeight) {
   }
   return floor;
 }
+// An enemy sub that sets off a mine this soon after the player bumps it counts as bumped into it.
+const MINE_BUMP_WINDOW = 3000;
 const DAMAGE = { missile: 12, mine: 22, bullet: 2.2 };
 const GRAVITY = 20;
 const LOOSE_COIN_MAX = 10;
@@ -684,6 +687,8 @@ export class Game {
     sfx.upgrade();
     this.hud.flashSlot(id, true);
     this.hud.showToast(`${def.name} Lv. ${lvl + 1}!`);
+    if (lvl + 1 >= def.max) unlock('max_upgrade');
+    if (id === 'hull' && this.player.duck.visible) unlock('rubber_duck');
     added.forEach((part, i) => {
       setTimeout(() => {
         part.pivot.getWorldPosition(this.tmp);
@@ -694,7 +699,16 @@ export class Game {
     });
   }
 
+  waveCleared(wave) {
+    if (wave >= 5) unlock('wave_5');
+    if (wave >= 10) unlock('wave_10');
+    if (wave >= 20) unlock('wave_20');
+    if (wave >= 5 && !this.hitThisWave) unlock('untouchable');
+    if (this.coinsTotal >= 1000) unlock('coins_1000');
+  }
+
   startWave() {
+    this.hitThisWave = false;
     this.wave++;
     const w = this.wave;
     const q = [];
@@ -901,7 +915,12 @@ export class Game {
     const p = e.obj.position.clone();
     this.effects.explosion(p, e.def.boom);
     sfx.boom(e.type === 'boss' || e.type === 'gunner');
-    if (e.type !== 'mine' && killer === this.localPlayer) this.kills++;
+    if (e.type !== 'mine' && killer === this.localPlayer) {
+      this.kills++;
+      unlock('first_sink');
+      if (addStat('kills') >= 100) unlock('sink_100');
+    }
+    if (e.type === 'boss') unlock('boss');
     if (this.role === 'host') this.net.event({ t: 'kill', id: e.id, by: killer?.netId });
     if (e.type === 'boss') {
       this.boss = null;
@@ -1107,6 +1126,7 @@ export class Game {
 
   hurtPlayer(amount, from) {
     if (this.player.invuln > 0 || !this.player.alive) return;
+    this.hitThisWave = true;
     const res = this.player.takeHit(amount * (1 + this.wave * 0.04), from);
     this.hud.flashHealth();
     const c = this.player.center;
@@ -1281,6 +1301,7 @@ export class Game {
           g.t = 0;
           if (g.target.def && !g.target.dead) {
             this.damageEnemy(g.target, 3 + 2 * pl.levels.grapple);
+            if (g.target.dead && g.target.type !== 'mine') unlock('grapple_kill');
             this.effects.sparkle({ x: tp.x, y: tp.y, z: 0.6 }, '#ffffff', 10, 5);
           } else if (g.target.value) {
             g.target.grabbed = true;
@@ -1323,7 +1344,10 @@ export class Game {
       for (const c of cones) {
         const to = new THREE.Vector2(e.obj.position.x - c.origin.x, e.obj.position.y - c.origin.y);
         const d = to.length();
-        if (d < range && to.dot(c.dir) > d * Math.cos(0.45)) e.dazzled = 0.3;
+        if (d < range && to.dot(c.dir) > d * Math.cos(0.45)) {
+          e.dazzled = 0.3;
+          if (e.type !== 'mine') unlock('dazzle');
+        }
       }
     }
   }
@@ -1416,6 +1440,7 @@ export class Game {
       if (e.type === 'mine' && !guest) {
         const victim = this.enemies.find((o) => o !== e && !o.dead && o.type !== 'mine' && this.enemyHit(o, p.x, p.y, 0.55));
         if (victim) {
+          if (performance.now() - (victim.bumpedAt ?? -Infinity) < MINE_BUMP_WINDOW) unlock('mine_bump');
           this.killEnemy(e);
           continue;
         }
@@ -1653,6 +1678,7 @@ export class Game {
 
   // Subs that collide bounce apart with no damage: a momentum exchange along the line between them, plus a clank.
   bump(e) {
+    e.bumpedAt = performance.now();
     const pl = this.player;
     const pc = pl.center;
     const p = e.obj.position;
@@ -2121,6 +2147,7 @@ export class Game {
         if (this.net) this.net.taken(c.id);
         this.coins += c.value;
         this.coinsTotal += c.value;
+        if (this.coinsTotal >= 1000) unlock('coins_1000');
         this.effects.coinBurst(p);
         this.hud.pulseCoins();
         sfx.coin();
@@ -2176,6 +2203,7 @@ export class Game {
       this.coins += bonus;
       this.coinsTotal += bonus;
       this.hud.showToast(`Wave ${this.wave} cleared! +${bonus} coins`);
+      this.waveCleared(this.wave);
       if (this.role === 'host') this.net.event({ t: 'cleared', wave: this.wave, bonus });
       this.hud.pulseCoins();
       sfx.coin();

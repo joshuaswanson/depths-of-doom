@@ -344,6 +344,13 @@ export const sfx = {
   pop() {
     tone({ type: 'sine', freq: 500, to: 1100, dur: 0.08, vol: 0.12 });
   },
+  // A bright rising arpeggio with a sparkle on top.
+  achievement() {
+    [784, 988, 1175, 1568].forEach((freq, i) => {
+      tone({ type: 'triangle', freq, dur: 0.22, vol: 0.09, delay: i * 0.07, dry: true });
+    });
+    tone({ type: 'sine', freq: 3136, to: 2637, dur: 0.5, vol: 0.04, delay: 0.28, dry: true });
+  },
   coin() {
     tone({ type: 'square', freq: 988, dur: 0.07, vol: 0.06, dry: true });
     tone({ type: 'square', freq: 1319, dur: 0.16, vol: 0.06, delay: 0.06, dry: true });
