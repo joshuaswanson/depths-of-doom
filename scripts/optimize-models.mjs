@@ -31,6 +31,14 @@ const SIMPLIFY = {
   rusted_vessel: [0.5, 0.003],
   polar_bear: [0.5, 0.002],
   penguin: [0.4, 0.0015],
+  blue_tang: [0.2, 0.0015],
+  tigerfish: [0.2, 0.0015],
+  discus: [0.2, 0.0015],
+  sheephead: [0.25, 0.0015],
+  clownfish: [0.4, 0.0015],
+  pufferfish: [0.35, 0.0015],
+  seahorse: [0.35, 0.0015],
+  starfish: [0.6, 0.0015],
 };
 
 // Scenery whose shadow comes from a much coarser stand-in: the soft shadow blur hides the lost detail.
