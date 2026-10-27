@@ -23,9 +23,9 @@ export function darkness(y) {
 
 const stops = ['#05304f', '#0a5c94', '#1a9bdb', '#6fe6ff'].map((hex) => new THREE.Color(hex));
 const deep = ['#000102', '#02050b', '#060410'].map((hex) => new THREE.Color(hex));
-// Polar water: the deep, saturated blue of cold, clear arctic sea, glowing cyan just under the ice and sinking through
-// cobalt to navy below.
-const icy = ['#010a22', '#04286a', '#0b56b0', '#4fbcf0'].map((hex) => new THREE.Color(hex));
+// Polar water: the clear teal of the sea around icebergs, bright cyan just under the ice and darkening to deep
+// blue-green below.
+const icy = ['#021820', '#05404f', '#0a7f94', '#5ccfdb'].map((hex) => new THREE.Color(hex));
 const glsl = (c) => `vec3(${c.r.toFixed(4)}, ${c.g.toFixed(4)}, ${c.b.toFixed(4)})`;
 
 // Screen-height gradient shared by the backdrop and the fog, so fogged props melt into the water behind them.
