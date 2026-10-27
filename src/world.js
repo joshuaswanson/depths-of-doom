@@ -1754,12 +1754,18 @@ function bakeColor(geo, color) {
   geo.setAttribute('color', new THREE.BufferAttribute(out, size));
 }
 
-// Bake a cluster of placed models into one mesh per material, anchored at the cluster's lowest point.
+// Bake a cluster of placed models into one mesh per material, anchored at the cluster's lowest point under the middle
+// of its pieces, so draw ordering sees where the cluster really is.
 function mergeCluster(pieces) {
   pieces.updateMatrixWorld(true);
   let base = Infinity;
-  for (const p of pieces.children) base = Math.min(base, p.position.y);
-  const toLocal = new THREE.Matrix4().makeTranslation(0, -base, 0);
+  const middle = new THREE.Vector3();
+  for (const p of pieces.children) {
+    base = Math.min(base, p.position.y);
+    middle.add(p.position);
+  }
+  middle.divideScalar(Math.max(pieces.children.length, 1));
+  const toLocal = new THREE.Matrix4().makeTranslation(-middle.x, -base, -middle.z);
   const buckets = new Map();
   // Nearest pieces first, so most GPUs can skip shading whatever they hide; dense kelp stacks many layers deep.
   const nearFirst = [...pieces.children].sort((a, b) => b.position.z - a.position.z);
@@ -1782,7 +1788,7 @@ function mergeCluster(pieces) {
     });
   }
   const cluster = new THREE.Group();
-  cluster.position.y = base;
+  cluster.position.set(middle.x, base, middle.z);
   for (const { material, order, cast, layers, geos } of buckets.values()) {
     const merged = mergeGeometries(geos, false);
     for (const g of geos) g.dispose();

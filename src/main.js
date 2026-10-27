@@ -37,6 +37,12 @@ renderer.toneMapping = THREE.NeutralToneMapping;
 renderer.toneMappingExposure = 1.0;
 // Checking each shader for errors on its first draw stalls until the driver finishes linking it.
 renderer.debug.checkShaderErrors = !import.meta.env.PROD;
+// Opaque objects draw nearest first in depth bands, so graphics chips that shade every layer skip pixels already
+// covered; within a band they stay grouped by material, which keeps shader switches down.
+const DEPTH_BAND = 10;
+renderer.setOpaqueSort((a, b) => a.groupOrder - b.groupOrder || a.renderOrder - b.renderOrder
+  || Math.floor(a.z / DEPTH_BAND) - Math.floor(b.z / DEPTH_BAND) || a.material.id - b.material.id || a.z - b.z
+  || a.id - b.id);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.VSMShadowMap;
 renderer.shadowMap.autoUpdate = false;
