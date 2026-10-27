@@ -983,7 +983,7 @@ function whaleHome(cx) {
   return roam > 15 ? { x: (lo + hi) / 2, roam } : null;
 }
 
-function updateWhale(whale, dt, t, cx, cy, aspect, calm) {
+function updateWhale(whale, dt, t, cx, cy, aspect, canSing) {
   const u = whale.userData;
   if (!u.active) {
     u.wait -= dt;
@@ -1053,9 +1053,9 @@ function updateWhale(whale, dt, t, cx, cy, aspect, calm) {
   // While it's clearly in view it sings now and then, softer the hazier it is, from its side of the screen.
   const seen = 1 - (u.haze.value - WHALE_HAZE) / (1 - WHALE_HAZE);
   u.song -= dt;
-  // Only in the quiet between waves, never over a fight.
+  // Only when the caller allows it: in the quiet between waves, with the sub fully underwater.
   const onScreen = Math.abs(p.x - cx) < halfWidthAt(p.z, aspect) && Math.abs(p.y - cy) < (CAMERA_Z - p.z) * TAN_HALF_FOV;
-  if (u.song <= 0 && calm && seen > 0.25 && onScreen) {
+  if (u.song <= 0 && canSing && seen > 0.25 && onScreen) {
     u.song = rand(7, 14);
     sfx.whaleCall(THREE.MathUtils.clamp((p.x - cx) / halfWidthAt(p.z, aspect), -1, 1), seen);
   }
@@ -2165,7 +2165,10 @@ export class World {
     const cx = camera.position.x;
     const cy = camera.position.y;
     if (this.updateGulls(dt, cx, cy, hull, camera.position.z) > 0) sfx.gull();
-    updateWhale(this.whale, dt, this.time, cx, cy, this.aspect, this.calm ?? true);
+    // Whale song carries through the water, so it is heard only with the whole sub under the surface.
+    const submerged = !hull || hull.top < SURFACE_Y;
+    sfx.whaleHeard(submerged);
+    updateWhale(this.whale, dt, this.time, cx, cy, this.aspect, (this.calm ?? true) && submerged);
     updateSpermWhale(this.spermWhale, dt, cx, cy, this.whale, this.aspect);
     updateDolphins(this, dt, this.time, cx, cy, halfWidthAt(-10, this.aspect), sub);
     updateMarlin(this.marlin, dt, this.time, cx, cy, halfWidthAt(-18, this.aspect), sub);

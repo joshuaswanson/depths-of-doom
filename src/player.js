@@ -623,6 +623,13 @@ export class Player {
     return Math.max(this.extents.hx, this.extents.hy);
   }
 
+  // The highest point of the sub, including the nose or tail when it tilts.
+  get top() {
+    const e = this.extents;
+    const a = this.screenTilt;
+    return this.center.y + Math.abs(e.hx * Math.sin(a)) + e.hy * Math.cos(a);
+  }
+
   setDarkness(dark) {
     const lamps = this.levels.spotlight;
     const power = 1 + 0.35 * lamps;

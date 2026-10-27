@@ -229,6 +229,17 @@ export function setMusic(mix) {
   }
 }
 
+// Whale song and its echo pass through here, so both fade out the moment the sub breaks the surface.
+let songBus = null;
+let songHeard = true;
+function songOut() {
+  if (songBus) return songBus;
+  songBus = ctx.createGain();
+  songBus.gain.value = songHeard ? 1 : 0;
+  songBus.connect(sfxBus);
+  return songBus;
+}
+
 // A long echoing tail for whale song: a feedback delay through a soft lowpass, made once.
 let songEcho = null;
 function echo() {
@@ -242,10 +253,11 @@ function echo() {
   tone.type = 'lowpass';
   tone.frequency.value = 900;
   input.connect(delay).connect(tone).connect(feedback).connect(delay);
-  tone.connect(sfxBus);
+  tone.connect(songOut());
   songEcho = input;
   return songEcho;
 }
+
 
 // One humpback call: a slow moaning glide with a little vibrato and a breathy overtone, panned to the whale's side.
 function whaleMoan({ from, to, peak, dur, delay, vol, pan }) {
@@ -280,7 +292,7 @@ function whaleMoan({ from, to, peak, dur, delay, vol, pan }) {
   osc.connect(filter);
   over.connect(overGain).connect(filter);
   filter.connect(gain).connect(panner);
-  panner.connect(sfxBus);
+  panner.connect(songOut());
   panner.connect(echo());
   for (const o of [osc, over, lfo]) {
     o.start(t);
@@ -289,6 +301,12 @@ function whaleMoan({ from, to, peak, dur, delay, vol, pan }) {
 }
 
 export const sfx = {
+  // Whale song is heard only underwater; a phrase already sounding fades away when the sub surfaces.
+  whaleHeard(heard) {
+    if (heard === songHeard) return;
+    songHeard = heard;
+    if (songBus) songBus.gain.setTargetAtTime(heard ? 1 : 0, ctx.currentTime, 0.12);
+  },
   // A short phrase of humpback song, gentle and far off.
   whaleCall(pan = 0, loud = 1) {
     if (!ctx || muted) return;
