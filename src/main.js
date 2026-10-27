@@ -69,7 +69,7 @@ overhead.shadow.camera.layers.enable(SHADOW_LAYER);
 overhead.shadow.bias = -0.0004;
 overhead.shadow.normalBias = 0.04;
 overhead.shadow.radius = 6;
-overhead.shadow.blurSamples = 12;
+overhead.shadow.blurSamples = 8;
 scene.add(overhead, overhead.target);
 const rim = new THREE.DirectionalLight('#7fdcff', 2.2);
 rim.position.set(4, 6, -12);
@@ -192,6 +192,7 @@ function setLite(on) {
   world?.setLite(on);
   const size = on ? SHADOW_MAP / 2 : SHADOW_MAP;
   overhead.shadow.mapSize.set(size, size);
+  overhead.shadow.blurSamples = on ? 6 : 8;
   overhead.shadow.map?.dispose();
   overhead.shadow.map = null;
 }
