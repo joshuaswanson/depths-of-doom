@@ -764,11 +764,11 @@ export class Player {
     p.y += this.vel.y * dt;
     const overlap = ice && this.iceOverlap(p.x, p.y, ice);
     if (overlap) {
-      // Pushed back out the way it came in: rising into ice drops it back under, sinking onto ice sets it on top.
-      const rising = this.vel.y > 0.05 || (this.vel.y > -0.05 && overlap.down <= overlap.up);
+      // Pushed out the shortest way: under a berg it is pressed back down, on top of one it is lifted clear.
+      const below = overlap.down <= overlap.up;
       if (Math.abs(this.vel.y) > 0.5) this.iceBump = { x: p.x, vx: 0, vy: this.vel.y };
-      p.y += rising ? -overlap.down : overlap.up;
-      if (rising ? this.vel.y > 0 : this.vel.y < 0) this.vel.y *= -0.2;
+      p.y += below ? -overlap.down : overlap.up;
+      if (below ? this.vel.y > 0 : this.vel.y < 0) this.vel.y *= -0.2;
     }
     const sunk = this.rockDepth(p.x, p.y, bounds.bottom);
     this.onFloor = sunk > -0.05;
