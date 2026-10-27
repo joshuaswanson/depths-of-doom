@@ -117,14 +117,7 @@ function hullGroan() {
   tone({ type: 'triangle', freq: f * 2.02, to: f * 1.7, dur: 1.1, vol: 0.025, delay: 0.15 });
 }
 
-export function setAmbience(dt, { active = false, surface = 0, speed = 0, underwater = 0, depth = 0 } = {}) {
-  if (!ctx) return;
-  if (!amb) {
-    amb = { rumble: waterBed('lowpass', 500, 0.8), rush: waterBed('bandpass', 700, 0.9),
-      surf: waterBed('bandpass', 900, 0.6), deep: waterBed('lowpass', 160, 0.7), drift: waterBed('lowpass', 320, 0.5),
-      hum: hum(46), t: 0 };
-  }
-  amb.t += dt;
+function retargetAmbience(active, surface, speed, underwater, depth) {
   const now = ctx.currentTime;
   const on = active ? 1 : 0;
   const swell = 0.5 + 0.5 * Math.sin(amb.t * 0.55) * Math.sin(amb.t * 0.23 + 1);
@@ -143,11 +136,28 @@ export function setAmbience(dt, { active = false, surface = 0, speed = 0, underw
   amb.hum.gain.gain.setTargetAtTime(below * depth * 0.05, now, 1);
   amb.hum.osc.frequency.setTargetAtTime(44 + 6 * tide, now, 1);
   sfxBus.frequency.setTargetAtTime(lerp(18000, UNDERWATER_CUTOFF, underwater), now, 0.08);
+}
+
+export function setAmbience(dt, { active = false, surface = 0, speed = 0, underwater = 0, depth = 0 } = {}) {
+  if (!ctx) return;
+  if (!amb) {
+    amb = { rumble: waterBed('lowpass', 500, 0.8), rush: waterBed('bandpass', 700, 0.9),
+      surf: waterBed('bandpass', 900, 0.6), deep: waterBed('lowpass', 160, 0.7), drift: waterBed('lowpass', 320, 0.5),
+      hum: hum(46), t: 0 };
+  }
+  amb.t += dt;
+  amb.since = (amb.since ?? 0) + dt;
+  // The beds glide over a tenth of a second or more, so retargeting them 15 times a second is enough.
+  if (amb.since >= 1 / 15) {
+    amb.since = 0;
+    retargetAmbience(active, surface, speed, underwater, depth);
+  }
   if (active && Math.random() < dt * surface * (0.35 + speed * 3)) {
     const f = 500 + Math.random() * 900;
     tone({ type: 'sine', freq: f, to: f * (1.6 + Math.random() * 0.6), dur: 0.05 + Math.random() * 0.04,
       vol: 0.025 + Math.random() * 0.035 });
   }
+  const below = active ? underwater : 0;
   if (below > 0.5 && Math.random() < dt * (0.3 + speed * 2.2)) bubbleTrain(0.8 + Math.random() * 0.8);
   if (below > 0.5 && depth > 0.5 && Math.random() < dt / 11) hullGroan();
 }
