@@ -29,7 +29,7 @@ WATER.surface.value = SURFACE_Y;
 const canvas = document.getElementById('game');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
 const MAX_PIXEL_RATIO = Math.min(window.devicePixelRatio, 1.5);
-const MIN_PIXEL_RATIO = Math.min(1, MAX_PIXEL_RATIO);
+const MIN_PIXEL_RATIO = Math.min(0.5, MAX_PIXEL_RATIO);
 let pixelRatio = MAX_PIXEL_RATIO;
 renderer.setPixelRatio(pixelRatio);
 renderer.toneMapping = THREE.NeutralToneMapping;
@@ -38,6 +38,7 @@ renderer.toneMappingExposure = 1.0;
 renderer.debug.checkShaderErrors = !import.meta.env.PROD;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.VSMShadowMap;
+renderer.shadowMap.autoUpdate = false;
 
 const scene = new THREE.Scene();
 scene.fog = new THREE.Fog(0xffffff, 20, 125);
@@ -93,7 +94,7 @@ const sunAxes = (() => {
 })();
 const shadowCentre = new THREE.Vector3();
 function followShadow() {
-  const texel = (2 * SHADOW_SPAN) / SHADOW_MAP;
+  const texel = (2 * SHADOW_SPAN) / overhead.shadow.mapSize.x;
   shadowCentre.set(camera.position.x, camera.position.y - 4, -10);
   const a = Math.round(shadowCentre.dot(sunAxes.x) / texel) * texel;
   const b = Math.round(shadowCentre.dot(sunAxes.y) / texel) * texel;
@@ -172,32 +173,63 @@ function resize() {
 }
 window.addEventListener('resize', resize);
 
-// Trade sharpness for frame rate: drop the render resolution when frames run long, raise it again with headroom.
-const fpsWindow = { time: 0, frames: 0, good: 0, bad: 0, locked: false };
-// Only a slowdown lasting two straight seconds lowers the resolution, so a passing hitch never blurs the picture;
-// two smooth seconds raise it again.
-function adaptResolution(dt) {
-  if (fpsWindow.locked || document.hidden || dt > 0.25) return;
+// Trade looks for frame rate when frames run long, and win them back with headroom. Sharpness above 1:1 goes first,
+// then the extras (bloom and full-rate, full-size shadows), then the resolution keeps falling.
+const LOW_PIXEL_RATIO = Math.min(1, MAX_PIXEL_RATIO);
+let lite = false;
+const fpsWindow = { time: 0, frames: 0, good: 0, bad: 0, locked: false, need: 2, sinceRaise: Infinity };
+
+function setPixelRatio(r) {
+  pixelRatio = Math.round(r * 100) / 100;
+  renderer.setPixelRatio(pixelRatio);
+  resize();
+}
+
+function setLite(on) {
+  lite = on;
+  bloom.enabled = !on;
+  const size = on ? SHADOW_MAP / 2 : SHADOW_MAP;
+  overhead.shadow.mapSize.set(size, size);
+  overhead.shadow.map?.dispose();
+  overhead.shadow.map = null;
+}
+
+function lowerQuality() {
+  if (pixelRatio > LOW_PIXEL_RATIO) setPixelRatio(Math.max(LOW_PIXEL_RATIO, pixelRatio - 0.1));
+  else if (!lite) setLite(true);
+  else if (pixelRatio > MIN_PIXEL_RATIO) setPixelRatio(Math.max(MIN_PIXEL_RATIO, pixelRatio - 0.1));
+}
+
+function raiseQuality() {
+  if (pixelRatio < LOW_PIXEL_RATIO) setPixelRatio(Math.min(LOW_PIXEL_RATIO, pixelRatio + 0.15));
+  else if (lite) setLite(false);
+  else if (pixelRatio < MAX_PIXEL_RATIO) setPixelRatio(Math.min(MAX_PIXEL_RATIO, pixelRatio + 0.15));
+  else return false;
+  return true;
+}
+
+// A slowdown lasting two straight seconds lowers quality, so a passing hitch never blurs the picture; a very slow
+// machine drops a step every second. Smooth seconds raise it again, and a raise that brings the slowdown straight
+// back makes the next one wait twice as long, so quality settles.
+function adaptQuality(dt) {
+  if (fpsWindow.locked || document.hidden || dt > 1) return;
   fpsWindow.time += dt;
   fpsWindow.frames++;
   if (fpsWindow.time < 1) return;
   const fps = fpsWindow.frames / fpsWindow.time;
   fpsWindow.time = 0;
   fpsWindow.frames = 0;
+  fpsWindow.sinceRaise++;
   fpsWindow.bad = fps < 48 ? fpsWindow.bad + 1 : 0;
   fpsWindow.good = fps > 56 ? fpsWindow.good + 1 : 0;
-  let next = pixelRatio;
-  if (fpsWindow.bad >= 2) {
-    next = Math.max(MIN_PIXEL_RATIO, pixelRatio - 0.1);
+  if (fpsWindow.bad >= 2 || fps < 24) {
+    if (fpsWindow.sinceRaise <= 3) fpsWindow.need = Math.min(fpsWindow.need * 2, 64);
+    lowerQuality();
+    if (fps < 12) lowerQuality();
     fpsWindow.bad = 0;
-  } else if (fpsWindow.good >= 2) {
-    next = Math.min(MAX_PIXEL_RATIO, pixelRatio + 0.15);
+  } else if (fpsWindow.good >= fpsWindow.need) {
+    if (raiseQuality()) fpsWindow.sinceRaise = 0;
     fpsWindow.good = 0;
-  }
-  if (next !== pixelRatio) {
-    pixelRatio = next;
-    renderer.setPixelRatio(pixelRatio);
-    resize();
   }
 }
 
@@ -279,8 +311,10 @@ async function boot() {
   const hidden = [...world.jellies, ...world.anglers, world.whale, world.spermWhale, ...world.dolphins.pod, world.marlin,
     ...world.mantas].filter((j) => !j.visible);
   for (const j of hidden) j.visible = true;
+  renderer.shadowMap.needsUpdate = true;
   await warmUp(renderer, scene, camera, composer.readBuffer);
   // Draw a real frame, shadows and bloom included, so every shader's first use happens behind the loading screen.
+  renderer.shadowMap.needsUpdate = true;
   composer.render();
   for (const j of hidden) j.visible = false;
   cleanup();
@@ -296,7 +330,8 @@ async function boot() {
   }
   window.__game = game;
   window.__debug = { scene, world, bloom, renderer, composer, effects, player, get pixelRatio() { return pixelRatio; },
-    lockResolution(r) { fpsWindow.locked = true; pixelRatio = r; renderer.setPixelRatio(r); resize(); },
+    lockResolution(r) { fpsWindow.locked = true; setPixelRatio(r); },
+    setLite,
     manual(on) { renderer.setAnimationLoop(on ? null : frame); },
     step(dt) { tick(dt); },
     set input(v) { scriptedInput = v; },
@@ -325,7 +360,7 @@ function musicMix() {
 function frame() {
   timer.update();
   const rawDt = timer.getDelta();
-  adaptResolution(rawDt);
+  adaptQuality(rawDt);
   tick(Math.min(rawDt, 1 / 20));
 }
 
@@ -349,6 +384,7 @@ backgroundTicker.onmessage = () => {
 let scriptedInput = null;
 let cinematic = false;
 let cameraRig = null;
+let shadowFrame = 0;
 
 function tick(dt) {
   if (state !== 'paused') SHADER_TIME.value += dt;
@@ -399,6 +435,10 @@ function tick(dt) {
     hud.drawRadar(player, game.radarEnemies(), game.radarRange, game.radarSweep, game.radarCoins());
   }
   placeHints();
+  // Shadows fade out in the dark water, and a slow machine redraws them every other frame.
+  shadowFrame++;
+  renderer.shadowMap.needsUpdate = !overhead.shadow.map
+    || (overhead.shadow.intensity > 0 && (!lite || shadowFrame % 2 === 0));
   composer.render();
 }
 
