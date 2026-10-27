@@ -26,9 +26,6 @@ export function castsShadow(material) {
   return !material.transparent && !FINE_DETAIL.test(material.name);
 }
 
-// Creatures swimming far above the floor, whose shadows would land too faint and far off to see.
-const SHADOWLESS = /^(seagull|humpback|sperm_whale|dolphin|marlin|manta)$/;
-
 // Dense scenery casts its shadow from a coarse stand-in that only the shadow camera sees.
 const SHADOW_PROXIES = ['reef_large', 'reef_small', 'coral_staghorn', 'coral_fan', 'coral_brain', 'coral_table',
   'sponge_cluster'];
@@ -57,7 +54,7 @@ export async function loadModels(onProgress) {
     gltf.scene.traverse((o) => {
       if (!o.isMesh) return;
       o.material.envMapIntensity = 0.55;
-      o.castShadow = castsShadow(o.material) && !SHADOWLESS.test(name) && !SHADOW_PROXIES.includes(name);
+      o.castShadow = castsShadow(o.material) && !SHADOW_PROXIES.includes(name);
       // The sub and its parts are closed shapes, so their front faces alone cast the shadow. That keeps them on the
       // shadow shader everything else already uses, so their first shadow never stalls a frame.
       if (/^(player_|part_)/.test(name)) o.material.shadowSide = THREE.FrontSide;
