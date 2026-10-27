@@ -21,6 +21,7 @@ const MAX_CLIMB = 0.9;
 // Points along the hull, from tail to nose as fractions of its half-length, where it is checked against the rock. The
 // ends reach a little past the hull so its tips stop just short of a cliff face.
 const HULL_SAMPLES = [-1.12, -0.75, -0.45, -0.15, 0.15, 0.45, 0.75, 1.12];
+const OUTLINE_SLICES = 18;
 export const RIG_SCALE = 0.82;
 const WALL_BOUNCE_SPEED = 3;
 const REGEN_DELAY = 5;
@@ -268,6 +269,7 @@ export class Player {
     this.squash = 0;
     this.vel = new THREE.Vector2();
     this.extents = { hx: 2, hy: 1, cx: 0, cy: 0 };
+    this.outline = [{ x: 0, y: 1 }];
     this.time = 0;
     this.reset();
   }
@@ -506,6 +508,7 @@ export class Player {
         box.union(o.geometry.boundingBox.clone().applyMatrix4(toLocal.clone().multiply(o.matrixWorld)));
       });
     }
+    this.measureOutline(parts, toLocal, box);
     this.parts.forEach((p, i) => {
       p.pivot.position.copy(saved[i][0]);
       p.pivot.scale.copy(saved[i][1]);
@@ -520,6 +523,29 @@ export class Player {
     // Always a round bubble. Length and depth count alike, so measuring mid-turn, with the hull swung toward the
     // camera, gives the same size.
     this.shield.scale.setScalar(Math.max(s.x * 0.62, s.z * 0.62, s.y * 0.68));
+  }
+
+  // The highest point of the sub's side view in each of a row of slices along its length, so ice can come right down
+  // onto the hull and the parts on it.
+  measureOutline(parts, toLocal, box) {
+    const top = new Array(OUTLINE_SLICES).fill(-Infinity);
+    const width = box.max.x - box.min.x;
+    const v = new THREE.Vector3();
+    const m = new THREE.Matrix4();
+    for (const root of parts) {
+      root.traverse((o) => {
+        if (!o.isMesh || o.userData.light) return;
+        m.multiplyMatrices(toLocal, o.matrixWorld);
+        const pos = o.geometry.attributes.position;
+        for (let i = 0; i < pos.count; i++) {
+          v.fromBufferAttribute(pos, i).applyMatrix4(m);
+          const k = Math.min(OUTLINE_SLICES - 1, Math.floor(((v.x - box.min.x) / width) * OUTLINE_SLICES));
+          top[k] = Math.max(top[k], v.y);
+        }
+      });
+    }
+    this.outline = top.map((y, k) => ({ x: box.min.x + ((k + 0.5) / OUTLINE_SLICES) * width, y }))
+      .filter((p) => p.y > -Infinity);
   }
 
   // Silhouette as seen by the camera for the current yaw; cx is signed, so it flips with the heading.
@@ -606,11 +632,13 @@ export class Player {
   // How far the top of the hull reaches up into the ice above it with the sub at (x, y), checked along its whole
   // length; positive means it pokes in by that much.
   iceDepth(x, y, ceiling) {
-    const e = this.extents;
+    const facing = Math.cos(this.yaw);
+    const cos = Math.cos(this.screenTilt);
+    const sin = Math.sin(this.screenTilt);
     let depth = -Infinity;
-    for (const t of HULL_SAMPLES) {
-      const top = y + e.cy + e.hy * 0.9 * Math.sqrt(Math.max(0, 1 - t * t));
-      depth = Math.max(depth, top - ceiling(x + e.cx + t * e.hx));
+    for (const p of this.outline) {
+      const px = p.x * facing;
+      depth = Math.max(depth, y + px * sin + p.y * cos - ceiling(x + px * cos - p.y * sin));
     }
     return depth;
   }
