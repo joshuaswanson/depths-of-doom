@@ -171,15 +171,19 @@ function* layoutIce(s, ice) {
   const to = s.end - ICE_INSET;
   const middle = (s.start + s.end) / 2;
   const span = to - from;
-  // Stretches of the lane kept clear of bergs: fields of pack ice to smash through at both edges of each pole, and in
-  // the south flat floes crowded with penguins in the middle.
-  const fieldWidth = Math.min(18, span * 0.18);
-  const fields = [{ start: from, end: from + fieldWidth }, { start: to - fieldWidth, end: to }];
+  // Stretches of the lane kept clear of bergs: open runs of pack ice to smash through at both edges of each pole, and
+  // in the south flat floes crowded with penguins in the middle.
+  const runWidth = Math.min(18, span * 0.18);
+  const runs = [[from, from + runWidth], [to - runWidth, to]];
   const floes = kind === 'south'
     ? [0.38, 0.62].map((f) => ({ x: from + span * f, width: 8 + r() * 3, depth: 5 + r() * 2, seed: Math.floor(r() * 1e9) }))
     : [];
-  const reserved = [...fields.map((f) => [f.start - 2, f.end + 2]),
+  const reserved = [...runs.map(([a, b]) => [a - 2, b + 2]),
     ...floes.map((f) => [f.x - f.width / 2 - 5, f.x + f.width / 2 + 5])];
+  // The igloo's floe sits in the pack just behind the lane, where a sub breaking through comes up beside it.
+  const home = kind === 'north'
+    ? { x: from + runWidth / 2 + (r() - 0.5) * 4, z: -11, topAt: () => PACK_TOP }
+    : null;
   const bergs = [];
   // A berg whose keel or rams would reach past `limit` is made again smaller until it fits.
   const place = (b, x, limit = Infinity) => {
@@ -240,12 +244,9 @@ function* layoutIce(s, ice) {
   const animals = [];
   const roomy = bergs.filter((b) => b.width > 10 && b.z > BACK_Z[0] + 10);
   if (kind === 'north') {
-    // The igloo's floe sits just behind the lane, where a sub breaking through comes up beside it.
-    const field = fields[0];
-    field.home = { x: (field.start + field.end) / 2 + (r() - 0.5) * 4, z: -11, topAt: () => PACK_TOP };
-    animals.push({ type: 'igloo', berg: field.home, dx: IGLOO_SPOT.dx, dz: IGLOO_SPOT.dz });
+    animals.push({ type: 'igloo', berg: home, dx: IGLOO_SPOT.dx, dz: IGLOO_SPOT.dz });
     // The bear paces along the front of the floe, clear of the igloo's tunnel.
-    animals.push({ type: 'bear', berg: fields[0].home, dx: 1.5, dz: 3.7 });
+    animals.push({ type: 'bear', berg: home, dx: 1.5, dz: 3.7 });
     for (const b of roomy) {
       if (r() > 0.5) continue;
       const dx = (r() - 0.5) * b.width * 0.2;
@@ -283,6 +284,22 @@ function* layoutIce(s, ice) {
       yaw: (r() - 0.5) * 1.6 + (r() < 0.5 ? 0 : Math.PI), phase: r() * 6.3 }));
     yield;
   }
+  // Pack ice covers all the open sea between the bergs and floes, ragged at the pole's two ends.
+  const blocked = (x, z, margin) => bergs.some((b) => x > b.left - margin - 1 && x < b.right + margin + 1
+    && b.covers(x - b.x, z - b.z, margin + 1))
+    || floes.some((f) => x > f.room[0] - f.half - margin && x < f.room[1] + f.half + margin
+      && Math.abs(z) < f.depth / 2 + 1 + margin);
+  const run = { start: from - 6, end: to + 6, home };
+  const plates = [];
+  yield* packLayout(run, PACK_DEPTH, blocked, plates);
+  const pieces = Math.ceil((run.end - run.start) / PACK_PIECE);
+  const fields = Array.from({ length: pieces }, (_, i) => {
+    const start = run.start + ((run.end - run.start) * i) / pieces;
+    const end = run.start + ((run.end - run.start) * (i + 1)) / pieces;
+    const mine = (x) => (i === 0 || x >= start) && (i === pieces - 1 || x < end);
+    const seeds = plates.filter((p) => mine(p.x));
+    return { start, end, seeds, brash: plates.brash.filter((b) => mine(b.x)), home: seeds.some((p) => p.home) ? home : null };
+  });
   Object.assign(ice, { kind, bergs, animals, fields, floes, ready: true });
 }
 
@@ -581,6 +598,8 @@ const PACK_DRAFT = 0.42;
 const PACK_DEPTH = [-24, 3.4];
 const LANE_HALF = 2.7;
 const CHUNKS = 700;
+// The pack over a pole is built and drawn in pieces this wide, so pieces out of view are skipped.
+const PACK_PIECE = 24;
 const HOME_RADIUS = 6.2;
 let shardGeometry = null;
 let packMaterial = null;
@@ -602,21 +621,51 @@ function clipPolygon(poly, nx, nz, c) {
   return out;
 }
 
-// Where each floe of a field lies: its middle, rough size and outline.
-function* packLayout(field, depth, out) {
+// Seeds bucketed on a grid over the sea, for finding the ones near a point.
+class SeedGrid {
+  constructor(cell) {
+    this.cell = cell;
+    this.cells = new Map();
+  }
+
+  add(s) {
+    const key = `${Math.floor(s.x / this.cell)},${Math.floor(s.z / this.cell)}`;
+    if (!this.cells.has(key)) this.cells.set(key, []);
+    this.cells.get(key).push(s);
+  }
+
+  *near(x, z, reach) {
+    const n = Math.ceil(reach / this.cell);
+    const cx = Math.floor(x / this.cell);
+    const cz = Math.floor(z / this.cell);
+    for (let i = cx - n; i <= cx + n; i++) {
+      for (let j = cz - n; j <= cz + n; j++) yield* this.cells.get(`${i},${j}`) ?? [];
+    }
+  }
+}
+
+// Where each floe of a stretch of pack lies: its middle, rough size and outline, packed in around anything `blocked`.
+function* packLayout(field, depth, blocked, out) {
   const r = seeded(Math.floor(field.start * 13) + 5);
-  const seeds = field.home ? [{ x: field.home.x, z: field.home.z, rad: HOME_RADIUS, home: true }] : [];
+  const grid = new SeedGrid(4);
+  const seeds = [];
+  const keep = (s) => {
+    seeds.push(s);
+    grid.add(s);
+  };
+  if (field.home) keep({ x: field.home.x, z: field.home.z, rad: HOME_RADIUS, home: true });
+  const biggest = HOME_RADIUS;
   const width = field.end - field.start;
   // Leads: cracks of open water running across the field at odd angles.
-  const leads = Array.from({ length: 2 + Math.floor(r() * 2) }, () => ({
-    x: field.start + r() * width, a: (r() - 0.5) * 1.4, w: 0.7 + r() * 1.8,
+  const leads = Array.from({ length: 1 + Math.floor(width / 40 + r() * 2) }, () => ({
+    x: field.start + r() * width, a: (r() - 0.5) * 1.4, w: 0.4 + r() * 1.1,
   }));
   const inLead = (x, z) => leads.some((l) => Math.abs((x - l.x) * Math.cos(l.a) - z * Math.sin(l.a)) < l.w / 2);
-  const tries = Math.round(width * (depth[1] - depth[0]) * 5);
+  const tries = Math.round(width * (depth[1] - depth[0]) * 8);
   for (let k = 0; k < tries; k++) {
     const x = field.start - 8 + r() * (width + 16);
     const z = depth[0] + r() * (depth[1] - depth[0]);
-    // The field's ragged sides, beyond which only a few stragglers drift.
+    // The field's ragged ends, beyond which only a few stragglers drift.
     const inside = Math.min(x - field.start - fbm(z * 0.07, 1.3, 0.5) * 12, field.end + fbm(z * 0.07, 7.1, 2.5) * 12 - x);
     if (inside < 0 && r() > 0.15 * Math.exp(inside / 3)) continue;
     if (z > depth[1] - 1.8 + fbm(x * 0.09, 3.3, 8.1) * 4) continue;
@@ -625,9 +674,17 @@ function* packLayout(field, depth, out) {
     const lane = Math.abs(z) < LANE_HALF + 1;
     const big = 0.5 + fbm(x * 0.06, z * 0.06, 4.4);
     const rad = lane ? 0.3 + 1.3 * r() ** 2 : 0.3 + 3.4 * r() ** 3 * (0.4 + big);
-    if (k % 400 === 0) yield;
-    if (seeds.some((s) => (s.x - x) ** 2 + (s.z - z) ** 2 < ((s.rad + rad) * (0.6 + r() * 0.25)) ** 2)) continue;
-    seeds.push({ x, z, rad });
+    if (k % 100 === 0) yield;
+    const room = (0.6 + r() * 0.25);
+    let clash = false;
+    for (const s of grid.near(x, z, rad + biggest)) {
+      if ((s.x - x) ** 2 + (s.z - z) ** 2 < ((s.rad + rad) * room) ** 2) {
+        clash = true;
+        break;
+      }
+    }
+    if (clash || blocked(x, z, rad * 0.9)) continue;
+    keep({ x, z, rad });
   }
   // Each floe takes the patch of sea nearer its middle than any other's, weighted by size so the big ones hold more,
   // less a narrow lead of open water all round.
@@ -638,8 +695,8 @@ function* packLayout(field, depth, out) {
       const k = s.rad * (s.home ? 1.02 : 1.05 + r() * 0.3);
       return [s.x + Math.cos(a) * k, s.z + Math.sin(a) * k];
     });
-    const gap = 0.04 + r() * r() * 0.5;
-    for (const o of seeds) {
+    const gap = 0.03 + r() * r() * 0.25;
+    for (const o of grid.near(s.x, s.z, (s.rad + biggest) * 1.7)) {
       if (o === s) continue;
       const dx = o.x - s.x;
       const dz = o.z - s.z;
@@ -652,12 +709,20 @@ function* packLayout(field, depth, out) {
     s.poly = s.home ? poly : brokenEdge(poly, r);
   }
   out.push(...seeds.filter((s) => s.poly.length >= 3));
-  // Loose brash ice: fragments drifting in the leads and gaps.
+  // Loose brash ice: fragments drifting in the leads and gaps, for the sub to shoulder aside.
   const brash = [];
-  for (let k = 0; k < width * 4; k++) {
+  for (let k = 0; k < width * 14; k++) {
+    if (k % 300 === 0) yield;
     const x = field.start - 4 + r() * (width + 8);
     const z = depth[0] + r() * (depth[1] - depth[0] - 1);
-    if (seeds.some((s) => (s.x - x) ** 2 + (s.z - z) ** 2 < (s.rad * 0.95) ** 2)) continue;
+    let covered = false;
+    for (const s of grid.near(x, z, biggest)) {
+      if ((s.x - x) ** 2 + (s.z - z) ** 2 < (s.rad * 0.95) ** 2) {
+        covered = true;
+        break;
+      }
+    }
+    if (covered || blocked(x, z, 0.3)) continue;
     brash.push({ x, z, size: 0.15 + r() * r() * 0.5 });
   }
   out.brash = brash;
@@ -701,7 +766,7 @@ class PackIce {
 
   // Lays out and builds the floes a few at a time, yielding between batches.
   *build() {
-    const { field, group, depth } = this;
+    const { field, group } = this;
     shardGeometry ??= iceBlock(seeded(3), {
       reach: jaggedOutline(seeded(4), 5, 0.5), width: 1, depth: 0.8, top: 0.22, draft: 0.4, dome: 0.2, bulge: 0,
       blunt: 3, rough: 0.6, topRough: 0.4, segments: 16, capRows: 2, cliffRows: 1, keelRows: 3,
@@ -711,10 +776,8 @@ class PackIce {
     this.plates = [];
     const parts = [];
     let start = 0;
-    const seeds = [];
-    yield* packLayout(field, depth, seeds);
-    for (const [n, s] of seeds.entries()) {
-      if (n % 24 === 0) yield;
+    for (const [n, s] of field.seeds.entries()) {
+      if (n % 8 === 0) yield;
       const cx = s.poly.reduce((a, p) => a + p[0], 0) / s.poly.length;
       const cz = s.poly.reduce((a, p) => a + p[1], 0) / s.poly.length;
       const corners = s.poly.map(([x, z]) => [((Math.atan2(z - cz, x - cx) % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2),
@@ -768,7 +831,7 @@ class PackIce {
     this.posV = new THREE.Vector3();
     this.idle = new THREE.Matrix4().makeScale(0, 0, 0);
     for (let i = 0; i < CHUNKS; i++) this.chunkMesh.setMatrixAt(i, this.idle);
-    for (const b of seeds.brash) {
+    for (const b of field.brash) {
       this.addChunk({ x: b.x, y: SURFACE_Y, z: b.z, vx: 0, vy: 0, vz: 0, sx: 0, sz: 0, size: b.size });
     }
   }
@@ -788,6 +851,7 @@ class PackIce {
 
   update(dt, t, hull, effects) {
     packMaterial.userData.time.value = t;
+    if (hull && Math.abs(hull.center.x - (this.field.start + this.field.end) / 2) > PACK_PIECE / 2 + 60) return;
     let crushing = false;
     if (hull) {
       const c = hull.center;
@@ -1215,7 +1279,10 @@ export class Polar {
     // before the first pole scrolls into view.
     const sample = new THREE.Group();
     sample.add(new THREE.Mesh(iceberg(seeded(1), 4, 3, 1, 2, 16).geometry, iceMat()));
-    drain(new PackIce({ start: 0, end: 8 }, sample, [-2, 2]).build());
+    const field = { start: 0, end: 8 };
+    const seeds = [];
+    drain(packLayout(field, [-2, 2], () => false, seeds));
+    drain(new PackIce({ ...field, seeds, brash: seeds.brash }, sample, [-2, 2]).build());
     sample.add(makeIgloo(), makeAnimal({ type: 'bear' }), makeAnimal({ type: 'penguin' }));
     sample.visible = false;
     scene.add(sample);

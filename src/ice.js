@@ -251,7 +251,15 @@ export function iceBlock(r, o) {
     if (Math.hypot(topAt(x + 0.5, z) - topAt(x - 0.5, z), topAt(x, z + 0.5) - topAt(x, z - 0.5)) > 0.3) return false;
     return planes.every(({ n, c }) => n.y > 0.5 || n.x * x + n.y * y + n.z * z <= c - margin);
   };
-  return { geometry: geo, topAt, walkable };
+  // Whether (x, z) lies within `margin` of the ice where it meets the water.
+  const covers = (x, z, margin) => {
+    const a = Math.atan2(z / hz, x / hx);
+    const f = (((a / (Math.PI * 2)) % 1) + 1) % 1 * segments;
+    const i = Math.floor(f);
+    const out = THREE.MathUtils.lerp(outline[i % segments], outline[(i + 1) % segments], f - i);
+    return Math.hypot(x / hx, z / hz) * size <= out * (1 + batter) * size + margin;
+  };
+  return { geometry: geo, topAt, walkable, covers };
 }
 
 // The cross-section of a closed shape in the plane z = zPlane, at each step along x: the lowest point of its surface
