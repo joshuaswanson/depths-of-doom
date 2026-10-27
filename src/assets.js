@@ -19,6 +19,13 @@ const MODEL_NAMES = [
 const models = {};
 const clips = {};
 
+// The soft shadow blur smears anything this fine into nothing, so drawing it into the shadow map is wasted work.
+const FINE_DETAIL = /^(anemone_|kelp_bladder|jelly_)|_tip$/;
+
+export function castsShadow(material) {
+  return !material.transparent && !FINE_DETAIL.test(material.name);
+}
+
 export async function loadModels(onProgress) {
   const draco = new DRACOLoader().setDecoderPath(`${import.meta.env.BASE_URL}draco/`);
   const loader = new GLTFLoader().setDRACOLoader(draco);
@@ -28,7 +35,7 @@ export async function loadModels(onProgress) {
     gltf.scene.traverse((o) => {
       if (!o.isMesh) return;
       o.material.envMapIntensity = 0.55;
-      o.castShadow = !o.material.transparent;
+      o.castShadow = castsShadow(o.material);
       // The sub and its parts are closed shapes, so their front faces alone cast the shadow. That keeps them on the
       // shadow shader everything else already uses, so their first shadow never stalls a frame.
       if (/^(player_|part_)/.test(name)) o.material.shadowSide = THREE.FrontSide;

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { animationsOf, findNode, plainMaterials, spawn, spawnSkinned, tint } from './assets.js';
+import { animationsOf, castsShadow, findNode, plainMaterials, spawn, spawnSkinned, tint } from './assets.js';
 import { sfx } from './audio.js';
 import { CURRENT_MATERIALS, NOISE_GLSL, SHADER_TIME, WHALE_BEND, addTailBeat, addWaterline, addWingFlap } from './surface.js';
 import {
@@ -1693,7 +1693,7 @@ function mergeCluster(pieces) {
     if (!merged) continue;
     const mesh = new THREE.Mesh(merged, material);
     mesh.renderOrder = order;
-    mesh.castShadow = !material.transparent;
+    mesh.castShadow = castsShadow(material);
     cluster.add(mesh);
   }
   return cluster;
