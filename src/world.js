@@ -2107,7 +2107,8 @@ export class World {
     const { layer } = prop;
     const deep = floorY(x) < SHELF_Y - 4;
     const murk = deep ? 0 : murkAt(x);
-    const polar = !deep && polarAt(x).amount > 0.5;
+    // Polar shelves are bare of ruins all the way out to their cliffs.
+    const polar = !deep && polarAt(x).shelf !== null;
     const want = deep ? 'deep' : polar ? 'polar' : murk > 0.35 ? 'murk' : 'clear';
     if (prop.kind !== want) {
       if (prop.obj) this.scene.remove(prop.obj);
@@ -2298,7 +2299,8 @@ export class World {
     // The play area sits about 20 units from the camera; fog starts behind it so darkness in the depths comes from
     // missing light, and whatever a lamp hits still shows.
     this.scene.fog.near = THREE.MathUtils.lerp(20, 19, this.dark);
-    this.scene.fog.far = THREE.MathUtils.lerp(125, 42, this.dark);
+    // Cold polar water is clearer, so it lets the eye see further.
+    this.scene.fog.far = THREE.MathUtils.lerp(125 + 30 * this.polar.cold, 42, this.dark);
     this.surface.material.uniforms.uTime.value = t;
     this.surface.position.x = cx;
     this.waterline.material.uniforms.uTime.value = t;
@@ -2323,7 +2325,7 @@ export class World {
 
     for (const ray of this.rays) {
       ray.material.uniforms.uTime.value = t;
-      ray.material.uniforms.uStrength.value = ray.userData.strength * (1 - this.dark) * (1 - 0.7 * this.polar.cold);
+      ray.material.uniforms.uStrength.value = ray.userData.strength * (1 - this.dark) * (1 - 0.35 * this.polar.cold);
       ray.position.x = wrap(ray.position.x, cx, halfWidthAt(ray.position.z, this.aspect) + 10);
     }
 

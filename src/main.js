@@ -88,12 +88,17 @@ under.position.set(0, -10, 6);
 scene.add(under);
 const SUNLIGHT = [[hemi, 1.25], [sun, 2.1], [overhead, 0.6], [rim, 2.2], [under, 0.6]];
 
-// Under the polar ice the light is a little dimmer and colder.
-const ICY_SKY = new THREE.Color('#dff3ff');
+// Under the polar ice the light comes through blue: pale from the ice overhead, deep cobalt from the water around.
+const ICY_SKY = new THREE.Color('#cfeaff');
+const ICY_GROUND = new THREE.Color('#06245e');
+const ICY_RIM = new THREE.Color('#3f9dff');
+const ICY_UNDER = new THREE.Color('#1d5fd6');
 function lightForDepth(dark, cold) {
-  for (const [light, base] of SUNLIGHT) light.intensity = base * (1 - dark * 0.975) * (1 - 0.15 * cold);
+  for (const [light, base] of SUNLIGHT) light.intensity = base * (1 - dark * 0.975) * (1 - 0.12 * cold);
   hemi.color.set('#9fe2ff').lerp(ICY_SKY, cold);
-  rim.color.set('#7fdcff').lerp(new THREE.Color('#7a5cff'), dark);
+  hemi.groundColor.set('#163f4a').lerp(ICY_GROUND, cold);
+  under.color.set('#3fb8c8').lerp(ICY_UNDER, cold);
+  rim.color.set('#7fdcff').lerp(ICY_RIM, cold).lerp(new THREE.Color('#7a5cff'), dark);
   scene.environmentIntensity = 0.7 * (1 - dark * 0.97);
   overhead.shadow.intensity = 1 - THREE.MathUtils.smoothstep(dark, 0, 0.5);
 }
