@@ -3,7 +3,7 @@ import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { applySurfaceDetail } from './surface.js';
+import { addWaterline, applySurfaceDetail } from './surface.js';
 import { addSkullDecals } from './decals.js';
 
 const MODEL_NAMES = [
@@ -124,7 +124,12 @@ function mergeStatic(root) {
 // Shader variants depend on the render target, so compile against the post-processing buffer the game draws into.
 export async function warmUp(renderer, scene, camera, target) {
   const holder = new THREE.Group();
-  for (const name of MODEL_NAMES) holder.add(spawn(name));
+  for (const name of MODEL_NAMES) {
+    const obj = spawn(name);
+    // Parts bolted onto a sub catch the waterline shimmer, a shader variant of their own.
+    if (/^(part_|junk_)/.test(name)) for (const m of ownMaterials(obj)) addWaterline(m, { topOnly: true });
+    holder.add(obj);
+  }
   holder.position.set(0, 0, -5);
   scene.add(holder);
   const previous = renderer.getRenderTarget();
