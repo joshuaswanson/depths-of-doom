@@ -57,7 +57,7 @@ def kelp_stalk(part, P, base, height, rng, lean=0.0):
                  for s in [j / 9 for j in range(10)]]
         ribbon(part, P["kelp_blade"], blade, lambda s: 0.14 * math.sin(math.pi * min(1.0, s * 1.15 + 0.08)) + 0.015,
                ruffle=0.045, twist=rng.uniform(-1.0, 1.0))
-        part.sphere(P["kelp_bladder"], loc=root + out * 0.1, scale=(0.07, 0.07, 0.09), segs=10, rings=8)
+        part.sphere(P["kelp_bladder"], loc=root + out * 0.1, scale=(0.07, 0.07, 0.09), segs=6, rings=5)
     part.sphere(P["kelp_stipe"], loc=(base[0], base[1], 0.05), scale=(0.22, 0.22, 0.1), segs=12, rings=6)
 
 
