@@ -603,6 +603,18 @@ export class Player {
     return depth;
   }
 
+  // How far the top of the hull reaches up into the ice above it with the sub at (x, y), checked along its whole
+  // length; positive means it pokes in by that much.
+  iceDepth(x, y, ceiling) {
+    const e = this.extents;
+    let depth = -Infinity;
+    for (const t of HULL_SAMPLES) {
+      const top = y + e.cy + e.hy * 0.9 * Math.sqrt(Math.max(0, 1 - t * t));
+      depth = Math.max(depth, top - ceiling(x + e.cx + t * e.hx));
+    }
+    return depth;
+  }
+
   get center() {
     const e = this.extents;
     const a = this.screenTilt;
@@ -678,15 +690,25 @@ export class Player {
     const e = this.extents;
     const dx = this.vel.x * dt;
     const nx = p.x + dx;
-    // Gentle slopes lift the sub as it slides along them; anything steeper is a wall.
+    // Gentle slopes lift the sub as it slides along them; anything steeper is a wall. Floating ice works the same
+    // way from above: a sloping keel presses the sub down, a sheer one stops it.
     const lift = this.rockDepth(nx, p.y, bounds.bottom);
-    if (lift > 0 && lift > Math.abs(dx) * MAX_CLIMB) {
+    const press = bounds.ceiling ? this.iceDepth(nx, p.y, bounds.ceiling) : -Infinity;
+    const pressBefore = press > 0 ? this.iceDepth(p.x, p.y, bounds.ceiling) : 0;
+    if ((lift > 0 && lift > Math.abs(dx) * MAX_CLIMB) || (press > 0 && press - Math.max(pressBefore, 0) > Math.abs(dx) * MAX_CLIMB)) {
       // A real crash bounces off; pressing on into the wall just stops dead, so the speed never flickers.
       this.vel.x = Math.abs(this.vel.x) > WALL_BOUNCE_SPEED ? this.vel.x * -0.25 : 0;
     } else {
       p.x = nx;
     }
     p.y += this.vel.y * dt;
+    if (bounds.ceiling) {
+      const bumped = this.iceDepth(p.x, p.y, bounds.ceiling);
+      if (bumped > 0) {
+        p.y -= bumped;
+        if (this.vel.y > 0) this.vel.y *= -0.2;
+      }
+    }
     const sunk = this.rockDepth(p.x, p.y, bounds.bottom);
     this.onFloor = sunk > -0.05;
     if (sunk > 0) {

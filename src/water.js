@@ -23,10 +23,13 @@ export function darkness(y) {
 
 const stops = ['#05304f', '#0a5c94', '#1a9bdb', '#6fe6ff'].map((hex) => new THREE.Color(hex));
 const deep = ['#000102', '#02050b', '#060410'].map((hex) => new THREE.Color(hex));
+// Polar water: colder and greyer, pale under the ice and steel blue below.
+const icy = ['#0a2533', '#1b4d63', '#4a8ba3', '#b8e2ec'].map((hex) => new THREE.Color(hex));
 const glsl = (c) => `vec3(${c.r.toFixed(4)}, ${c.g.toFixed(4)}, ${c.b.toFixed(4)})`;
 
 // Screen-height gradient shared by the backdrop and the fog, so fogged props melt into the water behind them.
-// The fog's color uniform carries the depth shift (red) and darkness (green), since every fogged material has it.
+// The fog's color uniform carries the depth shift (red), darkness (green) and polar cold (blue), since every fogged
+// material has it.
 export const WATER_GRADIENT_GLSL = /* glsl */ `
 vec3 waterGradient( float t ) {
   t = clamp( t, 0.0, 1.1 );
@@ -38,8 +41,15 @@ vec3 abyssGradient( float t ) {
   vec3 c = mix( ${glsl(deep[0])}, ${glsl(deep[1])}, smoothstep( 0.0, 0.8, t ) );
   return mix( c, ${glsl(deep[2])}, smoothstep( 0.55, 1.0, t ) * 0.6 );
 }
-vec3 seaColor( float t, float shift, float dark ) {
-  return mix( waterGradient( t + shift ), abyssGradient( t ), dark );
+vec3 icyGradient( float t ) {
+  t = clamp( t, 0.0, 1.1 );
+  vec3 c = mix( ${glsl(icy[0])}, ${glsl(icy[1])}, smoothstep( 0.0, 0.45, t ) );
+  c = mix( c, ${glsl(icy[2])}, smoothstep( 0.4, 0.85, t ) );
+  return mix( c, ${glsl(icy[3])}, smoothstep( 0.85, 1.05, t ) );
+}
+vec3 seaColor( float t, float shift, float dark, float polar ) {
+  vec3 open = polar > 0.0 ? mix( waterGradient( t + shift ), icyGradient( t + shift ), polar ) : waterGradient( t + shift );
+  return mix( open, abyssGradient( t ), dark );
 }
 `;
 
@@ -77,7 +87,7 @@ export function installWaterFog() {
 #if defined( USE_FOG ) && defined( OPAQUE ) && !defined( FOG_EXP2 ) && !defined( FOG_CAP )
   if ( smoothstep( fogNear, fogFar, vFogDepth ) > 0.998 ) {
     gl_FragColor = vec4( seaColor( clamp( vFogScreenY / ${TAN_HALF_FOV.toFixed(5)} * 0.5 + 0.5, 0.0, 1.0 ), fogColor.r,
-      fogColor.g ), 1.0 );
+      fogColor.g, fogColor.b ), 1.0 );
     return;
   }
 #endif
@@ -96,7 +106,7 @@ export function installWaterFog() {
   #ifdef FOG_MIN
     fogFactor = max( fogFactor, FOG_MIN );
   #endif
-  gl_FragColor.rgb = mix( gl_FragColor.rgb, seaColor( fogT, fogColor.r, fogColor.g ), fogFactor );
+  gl_FragColor.rgb = mix( gl_FragColor.rgb, seaColor( fogT, fogColor.r, fogColor.g, fogColor.b ), fogFactor );
 #endif
 `;
 }

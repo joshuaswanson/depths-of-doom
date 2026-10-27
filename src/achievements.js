@@ -22,6 +22,12 @@ export const ACHIEVEMENTS = [
   { id: 'dolphin_jump', name: 'Porpoise Pals', desc: 'Leap out of the water alongside the dolphins.' },
   { id: 'abyss', name: 'Rock Bottom', desc: 'Touch the floor of a deep trench.' },
   { id: 'coop', name: 'Crew Up', desc: 'Dive with a friend.' },
+  { id: 'north_pole', name: 'True North', desc: 'Reach the North Pole.' },
+  { id: 'south_pole', name: 'Down Under the Ice', desc: 'Reach the South Pole.' },
+  { id: 'polar_bear', name: 'Bear Necessities', desc: 'Spot a polar bear on the ice.' },
+  { id: 'penguin_swim', name: 'Penguin Pal', desc: 'Swim alongside a diving penguin.' },
+  { id: 'penguin_bowl', name: 'Penguin Bowling', desc: 'Ram a floe and knock three penguins into the sea.' },
+  { id: 'icebreaker', name: 'Icebreaker', desc: 'Smash through 40 plates of pack ice.' },
 ];
 
 const KEY = 'depths-of-doom-achievements';

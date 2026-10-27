@@ -6,6 +6,7 @@ import { WATER, addWaterline } from './surface.js';
 import { sfx } from './audio.js';
 import { UPGRADES, upgradeCost } from './upgrades.js';
 import { CAMERA_Z, SHELF_Y, SURFACE_Y, TAN_HALF_FOV } from './water.js';
+import { iceCeiling } from './polar.js';
 import { floorY, murkAt, seabedAt, seabedColor } from './world.js';
 
 const rand = (a, b) => a + Math.random() * (b - a);
@@ -308,6 +309,11 @@ function viewportGlow(type) {
 }
 const DESPAWN_DIST = 60;
 const ENEMY_TOP = SURFACE_Y - 1.8;
+
+// The lowest the floating polar ice reaches over a body spanning halfLength either side of x.
+function iceAbove(x, halfLength) {
+  return Math.min(iceCeiling(x - halfLength), iceCeiling(x), iceCeiling(x + halfLength));
+}
 const enemyFloor = (x) => seabedAt(x) + 1.8;
 // The lowest an enemy can sit at x without its hull, `halfLength` long either side, dipping into the rock.
 function enemyFloorUnder(x, halfLength, halfHeight) {
@@ -646,7 +652,7 @@ export class Game {
   }
 
   get bounds() {
-    const b = { bottom: (x) => seabedAt(x) + 0.7 };
+    const b = { bottom: (x) => seabedAt(x) + 0.7, ceiling: iceCeiling };
     // In co-op the subs stay within a screen or so of each other, so everyone fights the same waves.
     const alive = this.players.filter((pl) => pl.alive);
     if (alive.length > 1) {
@@ -796,7 +802,7 @@ export class Game {
       }
       if (!placed && !onShelf(x)) return null;
       const floor = seabedAt(x);
-      y = THREE.MathUtils.clamp(y, floor + 3, Math.min(ENEMY_TOP, floor + MAX_CHAIN));
+      y = THREE.MathUtils.clamp(y, floor + 3, Math.min(ENEMY_TOP, floor + MAX_CHAIN, iceAbove(x, 1) - 1.5));
       if (!placed && Math.abs(y - (spec.pos?.y ?? pc.y)) > 12) return null;
       anchor = { x, y: floor };
       // Moored mines hang a little behind or in front of the sub's lane so their chains never cut through it.
@@ -868,10 +874,10 @@ export class Game {
     const dy = Math.sin(angle);
     const t = Math.min(Math.abs(dx) > 1e-3 ? hw / Math.abs(dx) : Infinity, Math.abs(dy) > 1e-3 ? hh / Math.abs(dy) : Infinity);
     let x = this.cam.x + dx * t;
-    let y = THREE.MathUtils.clamp(this.cam.y + dy * t, enemyFloor(x), ENEMY_TOP);
+    let y = THREE.MathUtils.clamp(this.cam.y + dy * t, enemyFloor(x), Math.min(ENEMY_TOP, iceAbove(x, 3) - 2));
     if (Math.abs(y - this.cam.y) < hh && Math.abs(x - this.cam.x) < hw) {
       x = this.cam.x + (dx >= 0 ? 1 : -1) * hw;
-      y = THREE.MathUtils.clamp(y, enemyFloor(x), ENEMY_TOP);
+      y = THREE.MathUtils.clamp(y, enemyFloor(x), Math.min(ENEMY_TOP, iceAbove(x, 3) - 2));
     }
     return { x, y };
   }
@@ -1181,7 +1187,7 @@ export class Game {
         break;
       }
     }
-    pl.group.position.set(x, Math.max(seabedAt(x) + 4, Math.min(pl.group.position.y + 6, SURFACE_Y - 3)), 0);
+    pl.group.position.set(x, Math.max(seabedAt(x) + 4, Math.min(pl.group.position.y + 6, SURFACE_Y - 3, iceAbove(x, 3) - 3)), 0);
     pl.vel.set(0, 0);
     pl.hp = pl.maxHp;
     pl.alive = true;
@@ -1382,8 +1388,9 @@ export class Game {
         p.x += e.vel.x * dt;
         p.y += e.vel.y * dt;
       }
-      if (p.y > ENEMY_TOP) {
-        p.y = ENEMY_TOP;
+      const top = Math.min(ENEMY_TOP, iceAbove(p.x, e.def.rx) - e.def.ry - 0.3);
+      if (p.y > top) {
+        p.y = top;
         e.vel.y = Math.min(e.vel.y, 0);
       }
       const floor = e.type === 'mine' ? enemyFloor(p.x) : enemyFloorUnder(p.x, e.def.rx, e.def.ry);
@@ -2139,7 +2146,7 @@ export class Game {
         c.vy = c.vy * Math.exp(-dt * 2.5) + Math.sin(c.t * 2) * dt * 0.6;
       }
       p.x += c.vx * dt;
-      p.y = THREE.MathUtils.clamp(p.y + c.vy * dt, seabedAt(p.x) + 0.5, SURFACE_Y - 0.4);
+      p.y = THREE.MathUtils.clamp(p.y + c.vy * dt, seabedAt(p.x) + 0.5, Math.min(SURFACE_Y - 0.4, iceCeiling(p.x) - 0.5));
       c.obj.rotation.y += c.spin * dt;
       if (!c.loose && c.t > 11) c.obj.visible = Math.floor(c.t * 10) % 2 === 0;
       if (pl.alive && pl.hitTest(p.x, p.y, 0.3)) {

@@ -88,8 +88,11 @@ under.position.set(0, -10, 6);
 scene.add(under);
 const SUNLIGHT = [[hemi, 1.25], [sun, 2.1], [overhead, 0.6], [rim, 2.2], [under, 0.6]];
 
-function lightForDepth(dark) {
-  for (const [light, base] of SUNLIGHT) light.intensity = base * (1 - dark * 0.975);
+// Under the polar ice the light is a little dimmer and colder.
+const ICY_SKY = new THREE.Color('#dff3ff');
+function lightForDepth(dark, cold) {
+  for (const [light, base] of SUNLIGHT) light.intensity = base * (1 - dark * 0.975) * (1 - 0.15 * cold);
+  hemi.color.set('#9fe2ff').lerp(ICY_SKY, cold);
   rim.color.set('#7fdcff').lerp(new THREE.Color('#7a5cff'), dark);
   scene.environmentIntensity = 0.7 * (1 - dark * 0.97);
   overhead.shadow.intensity = 1 - THREE.MathUtils.smoothstep(dark, 0, 0.5);
@@ -318,7 +321,7 @@ async function boot() {
   const cleanup = game.prewarm();
   // Creatures stay hidden until they appear, and hidden objects are skipped by the warm-up; show them for it.
   const hidden = [...world.jellies, ...world.anglers, world.whale, world.spermWhale, ...world.dolphins.pod, world.marlin,
-    ...world.mantas].filter((j) => !j.visible);
+    ...world.mantas, ...world.polar.warmers, ...world.polar.swimmers].filter((j) => !j.visible);
   for (const j of hidden) j.visible = true;
   renderer.shadowMap.needsUpdate = true;
   await warmUp(renderer, scene, camera, composer.readBuffer);
@@ -445,7 +448,7 @@ function tick(dt) {
     depth: world.dark,
   });
   setMusic(musicMix());
-  lightForDepth(world.dark);
+  lightForDepth(world.dark, world.polar.cold);
   followShadow();
   player.setDarkness(world.dark);
   if (state === 'playing' || state === 'gameover') {

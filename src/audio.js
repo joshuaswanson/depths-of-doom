@@ -404,6 +404,12 @@ export const sfx = {
     [392, 523, 659].forEach((f, i) => tone({ type: 'triangle', freq: f, dur: 0.25, vol: 0.15, delay: i * 0.12,
       dry: true }));
   },
+  // Pack ice giving way: a sharp crack over a dull crunch.
+  iceCrack() {
+    noise({ dur: 0.08, vol: 0.22, freq: 5200, to: 1800, type: 'highpass' });
+    noise({ dur: 0.25, vol: 0.18, freq: 900, to: 200 });
+    tone({ type: 'triangle', freq: 1900 + Math.random() * 600, to: 700, dur: 0.07, vol: 0.05 });
+  },
   splash() {
     noise({ dur: 0.6, vol: 0.35, freq: 2500, to: 400, q: 0.7 });
     tone({ type: 'sine', freq: 300, to: 120, dur: 0.25, vol: 0.12 });

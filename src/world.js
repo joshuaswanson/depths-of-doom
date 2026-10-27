@@ -3,6 +3,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { unlock } from './achievements.js';
 import { animationsOf, cloneMaterial, findNode, plainMaterials, spawn, spawnSkinned, tint } from './assets.js';
 import { sfx } from './audio.js';
+import { Polar, polarAt } from './polar.js';
 import { CURRENT_MATERIALS, NOISE_GLSL, SHADER_TIME, WHALE_BEND, addTailBeat, addWaterline, addWingFlap } from './surface.js';
 import {
   ABYSS_Y, CAMERA_Z, SHADOW_FAR, SHADOW_NEAR, SHADOW_SPAN, SHELF_Y, SURFACE_Y, TAN_HALF_FOV, WATER_GRADIENT_GLSL,
@@ -86,7 +87,7 @@ function reefAt(x) {
 
 // The seabed swells up into a broad reef platform across the middle of the shelf.
 function reefRise(x, z) {
-  const reef = reefAt(x);
+  const reef = reefAt(x) * (1 - polarAt(x).amount);
   if (reef <= 0) return 0;
   const dz = (z - MOUND_Z) / 26;
   return REEF_RISE * reef * Math.exp(-dz * dz);
@@ -159,7 +160,8 @@ function makeMound(cell) {
     centre,
     height: 3.0 + 3.5 * hash(cell, 2),
     width: 4.5 + 3.5 * hash(cell, 3),
-    reef: reefAt(x) > 0.3,
+    reef: reefAt(x) > 0.3 && polarAt(x).amount < 0.5,
+    polar: polarAt(x).amount > 0.5,
     murk: murkAt(x),
   };
 }
@@ -281,19 +283,22 @@ function makeBackdrop() {
   const mat = new THREE.ShaderMaterial({
     depthTest: false,
     depthWrite: false,
-    uniforms: { uShift: { value: 0 }, uDark: { value: 0 }, uLine: { value: 2 } },
+    uniforms: { uShift: { value: 0 }, uDark: { value: 0 }, uLine: { value: 2 }, uPolar: { value: 0 } },
     vertexShader: /* glsl */ `
       varying vec2 vUv;
       void main() { vUv = uv; gl_Position = vec4( position.xy, 0.9999, 1.0 ); }`,
     fragmentShader: /* glsl */ `
-      uniform float uShift, uDark, uLine;
+      uniform float uShift, uDark, uLine, uPolar;
       varying vec2 vUv;
       ${WATER_GRADIENT_GLSL}
       void main() {
-        vec3 sea = seaColor( vUv.y, uShift, uDark );
+        vec3 sea = seaColor( vUv.y, uShift, uDark, uPolar );
         float h = vUv.y - uLine;
         vec3 sky = mix( vec3( 0.62, 0.86, 0.95 ), vec3( 0.16, 0.48, 0.86 ), smoothstep( 0.0, 0.35, h ) );
         sky += vec3( 1.0, 0.9, 0.7 ) * 0.25 * smoothstep( 0.25, 0.0, length( vec2( ( vUv.x - 0.7 ) * 1.6, h - 0.2 ) ) );
+        // Over the poles a low, heavy snow sky: bright whiteout at the horizon, leaden grey above.
+        vec3 storm = mix( vec3( 0.74, 0.79, 0.84 ), vec3( 0.3, 0.35, 0.42 ), smoothstep( 0.0, 0.3, h ) );
+        sky = mix( sky, storm, uPolar );
         gl_FragColor = vec4( h > 0.0 ? sky : sea, 1.0 );
       }`,
   });
@@ -416,6 +421,8 @@ const paintScratch = new THREE.Color();
 const painted = { y: 0, glow: 0 };
 
 // The seabed's height and colour at one point, with the reef glow that brightens the sand there.
+const POLAR_GRAVEL = ['#6f8592', '#8fa3ad', '#c9d7dd'].map((hex) => new THREE.Color(hex));
+
 function paintSeabed(x, z, murk, c) {
   const d = paintScratch;
   const floor = floorY(x);
@@ -435,6 +442,12 @@ function paintSeabed(x, z, murk, c) {
   c.lerp(RUBBLE, THREE.MathUtils.smoothstep(raised, 0.4, 2.0) * 0.55 * (1 - glow));
   c.lerp(REEF_SAND, THREE.MathUtils.smoothstep(glow, 0, 0.7) * 0.92);
   c.lerp(REEF_LAGOON, glow * ripple * 0.4);
+  const cold = polarAt(x).amount;
+  if (cold > 0) {
+    // Under the polar ice: grey-blue gravel scattered with pale stones.
+    d.copy(POLAR_GRAVEL[0]).lerp(POLAR_GRAVEL[1], n).lerp(POLAR_GRAVEL[2], Math.max(0, m * 2 - 1) * 0.8);
+    c.lerp(d, cold * 0.85);
+  }
   painted.y = y;
   painted.glow = glow;
   return painted;
@@ -453,6 +466,7 @@ function makeSeabedTile(material) {
   geo.userData.baseX = Float32Array.from({ length: geo.attributes.position.count }, (_, i) => geo.attributes.position.getX(i));
   geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(geo.attributes.position.count * 3), 3));
   geo.setAttribute('aReef', new THREE.BufferAttribute(new Float32Array(geo.attributes.position.count), 1));
+  geo.setAttribute('aPolar', new THREE.BufferAttribute(new Float32Array(geo.attributes.position.count), 1));
   const tile = new THREE.Mesh(geo, material);
   // The seabed has the costliest shader; drawn after everything standing on it, hidden stretches are never shaded.
   tile.renderOrder = 1;
@@ -476,6 +490,7 @@ function shapeTile(tile, target, budget = Infinity) {
   const col = geo.attributes.color;
   const c = new THREE.Color();
   const glowAttr = geo.attributes.aReef.array;
+  const polarAttr = geo.attributes.aPolar.array;
   const end = Math.min(pos.count, job.next + budget);
   const x0 = job.x0;
   const murkOf = new Map();
@@ -486,6 +501,7 @@ function shapeTile(tile, target, budget = Infinity) {
     const { y, glow } = paintSeabed(x, pos.getZ(i), murk, c);
     pos.setY(i, y);
     glowAttr[i] = glow;
+    polarAttr[i] = polarAt(x).amount;
     col.setXYZ(i, c.r, c.g, c.b);
   }
   job.next = end;
@@ -495,6 +511,7 @@ function shapeTile(tile, target, budget = Infinity) {
   pos.needsUpdate = true;
   col.needsUpdate = true;
   geo.attributes.aReef.needsUpdate = true;
+  geo.attributes.aPolar.needsUpdate = true;
   geo.computeVertexNormals();
 }
 
@@ -503,13 +520,14 @@ function makeSeabedMaterial(uniforms) {
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uTime = uniforms.uTime;
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nvarying vec3 vSeaWorld;\nattribute float aReef;\nvarying float vReef;')
+      .replace('#include <common>', '#include <common>\nvarying vec3 vSeaWorld;\nattribute float aReef;\nvarying float vReef;\nattribute float aPolar;\nvarying float vPolar;')
       .replace('#include <worldpos_vertex>',
-        '#include <worldpos_vertex>\nvSeaWorld = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;\nvReef = aReef;');
+        '#include <worldpos_vertex>\nvSeaWorld = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;\nvReef = aReef;\nvPolar = aPolar;');
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', /* glsl */ `#include <common>
         varying vec3 vSeaWorld;
         varying float vReef;
+        varying float vPolar;
         uniform float uTime;
         ${NOISE_GLSL}
         // Caustic net: bright lines along the borders of slowly wobbling cells, like light focused by surface waves.
@@ -549,7 +567,7 @@ function makeSeabedMaterial(uniforms) {
         float sFine = 1.0 - smoothstep( 0.05, 0.12, sTexel );
         float sPatch = dNoise( sp * 0.15 );
         float sShallow = smoothstep( -30.0, -12.0, vSeaWorld.y );
-        float sGrassMask = sShallow * ( 1.0 - vReef );
+        float sGrassMask = sShallow * ( 1.0 - vReef ) * ( 1.0 - vPolar );
         float sGrass = sGrassMask > 0.0 ? smoothstep( 0.55, 0.78, dNoise( sp * 0.35 + 5.0 ) ) * sGrassMask : 0.0;
         float sSteep = 1.0 - smoothstep( 0.55, 0.85, inverseTransformDirection( normalize( vNormal ), viewMatrix ).y );
         diffuseColor.rgb *= 0.85 + sRipple * 0.12 * ( 1.0 - sSteep ) + ( sPatch - 0.5 ) * 0.4 * ( 1.0 - 0.6 * vReef );
@@ -587,7 +605,8 @@ function makeSeabedMaterial(uniforms) {
         }
         #endif
         // Two drifting layers of caustics at different scales, so the sunlit floor ripples with light.
-        float fadeC = smoothstep( -90.0, -4.0, vSeaWorld.z ) * smoothstep( -32.0, -6.0, vSeaWorld.y );
+        // The polar ice lets through only a little of the rippling sunlight.
+        float fadeC = smoothstep( -90.0, -4.0, vSeaWorld.z ) * smoothstep( -32.0, -6.0, vSeaWorld.y ) * ( 1.0 - 0.75 * vPolar );
         if ( fadeC > 0.0 ) {
         vec2 cA = vSeaWorld.xz * vec2( 0.42, 0.3 ) + vec2( uTime * 0.05, uTime * 0.03 );
         cA += 0.45 * vec2( sin( cA.y * 1.9 + uTime * 0.6 ), cos( cA.x * 1.6 - uTime * 0.5 ) );
@@ -1287,7 +1306,7 @@ function updateDolphins(world, dt, t, cx, cy, halfW, sub) {
   if (!dolphins.active) {
     for (const d of dolphins.pod) d.visible = false;
     dolphins.wait -= dt;
-    if (dolphins.wait > 0 || !near) return;
+    if (dolphins.wait > 0 || !near || polarAt(cx).amount > 0.3) return;
     dolphins.active = true;
     dolphins.dir = Math.random() < 0.5 ? -1 : 1;
     // Each swims in its own depth lane, far enough apart that they never pass through each other.
@@ -1418,7 +1437,7 @@ function updateMarlin(fish, dt, t, cx, cy, halfW, sub) {
   if (!u.active) {
     fish.visible = false;
     u.wait -= dt;
-    if (u.wait > 0 || !open || deepBelow(cx) < 60) return;
+    if (u.wait > 0 || !open || deepBelow(cx) < 60 || polarAt(cx).amount > 0.3) return;
     const side = Math.random() < 0.5 ? -1 : 1;
     const x = cx + side * (halfW + MARLIN_LENGTH);
     if (deepBelow(x) < 50) {
@@ -1757,6 +1776,11 @@ function layoutCluster(m, blockers) {
       nestle(CORALS[Math.floor(r() * CORALS.length)], m.x + Math.cos(a) * d, MOUND_Z + 1 + Math.sin(a) * d,
         1.0 + r() * 0.7);
     }
+  } else if (m.polar) {
+    // Under the ice the shelf is bare gravel strewn with boulders.
+    for (let i = 0, n = 1 + Math.floor(r() * 3); i < n; i++) {
+      nestle(r() < 0.5 ? 'rock_a' : 'rock_b', m.x + (r() - 0.5) * 16, MOUND_Z + (r() - 0.5) * 10, 0.7 + r() * 0.8);
+    }
   } else if (m.murk > 0.5) {
     // Out in the murk: dense kelp forests, thickest nearest the cliffs.
     const stalks = 14 + Math.floor(r() * 6 + m.murk * 10);
@@ -1892,6 +1916,7 @@ export class World {
 
     this.dust = makeDust();
     scene.add(this.dust);
+    this.polar = new Polar(scene);
 
     this.props = [];
     for (const layer of LAYERS) this.populate(layer);
@@ -2015,9 +2040,11 @@ export class World {
   // Returns how many gulls just took off, so the game can play one cry for the flock.
   updateGulls(dt, cx, cy, hull, camZ) {
     let scared = 0;
-    const sub = hull?.center;
     // Floating gulls show once the top of the view nears the surface; flying ones climb up to 24 above it.
-    const visible = cy > SURFACE_Y - Math.max(camZ, 2) * TAN_HALF_FOV - 2 && cy < SURFACE_Y + 30;
+    const visible = cy > SURFACE_Y - Math.max(camZ, 2) * TAN_HALF_FOV - 2 && cy < SURFACE_Y + 30
+      && this.polar.cold < 0.3;
+    // Hidden gulls pay the sub no mind.
+    const sub = visible ? hull?.center : null;
     for (const gull of this.gulls) {
       const u = gull.userData;
       gull.visible = visible;
@@ -2077,10 +2104,11 @@ export class World {
     const { layer } = prop;
     const deep = floorY(x) < SHELF_Y - 4;
     const murk = deep ? 0 : murkAt(x);
-    const want = deep ? 'deep' : murk > 0.35 ? 'murk' : 'clear';
+    const polar = !deep && polarAt(x).amount > 0.5;
+    const want = deep ? 'deep' : polar ? 'polar' : murk > 0.35 ? 'murk' : 'clear';
     if (prop.kind !== want) {
       if (prop.obj) this.scene.remove(prop.obj);
-      const name = chooseProp(layer, want, murk);
+      const name = chooseProp(layer, want === 'polar' ? 'deep' : want, murk);
       prop.obj = spawn(name);
       prop.obj.userData.model = name;
       if (layer.plain) plainMaterials(prop.obj);
@@ -2091,6 +2119,7 @@ export class World {
         prop.obj.traverse((o) => { o.castShadow = false; });
       }
       if (!layer.tint && deep) tint(prop.obj, '#1c2233', 0.45);
+      if (!layer.tint && polar) tint(prop.obj, '#dcebf3', 0.3);
       prop.size = rand(layer.scale[0], layer.scale[1]);
       prop.obj.scale.setScalar(prop.size);
       prop.kind = want;
@@ -2238,6 +2267,7 @@ export class World {
       return { origin, dir: new THREE.Vector2(dir.x, dir.y).normalize() };
     });
     this.spotRange = hull?.spotRange ?? 0;
+    this.polar.update(dt, this.time, cx, cy, sub, camera, hull, this.effects);
     if (this.updateGulls(dt, cx, cy, hull, camera.position.z) > 0) {
       sfx.gull();
       unlock('gulls');
@@ -2260,7 +2290,8 @@ export class World {
     bu.uDark.value = this.dark;
     // A free camera can swing behind the play plane; the horizon maths needs a positive distance.
     bu.uLine.value = 0.5 + 0.5 * (SURFACE_Y - cy) / (Math.max(camera.position.z, 2) * TAN_HALF_FOV);
-    this.scene.fog.color.setRGB(shift, this.dark, 0);
+    this.scene.fog.color.setRGB(shift, this.dark, this.polar.cold);
+    bu.uPolar.value = this.polar.cold;
     // The play area sits about 20 units from the camera; fog starts behind it so darkness in the depths comes from
     // missing light, and whatever a lamp hits still shows.
     this.scene.fog.near = THREE.MathUtils.lerp(20, 19, this.dark);
@@ -2289,7 +2320,7 @@ export class World {
 
     for (const ray of this.rays) {
       ray.material.uniforms.uTime.value = t;
-      ray.material.uniforms.uStrength.value = ray.userData.strength * (1 - this.dark);
+      ray.material.uniforms.uStrength.value = ray.userData.strength * (1 - this.dark) * (1 - 0.7 * this.polar.cold);
       ray.position.x = wrap(ray.position.x, cx, halfWidthAt(ray.position.z, this.aspect) + 10);
     }
 
@@ -2304,8 +2335,8 @@ export class World {
       chain.rotation.z = Math.sin(t * 0.4 + chain.userData.swing) * 0.03;
       chain.position.y = SURFACE_Y - 0.4 + Math.sin(t * 1.3 + chain.userData.swing) * 0.12;
       chain.position.x = wrap(chain.position.x, cx, 70);
-      // Moorings only reach the shelf floor, so there are none over the trenches.
-      chain.visible = floorY(chain.position.x) > SHELF_Y - 3;
+      // Moorings only reach the shelf floor, so there are none over the trenches, nor under the polar ice.
+      chain.visible = floorY(chain.position.x) > SHELF_Y - 3 && polarAt(chain.position.x).amount < 0.2;
     }
 
     const dpos = this.dust.geometry.attributes.position;
