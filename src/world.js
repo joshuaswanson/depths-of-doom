@@ -3,7 +3,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { unlock } from './achievements.js';
 import { animationsOf, cloneMaterial, findNode, plainMaterials, spawn, spawnSkinned, tint } from './assets.js';
 import { sfx } from './audio.js';
-import { Polar, polarAt } from './polar.js';
+import { Polar, nearIce, polarAt } from './polar.js';
 import { CURRENT_MATERIALS, NOISE_GLSL, SHADER_TIME, WHALE_BEND, addTailBeat, addWaterline, addWingFlap } from './surface.js';
 import {
   ABYSS_Y, CAMERA_Z, SHADOW_FAR, SHADOW_NEAR, SHADOW_SPAN, SHELF_Y, SURFACE_Y, TAN_HALF_FOV, WATER_GRADIENT_GLSL,
@@ -1035,6 +1035,9 @@ function makeWhale() {
 
 // The whale keeps to its own patch of open water over the middle of the trench near the camera, whatever the
 // player does: the trench is found by walking out from the camera until the floor rises.
+// Whales, dolphins, the marlin and the gulls only turn up this far or more from any polar ice.
+const OPEN_SEA = 110;
+
 function whaleHome(cx) {
   if (deepBelow(cx) < 45) return null;
   let lo = cx;
@@ -1052,7 +1055,7 @@ function updateWhale(whale, dt, t, cx, cy, aspect, canSing) {
     whale.visible = false;
     if (u.wait > 0) return;
     const home = whaleHome(cx);
-    if (!home) {
+    if (!home || nearIce(cx, OPEN_SEA)) {
       u.wait = 2;
       return;
     }
@@ -1200,7 +1203,7 @@ function updateSpermWhale(whale, dt, cx, cy, humpback, aspect) {
     u.wait -= dt;
     if (u.wait > 0 || cy > -40 || cy < -175) return;
     const home = whaleHome(cx);
-    if (!home) {
+    if (!home || nearIce(cx, OPEN_SEA)) {
       u.wait = 3;
       return;
     }
@@ -1306,7 +1309,7 @@ function updateDolphins(world, dt, t, cx, cy, halfW, sub) {
   if (!dolphins.active) {
     for (const d of dolphins.pod) d.visible = false;
     dolphins.wait -= dt;
-    if (dolphins.wait > 0 || !near || polarAt(cx).amount > 0.3) return;
+    if (dolphins.wait > 0 || !near || nearIce(cx, OPEN_SEA)) return;
     dolphins.active = true;
     dolphins.dir = Math.random() < 0.5 ? -1 : 1;
     // Each swims in its own depth lane, far enough apart that they never pass through each other.
@@ -1437,7 +1440,7 @@ function updateMarlin(fish, dt, t, cx, cy, halfW, sub) {
   if (!u.active) {
     fish.visible = false;
     u.wait -= dt;
-    if (u.wait > 0 || !open || deepBelow(cx) < 60 || polarAt(cx).amount > 0.3) return;
+    if (u.wait > 0 || !open || deepBelow(cx) < 60 || nearIce(cx, OPEN_SEA)) return;
     const side = Math.random() < 0.5 ? -1 : 1;
     const x = cx + side * (halfW + MARLIN_LENGTH);
     if (deepBelow(x) < 50) {
@@ -1536,7 +1539,7 @@ function nearestReef(cx) {
   let best = null;
   for (let x = cx - MANTA_SEARCH; x <= cx + MANTA_SEARCH; x += 4) {
     const c = shelfCentre(x);
-    if (reefAt(x) < 0.6) continue;
+    if (reefAt(x) < 0.6 || polarAt(x).shelf) continue;
     const score = c - Math.abs(x - cx) * 0.001;
     if (!best || score > best.score) best = { x, score };
   }
@@ -2042,7 +2045,7 @@ export class World {
     let scared = 0;
     // Floating gulls show once the top of the view nears the surface; flying ones climb up to 24 above it.
     const visible = cy > SURFACE_Y - Math.max(camZ, 2) * TAN_HALF_FOV - 2 && cy < SURFACE_Y + 30
-      && this.polar.cold < 0.3;
+      && !nearIce(cx, OPEN_SEA);
     // Hidden gulls pay the sub no mind.
     const sub = visible ? hull?.center : null;
     for (const gull of this.gulls) {

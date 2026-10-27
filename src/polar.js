@@ -5,13 +5,15 @@ import { spawn } from './assets.js';
 import { SHELF_Y, SURFACE_Y } from './water.js';
 import { floorY } from './world.js';
 
-// Shelves are numbered outward from the one the dive starts on, and take their biome in turn: going right from the
-// start, reef, North Pole, reef, South Pole, then round again, with a trench between each.
-const BIOMES = ['reef', 'north', 'reef', 'south'];
+// Shelves are numbered outward from the one the dive starts on. Going right from the start, the first wide shelf
+// is the North Pole, the next wide one after a reef the South Pole, and so on round again; going left the South Pole
+// comes first.
 const SCAN_STEP = 4;
-// How far the polar ice and cold water reach out past a polar shelf's cliffs, over the trench beside it.
-const POLAR_FADE = 60;
-const ICE_REACH = 25;
+const POLE_MIN_WIDTH = 140;
+// A polar shelf starts out as ordinary sea at its cliffs. The cold sets in over the first stretch of shelf, and the
+// ice starts once it has.
+const POLAR_EDGE = [4, 30];
+const ICE_INSET = 26;
 
 const onShelf = (x) => floorY(x) > SHELF_Y - 3;
 
@@ -46,8 +48,20 @@ function shelf(index) {
   return s;
 }
 
+const biomes = new Map([[0, 'reef']]);
 export function biomeOf(index) {
-  return BIOMES[((index % BIOMES.length) + BIOMES.length) % BIOMES.length];
+  let biome = biomes.get(index);
+  if (biome) return biome;
+  const dir = Math.sign(index);
+  const s = shelf(index);
+  biome = 'reef';
+  if (biomeOf(index - dir) === 'reef' && s.end - s.start >= POLE_MIN_WIDTH) {
+    let last = null;
+    for (let i = index - dir; i !== 0 && !last; i -= dir) if (biomeOf(i) !== 'reef') last = biomeOf(i);
+    biome = last ? (last === 'north' ? 'south' : 'north') : dir > 0 ? 'north' : 'south';
+  }
+  biomes.set(index, biome);
+  return biome;
 }
 
 // The shelf at or nearest to x, and whether x lies on it.
@@ -66,24 +80,28 @@ function shelfNear(x) {
   return s;
 }
 
-// The polar shelf whose cold reaches x, if any, and how strongly: 1 over the shelf, fading out over the trench.
+// The polar shelf nearest x, if the nearest shelf is polar, and how cold the water is there: 0 over the trench and
+// along the shelf's edges, 1 under the ice.
 const polarCache = new Map();
 export function polarAt(x) {
   const key = Math.round(x);
   let p = polarCache.get(key);
   if (p) return p;
   const s = shelfNear(x);
-  p = { amount: 0, kind: null, shelf: null };
-  for (const candidate of [s, shelf(s.index - 1), shelf(s.index + 1)]) {
-    const kind = biomeOf(candidate.index);
-    if (kind === 'reef') continue;
-    const gap = Math.max(candidate.start - x, x - candidate.end, 0);
-    const amount = 1 - THREE.MathUtils.smoothstep(gap, 0, POLAR_FADE);
-    if (amount > p.amount) p = { amount, kind, shelf: candidate };
-  }
+  const kind = biomeOf(s.index);
+  p = kind === 'reef'
+    ? { amount: 0, kind: null, shelf: null }
+    : { amount: THREE.MathUtils.smoothstep(Math.min(x - s.start, s.end - x), POLAR_EDGE[0], POLAR_EDGE[1]), kind, shelf: s };
   polarCache.set(key, p);
   if (polarCache.size > 8000) polarCache.delete(polarCache.keys().next().value);
   return p;
+}
+
+// Whether polar ice lies within reach of x, so open-sea creatures can keep well away from it.
+export function nearIce(x, reach) {
+  const s = shelfNear(x);
+  return [shelf(s.index - 1), s, shelf(s.index + 1)].some((c) => biomeOf(c.index) !== 'reef'
+    && x > c.start + ICE_INSET - reach && x < c.end - ICE_INSET + reach);
 }
 
 // Seeded random numbers, so a shelf's ice is the same every time it scrolls into view.
@@ -164,15 +182,15 @@ const BACK_Z = [-70, -24];
 function layoutIce(s) {
   const r = seeded(s.index * 7919 + 17);
   const kind = biomeOf(s.index);
-  const from = s.start - ICE_REACH;
-  const to = s.end + ICE_REACH;
+  const from = s.start + ICE_INSET;
+  const to = s.end - ICE_INSET;
   const middle = (s.start + s.end) / 2;
-  const span = s.end - s.start;
+  const span = to - from;
   // Stretches of the lane kept clear of bergs: a field of thin pack ice to smash through in the north, and flat floes
   // crowded with penguins in the south.
-  const field = kind === 'north' ? { start: middle - Math.min(30, span * 0.3), end: middle + Math.min(30, span * 0.3) } : null;
+  const field = kind === 'north' ? { start: middle - Math.min(26, span * 0.25), end: middle + Math.min(26, span * 0.25) } : null;
   const floes = kind === 'south'
-    ? [0.3, 0.7].map((f) => ({ x: s.start + span * f, width: 8 + r() * 3, depth: 5 + r() * 2, seed: Math.floor(r() * 1e9) }))
+    ? [0.28, 0.72].map((f) => ({ x: from + span * f, width: 8 + r() * 3, depth: 5 + r() * 2, seed: Math.floor(r() * 1e9) }))
     : [];
   const reserved = [...(field ? [[field.start - 2, field.end + 2]] : []),
     ...floes.map((f) => [f.x - f.width / 2 - 5, f.x + f.width / 2 + 5])];
@@ -183,14 +201,14 @@ function layoutIce(s) {
       x = clash[1];
       continue;
     }
-    const width = Math.min(9 + r() * 20, Math.max(4, (reserved.find(([a]) => a > x)?.[0] ?? Infinity) - x - 1));
+    const width = Math.min(9 + r() * 20, Math.max(4, (reserved.find(([a]) => a > x)?.[0] ?? to) - x - 1));
     bergs.push({ x: x + width / 2, z: LANE_Z + (r() - 0.5) * 2, width, depth: 6 + r() * 6, top: 1.6 + r() * 3,
       draft: 5 + r() * 8, seed: Math.floor(r() * 1e9), lane: true });
     // Leads of open water between the bergs, where the sub can come up for air.
     x += width + (r() < 0.35 ? 8 + r() * 10 : 1 + r() * 3);
   }
-  for (let x = from - 20; x < to + 20;) {
-    const width = 18 + r() * 34;
+  for (let x = from - 6; x < to - 10;) {
+    const width = Math.min(18 + r() * 34, to + 6 - x);
     bergs.push({ x: x + width / 2, z: BACK_Z[0] + r() * (BACK_Z[1] - BACK_Z[0]), width, depth: 10 + r() * 16,
       top: 3 + r() * 9, draft: 6 + r() * 9, seed: Math.floor(r() * 1e9), lane: false });
     x += width * (0.6 + r() * 0.6);
@@ -270,7 +288,7 @@ function iceFor(s) {
 // gives the sky.
 export function iceCeiling(x) {
   const p = polarAt(x);
-  if (!p.shelf || x < p.shelf.start - ICE_REACH - 30 || x > p.shelf.end + ICE_REACH + 30) return Infinity;
+  if (!p.shelf || x < p.shelf.start + ICE_INSET - 30 || x > p.shelf.end - ICE_INSET + 30) return Infinity;
   let ceiling = Infinity;
   for (const b of iceFor(p.shelf).bergs) {
     if (!b.lane) continue;
@@ -691,7 +709,7 @@ export class Polar {
     const wanted = new Set();
     for (const s of [shelf(near.index - 1), near, shelf(near.index + 1)]) {
       if (biomeOf(s.index) === 'reef') continue;
-      if (cx < s.start - ICE_REACH - 140 || cx > s.end + ICE_REACH + 140) continue;
+      if (cx < s.start - 140 || cx > s.end + 140) continue;
       wanted.add(s.index);
       const ice = iceFor(s);
       if (!ice.built) buildIce(ice, this.scene);
@@ -708,7 +726,7 @@ export class Polar {
     }
     this.updateSwimmers(dt, t, cx, cy, sub);
     this.updateSnow(dt, cx, cy);
-    if (sub && p.shelf && sub.x > p.shelf.start && sub.x < p.shelf.end) {
+    if (sub && p.amount > 0.9) {
       unlock(p.kind === 'north' ? 'north_pole' : 'south_pole');
     }
   }
