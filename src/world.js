@@ -1699,13 +1699,15 @@ function sharedMaterial(m) {
 
 function bakeColor(geo, color) {
   const src = geo.attributes.color;
-  const out = new Float32Array(src.count * 3);
+  const size = src.itemSize;
+  const out = new Float32Array(src.count * size);
   for (let i = 0; i < src.count; i++) {
-    out[i * 3] = src.getX(i) * color.r;
-    out[i * 3 + 1] = src.getY(i) * color.g;
-    out[i * 3 + 2] = src.getZ(i) * color.b;
+    out[i * size] = src.getX(i) * color.r;
+    out[i * size + 1] = src.getY(i) * color.g;
+    out[i * size + 2] = src.getZ(i) * color.b;
+    if (size === 4) out[i * size + 3] = src.getW(i);
   }
-  geo.setAttribute('color', new THREE.BufferAttribute(out, 3));
+  geo.setAttribute('color', new THREE.BufferAttribute(out, size));
 }
 
 // Bake a cluster of placed models into one mesh per material, anchored at the cluster's lowest point.
