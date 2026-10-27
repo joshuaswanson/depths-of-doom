@@ -453,6 +453,8 @@ function makeSeabedTile(material) {
   geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(geo.attributes.position.count * 3), 3));
   geo.setAttribute('aReef', new THREE.BufferAttribute(new Float32Array(geo.attributes.position.count), 1));
   const tile = new THREE.Mesh(geo, material);
+  // The seabed has the costliest shader; drawn after everything standing on it, hidden stretches are never shaded.
+  tile.renderOrder = 1;
   tile.frustumCulled = false;
   tile.receiveShadow = true;
   tile.userData.x0 = null;
@@ -1671,7 +1673,9 @@ function mergeCluster(pieces) {
   for (const p of pieces.children) base = Math.min(base, p.position.y);
   const toLocal = new THREE.Matrix4().makeTranslation(0, -base, 0);
   const buckets = new Map();
-  for (const piece of pieces.children) {
+  // Nearest pieces first, so most GPUs can skip shading whatever they hide; dense kelp stacks many layers deep.
+  const nearFirst = [...pieces.children].sort((a, b) => b.position.z - a.position.z);
+  for (const piece of nearFirst) {
     piece.traverse((o) => {
       if (!o.isMesh) return;
       const geo = o.geometry.clone().applyMatrix4(toLocal.clone().multiply(o.matrixWorld));
