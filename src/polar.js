@@ -6,7 +6,7 @@ import { spawn, spawnSkinned } from './assets.js';
 import { SHELF_Y, SURFACE_Y, darkness } from './water.js';
 import { floorY } from './world.js';
 import { BearMind, PenguinMind, rigBear, rigPenguin, steerSwimmer, swimStroke, swimmerBack } from './critters.js';
-import { fbm, iceBlock, iceMaterial, jaggedOutline, polygonReach, undersideAlong } from './ice.js';
+import { fbm, iceBlock, iceMaterial, jaggedOutline, polygonReach, sliceAlong } from './ice.js';
 
 // Shelves are numbered outward from the one the dive starts on. Going right from the start, the first wide shelf
 // is the North Pole, the next wide one after a reef the South Pole, and so on round again; going left the South Pole
@@ -144,7 +144,10 @@ function iceberg(r, width, depth, top, draft, segments) {
   return iceBlock(r, {
     reach: jaggedOutline(r, 5 + Math.floor(r() * 4), tabular ? 0.2 : 0.3),
     width, depth, top: top / (1 + dome), draft, dome, bulge: 0.05 + r() * 0.15, blunt: 2.4 + r() * 2,
-    lean: (r() - 0.5) * 0.5, rough: 0.7 + r() * 0.5, cuts, segments,
+    lean: (r() - 0.5) * 0.5, rough: 0.7 + r() * 0.5, cuts, segments, lobes: 0.2 + r() * 0.35,
+    rams: Array.from({ length: Math.floor(r() * 3) }, () => ({
+      angle: r() * Math.PI * 2, spread: 0.35 + r() * 0.5, size: 0.25 + r() * 0.45, depth: 0.08 + r() * 0.25,
+    })),
   });
 }
 
@@ -168,13 +171,14 @@ function* layoutIce(s, ice) {
   const to = s.end - ICE_INSET;
   const middle = (s.start + s.end) / 2;
   const span = to - from;
-  // Stretches of the lane kept clear of bergs: a field of thin pack ice to smash through in the north, and flat floes
-  // crowded with penguins in the south.
-  const field = kind === 'north' ? { start: middle - Math.min(22, span * 0.19), end: middle + Math.min(22, span * 0.19) } : null;
+  // Stretches of the lane kept clear of bergs: fields of pack ice to smash through at both edges of each pole, and in
+  // the south flat floes crowded with penguins in the middle.
+  const fieldWidth = Math.min(18, span * 0.18);
+  const fields = [{ start: from, end: from + fieldWidth }, { start: to - fieldWidth, end: to }];
   const floes = kind === 'south'
-    ? [0.28, 0.72].map((f) => ({ x: from + span * f, width: 8 + r() * 3, depth: 5 + r() * 2, seed: Math.floor(r() * 1e9) }))
+    ? [0.38, 0.62].map((f) => ({ x: from + span * f, width: 8 + r() * 3, depth: 5 + r() * 2, seed: Math.floor(r() * 1e9) }))
     : [];
-  const reserved = [...(field ? [[field.start - 2, field.end + 2]] : []),
+  const reserved = [...fields.map((f) => [f.start - 2, f.end + 2]),
     ...floes.map((f) => [f.x - f.width / 2 - 5, f.x + f.width / 2 + 5])];
   const bergs = [];
   const place = (b, x) => {
@@ -210,7 +214,11 @@ function* layoutIce(s, ice) {
   }
   for (const b of bergs) {
     if (!b.lane) continue;
-    b.underside = measureUnderside(b);
+    b.slice = measureSlice(b);
+    b.offset = 0;
+    b.drift = 0;
+    b.rock = 0;
+    b.rockSpeed = 0;
     yield;
   }
   // Polar bears roam the bigger northern bergs, and one prowls the big floe in the pack ice where the igloo stands;
@@ -219,10 +227,11 @@ function* layoutIce(s, ice) {
   const roomy = bergs.filter((b) => b.width > 10 && b.z > BACK_Z[0] + 10);
   if (kind === 'north') {
     // The igloo's floe sits just behind the lane, where a sub breaking through comes up beside it.
-    field.home = { x: (field.start + field.end) / 2 + (r() - 0.5) * 6, z: -11, topAt: () => PACK_TOP };
+    const field = fields[0];
+    field.home = { x: (field.start + field.end) / 2 + (r() - 0.5) * 4, z: -11, topAt: () => PACK_TOP };
     animals.push({ type: 'igloo', berg: field.home, dx: -2.2, dz: -0.5 });
     // The bear paces along the front of the floe, clear of the igloo's tunnel.
-    animals.push({ type: 'bear', berg: field.home, dx: 1.5, dz: 3.7 });
+    animals.push({ type: 'bear', berg: fields[0].home, dx: 1.5, dz: 3.7 });
     for (const b of roomy) {
       if (r() > 0.5) continue;
       const dx = (r() - 0.5) * b.width * 0.2;
@@ -249,7 +258,7 @@ function* layoutIce(s, ice) {
     const box = f.geometry.boundingBox;
     f.half = Math.max(-box.min.x, box.max.x);
     const x0 = -f.half - 1;
-    f.underside = { x0, samples: undersideAlong(f.geometry, 0, x0, UNDERSIDE_STEP, Math.ceil((f.half * 2 + 2) / UNDERSIDE_STEP) + 1) };
+    f.slice = { x0, ...sliceAlong(f.geometry, 0, x0, SLICE_STEP, Math.ceil((f.half * 2 + 2) / SLICE_STEP) + 1) };
     // The floe drifts when rammed, but only as far as the bergs either side of it.
     const lane = bergs.filter((b) => b.lane);
     f.room = [Math.max(-Infinity, ...lane.filter((b) => b.right <= f.x).map((b) => b.right)) + 0.4,
@@ -259,7 +268,7 @@ function* layoutIce(s, ice) {
       yaw: (r() - 0.5) * 1.6 + (r() < 0.5 ? 0 : Math.PI), phase: r() * 6.3 }));
     yield;
   }
-  Object.assign(ice, { kind, bergs, animals, field, floes, ready: true });
+  Object.assign(ice, { kind, bergs, animals, fields, floes, ready: true });
 }
 
 // Run a generator's steps until it finishes or the time runs out; true once it has finished.
@@ -272,13 +281,28 @@ function drain(steps) {
   while (!steps.next().done);
 }
 
-// The height of a lane berg's underside at each step across the lane.
-const UNDERSIDE_STEP = 0.5;
-function measureUnderside(b) {
-  const x0 = b.left - 1;
-  const count = Math.ceil((b.right - b.left + 2) / UNDERSIDE_STEP) + 1;
-  const samples = undersideAlong(b.geometry, LANE_Z - b.z, x0 - b.x, UNDERSIDE_STEP, count).map((y) => y + SURFACE_Y);
-  return { x0, samples };
+// A lane berg's cross-section along the lane: its underside and top at each step, measured from its own middle.
+const SLICE_STEP = 0.5;
+function measureSlice(b) {
+  const x0 = b.left - 1 - b.x;
+  const count = Math.ceil((b.right - b.left + 2) / SLICE_STEP) + 1;
+  return { x0, ...sliceAlong(b.geometry, LANE_Z - b.z, x0, SLICE_STEP, count) };
+}
+
+// Bottom and top of a measured cross-section at a point along it, or null where there is no ice.
+function sliceAt(slice, lx) {
+  const i = (lx - slice.x0) / SLICE_STEP;
+  const k = Math.floor(i);
+  if (k < 0 || k + 1 >= slice.bottom.length) return null;
+  const f = i - k;
+  const b0 = slice.bottom[k];
+  const b1 = slice.bottom[k + 1];
+  if (b0 === Infinity && b1 === Infinity) return null;
+  const bottom = b0 === Infinity ? b1 : b1 === Infinity ? b0 : b0 + (b1 - b0) * f;
+  const t0 = slice.top[k];
+  const t1 = slice.top[k + 1];
+  const top = t0 === -Infinity ? t1 : t1 === -Infinity ? t0 : t0 + (t1 - t0) * f;
+  return { bottom, top };
 }
 
 const layouts = new Map();
@@ -300,28 +324,29 @@ function iceFor(s, now = true) {
   return ice;
 }
 
+// The ice in the sub's lane at x, as the span from its underside to its top; null in open water.
+export function iceSpan(x) {
+  const p = polarAt(x);
+  if (!p.shelf || x < p.shelf.start + ICE_INSET - 30 || x > p.shelf.end - ICE_INSET + 30) return null;
+  const ice = iceFor(p.shelf);
+  let span = null;
+  const join = (s) => {
+    if (!s) return;
+    span = span ? { bottom: Math.min(span.bottom, s.bottom), top: Math.max(span.top, s.top) } : s;
+  };
+  for (const b of ice.bergs) {
+    if (!b.lane || x < b.left + b.offset - 1 || x > b.right + b.offset + 1) continue;
+    const s = sliceAt(b.slice, x - b.x - b.offset);
+    if (s) join({ bottom: s.bottom + SURFACE_Y, top: s.top + SURFACE_Y });
+  }
+  for (const floe of ice.built?.floes ?? []) join(floe.span(x));
+  return span;
+}
+
 // The underside of the ice over the sub's lane at x: the highest the top of anything there can reach. Open water
 // gives the sky.
 export function iceCeiling(x) {
-  const p = polarAt(x);
-  if (!p.shelf || x < p.shelf.start + ICE_INSET - 30 || x > p.shelf.end - ICE_INSET + 30) return Infinity;
-  let ceiling = Infinity;
-  for (const b of iceFor(p.shelf).bergs) {
-    if (!b.lane) continue;
-    const u = b.underside;
-    const i = (x - u.x0) / UNDERSIDE_STEP;
-    const k = Math.floor(i);
-    if (k < 0 || k + 1 >= u.samples.length) continue;
-    const a = u.samples[k];
-    const c = u.samples[k + 1];
-    if (a === Infinity || c === Infinity) {
-      ceiling = Math.min(ceiling, a, c);
-      continue;
-    }
-    ceiling = Math.min(ceiling, a + (c - a) * (i - k));
-  }
-  for (const floe of iceFor(p.shelf).built?.floes ?? []) ceiling = Math.min(ceiling, floe.underside(x));
-  return ceiling;
+  return iceSpan(x)?.bottom ?? Infinity;
 }
 
 // One snow block: a patch of a curved surface, `point(u, v, inset)`, its edges rounded off so the joints between
@@ -360,14 +385,17 @@ function snowBlock(point, out, u0, u1, v0, v1, nu, nv, bevel) {
 // The igloo: a dome of snow blocks laid in a rising spiral, with a tunnel of blocks for an entrance. Packed snow shows
 // in the joints between them.
 const IGLOO_RADIUS = 2.2;
-const TUNNEL = { radius: 0.9, from: 1.75, to: 3.35 };
+// The entrance tunnel: an arch of blocks, taller than it is wide, with walls a block thick.
+// The dark doorway at its back sits just outside the dome's inner wall.
+const TUNNEL = { width: 0.9, height: 1.2, wall: 0.28, from: 1.5, to: 3.3, back: 2.16 };
+const archPoint = (u, inset, z) => new THREE.Vector3(Math.cos(u) * (TUNNEL.width - inset),
+  Math.pow(Math.sin(u), 0.7) * (TUNNEL.height - inset), z);
 function iglooBlocks() {
   const r = seeded(99);
   const R = IGLOO_RADIUS;
   const dome = (u, v, inset) => new THREE.Vector3(Math.cos(v) * Math.cos(u), Math.sin(v) * 0.94, Math.cos(v) * Math.sin(u))
     .multiplyScalar(R - inset);
-  const tunnel = (u, v, inset) => new THREE.Vector3(Math.cos(u) * (TUNNEL.radius - inset),
-    Math.sin(u) * (TUNNEL.radius - inset) * 1.05, v);
+  const tunnel = (u, v, inset) => archPoint(u, inset, v);
   const blocks = [];
   const rings = 6;
   const gap = 0.025;
@@ -387,9 +415,9 @@ function iglooBlocks() {
     }
   }
   blocks.push(snowBlock(dome, (p) => p, 0, Math.PI * 2, Math.PI / 2 * 0.9 + gap, Math.PI / 2, 24, 3, 0));
-  for (let k = 0; k < 2; k++) {
-    const v0 = TUNNEL.from + ((TUNNEL.to - TUNNEL.from) * k) / 2;
-    const v1 = TUNNEL.from + ((TUNNEL.to - TUNNEL.from) * (k + 1)) / 2;
+  for (let k = 0; k < 3; k++) {
+    const v0 = TUNNEL.from + ((TUNNEL.to - TUNNEL.from) * k) / 3;
+    const v1 = TUNNEL.from + ((TUNNEL.to - TUNNEL.from) * (k + 1)) / 3;
     for (let i = 0; i < 5; i++) {
       const shift = k % 2 ? 0.5 : 0;
       const u0 = Math.max(0, ((i - shift) / 5) * Math.PI);
@@ -397,6 +425,14 @@ function iglooBlocks() {
       blocks.push(snowBlock(tunnel, (p) => new THREE.Vector3(p.x, p.y, 0), u0 + gap, u1 - gap, v0 + gap, v1 - gap,
         5, 4, 0.06));
     }
+  }
+  // The blocks' cut ends round the mouth, a wall's thickness deep.
+  const rim = (u, v) => archPoint(u, 0, TUNNEL.to).lerp(archPoint(u, TUNNEL.wall, TUNNEL.to), v);
+  for (let i = 0; i < 5; i++) {
+    const u0 = (i / 5) * Math.PI;
+    const u1 = ((i + 1) / 5) * Math.PI;
+    blocks.push(snowBlock((u, v, inset) => rim(u, v).setZ(TUNNEL.to - inset), () => new THREE.Vector3(0, 0, 1),
+      u0 + gap, u1 - gap, 0.04, 0.96, 4, 2, 0.04));
   }
   return mergeGeometries(blocks);
 }
@@ -412,16 +448,28 @@ function makeIgloo() {
   const joints = new THREE.MeshStandardMaterial({ color: '#a9bfcf', roughness: 1 });
   const inner = new THREE.Mesh(new THREE.SphereGeometry(R - 0.06, 64, 24, 0, Math.PI * 2, 0, Math.PI / 2), joints);
   inner.scale.y = 0.94;
-  const tunnelGeo = new THREE.CylinderGeometry(TUNNEL.radius - 0.05, TUNNEL.radius - 0.05, TUNNEL.to - TUNNEL.from + 0.6,
-    32, 1, true, -Math.PI / 2, Math.PI);
-  tunnelGeo.rotateX(Math.PI / 2);
-  const tunnelInner = new THREE.Mesh(tunnelGeo, joints);
-  tunnelInner.position.z = (TUNNEL.from + TUNNEL.to) / 2 - 0.3;
-  tunnelInner.scale.y = 1.05;
-  const door = new THREE.Mesh(new THREE.CircleGeometry(TUNNEL.radius - 0.08, 32, 0, Math.PI),
-    new THREE.MeshBasicMaterial({ color: '#0c151d' }));
-  door.position.z = TUNNEL.from + 0.2;
-  door.scale.y = 1.05;
+  // Inside, the tunnel's walls fade from the dim light at the mouth to darkness.
+  const dark = new THREE.MeshBasicMaterial({ color: '#a8bcc8', vertexColors: true, side: THREE.DoubleSide });
+  const lining = snowBlock((u, v) => archPoint(u, TUNNEL.wall, v), (p) => new THREE.Vector3(-p.x, -p.y, 0),
+    0, Math.PI, TUNNEL.back, TUNNEL.to, 24, 10, 0);
+  const floor = snowBlock((u, v) => new THREE.Vector3(u, 0.02, v), () => new THREE.Vector3(0, 1, 0),
+    -(TUNNEL.width - TUNNEL.wall), TUNNEL.width - TUNNEL.wall, TUNNEL.back, TUNNEL.to, 4, 10, 0);
+  const tunnelInner = new THREE.Mesh(mergeGeometries([lining, floor]), dark);
+  const pos = tunnelInner.geometry.attributes.position;
+  const shade = new Float32Array(pos.count * 3);
+  for (let i = 0; i < pos.count; i++) {
+    const light = 0.02 + 0.3 * THREE.MathUtils.smoothstep(pos.getZ(i), TUNNEL.back, TUNNEL.to) ** 2;
+    shade.set([light, light, light], i * 3);
+  }
+  tunnelInner.geometry.setAttribute('color', new THREE.BufferAttribute(shade, 3));
+  const doorShape = new THREE.Shape();
+  for (let i = 0; i <= 24; i++) {
+    const p = archPoint((i / 24) * Math.PI, TUNNEL.wall, 0);
+    if (i === 0) doorShape.moveTo(p.x, p.y);
+    else doorShape.lineTo(p.x, p.y);
+  }
+  const door = new THREE.Mesh(new THREE.ShapeGeometry(doorShape), new THREE.MeshBasicMaterial({ color: '#05090c' }));
+  door.position.z = TUNNEL.back;
   group.add(shell, inner, tunnelInner, door);
   group.traverse((o) => {
     if (o.isMesh) o.castShadow = o !== door;
@@ -455,15 +503,17 @@ function* buildIce(ice, scene) {
   const group = new THREE.Group();
   for (const b of ice.bergs) {
     const mesh = new THREE.Mesh(b.geometry, iceMat());
-    mesh.position.set(b.x, SURFACE_Y, b.z);
+    mesh.position.set(b.x + (b.offset ?? 0), SURFACE_Y, b.z);
     mesh.castShadow = b.draft > 2;
+    b.mesh = mesh;
     group.add(mesh);
   }
   yield;
-  let field = null;
-  if (ice.field) {
-    field = new PackIce(ice.field, group);
-    yield* field.build();
+  const fields = [];
+  for (const spec of ice.fields) {
+    const pack = new PackIce(spec, group);
+    yield* pack.build();
+    fields.push(pack);
   }
   const animals = ice.animals.map((a) => {
     const obj = makeAnimal(a);
@@ -487,7 +537,7 @@ function* buildIce(ice, scene) {
     yield;
   }
   scene.add(group);
-  ice.built = { group, animals, field, floes };
+  ice.built = { group, animals, fields, floes };
 }
 
 // Feet on the snow, following its rise and fall; a bear tips its body to the slope under it.
@@ -495,7 +545,7 @@ function placeAnimal(obj) {
   const u = obj.userData;
   const b = u.berg;
   const ground = b.topAt(u.dx, u.dz);
-  obj.position.set(b.x + u.dx, SURFACE_Y + ground + u.foot + (u.bob ?? 0), b.z + u.dz);
+  obj.position.set(b.x + (b.offset ?? 0) + u.dx, SURFACE_Y + ground + u.foot + (u.bob ?? 0), b.z + u.dz);
   if (u.type === 'bear') {
     const fx = Math.cos(u.yaw) * 1.2;
     const fz = -Math.sin(u.yaw) * 1.2;
@@ -513,7 +563,7 @@ const PACK_TOP = 0.16;
 const PACK_DRAFT = 0.42;
 const PACK_DEPTH = [-24, 3.4];
 const LANE_HALF = 2.7;
-const CHUNKS = 260;
+const CHUNKS = 700;
 const HOME_RADIUS = 6.2;
 let shardGeometry = null;
 let packMaterial = null;
@@ -540,7 +590,12 @@ function* packLayout(field, depth, out) {
   const r = seeded(Math.floor(field.start * 13) + 5);
   const seeds = field.home ? [{ x: field.home.x, z: field.home.z, rad: HOME_RADIUS, home: true }] : [];
   const width = field.end - field.start;
-  const tries = Math.round(width * (depth[1] - depth[0]) * 3);
+  // Leads: cracks of open water running across the field at odd angles.
+  const leads = Array.from({ length: 2 + Math.floor(r() * 2) }, () => ({
+    x: field.start + r() * width, a: (r() - 0.5) * 1.4, w: 0.7 + r() * 1.8,
+  }));
+  const inLead = (x, z) => leads.some((l) => Math.abs((x - l.x) * Math.cos(l.a) - z * Math.sin(l.a)) < l.w / 2);
+  const tries = Math.round(width * (depth[1] - depth[0]) * 5);
   for (let k = 0; k < tries; k++) {
     const x = field.start - 8 + r() * (width + 16);
     const z = depth[0] + r() * (depth[1] - depth[0]);
@@ -548,11 +603,13 @@ function* packLayout(field, depth, out) {
     const inside = Math.min(x - field.start - fbm(z * 0.07, 1.3, 0.5) * 12, field.end + fbm(z * 0.07, 7.1, 2.5) * 12 - x);
     if (inside < 0 && r() > 0.15 * Math.exp(inside / 3)) continue;
     if (z > depth[1] - 1.8 + fbm(x * 0.09, 3.3, 8.1) * 4) continue;
+    if (inLead(x, z)) continue;
+    // Mostly small pieces with the odd big floe among them, the big ones bunched where the field is thickest.
     const lane = Math.abs(z) < LANE_HALF + 1;
     const big = 0.5 + fbm(x * 0.06, z * 0.06, 4.4);
-    const rad = lane ? 0.6 + r() * 0.75 : 0.6 + r() * r() * 1.4 + big * 1.4;
+    const rad = lane ? 0.3 + 1.3 * r() ** 2 : 0.3 + 3.4 * r() ** 3 * (0.4 + big);
     if (k % 400 === 0) yield;
-    if (seeds.some((s) => (s.x - x) ** 2 + (s.z - z) ** 2 < ((s.rad + rad) * 0.8) ** 2)) continue;
+    if (seeds.some((s) => (s.x - x) ** 2 + (s.z - z) ** 2 < ((s.rad + rad) * (0.6 + r() * 0.25)) ** 2)) continue;
     seeds.push({ x, z, rad });
   }
   // Each floe takes the patch of sea nearer its middle than any other's, weighted by size so the big ones hold more,
@@ -564,7 +621,7 @@ function* packLayout(field, depth, out) {
       const k = s.rad * (s.home ? 1.02 : 1.05 + r() * 0.3);
       return [s.x + Math.cos(a) * k, s.z + Math.sin(a) * k];
     });
-    const gap = 0.05 + r() * 0.14;
+    const gap = 0.04 + r() * r() * 0.5;
     for (const o of seeds) {
       if (o === s) continue;
       const dx = o.x - s.x;
@@ -575,9 +632,47 @@ function* packLayout(field, depth, out) {
       const t = (d2 + s.rad * s.rad - o.rad * o.rad) / (2 * d) - gap / 2;
       poly = clipPolygon(poly, dx / d, dz / d, (s.x * dx + s.z * dz) / d + t);
     }
-    s.poly = poly;
+    s.poly = s.home ? poly : brokenEdge(poly, r);
   }
   out.push(...seeds.filter((s) => s.poly.length >= 3));
+  // Loose brash ice: fragments drifting in the leads and gaps.
+  const brash = [];
+  for (let k = 0; k < width * 4; k++) {
+    const x = field.start - 4 + r() * (width + 8);
+    const z = depth[0] + r() * (depth[1] - depth[0] - 1);
+    if (seeds.some((s) => (s.x - x) ** 2 + (s.z - z) ** 2 < (s.rad * 0.95) ** 2)) continue;
+    brash.push({ x, z, size: 0.15 + r() * r() * 0.5 });
+  }
+  out.brash = brash;
+}
+
+// Ice breaks along ragged lines: each straight edge becomes a wandering one, bitten into here and there.
+function brokenEdge(poly, r) {
+  const cx = poly.reduce((a, p) => a + p[0], 0) / poly.length;
+  const cz = poly.reduce((a, p) => a + p[1], 0) / poly.length;
+  const out = [];
+  for (let i = 0; i < poly.length; i++) {
+    const [ax, az] = poly[i];
+    const [bx, bz] = poly[(i + 1) % poly.length];
+    const len = Math.hypot(bx - ax, bz - az);
+    const steps = Math.max(1, Math.round(len / 0.22));
+    const notch = r() < 0.25 ? 0.25 + r() * 0.5 : -1;
+    for (let j = 0; j < steps; j++) {
+      const t = j / steps;
+      let x = ax + (bx - ax) * t;
+      let z = az + (bz - az) * t;
+      if (j > 0) {
+        const toward = Math.hypot(cx - x, cz - z);
+        let bite = (0.5 + 0.5 * fbm(x * 1.7, z * 1.7, 5.5)) * Math.min(0.18, len * 0.1);
+        if (notch > 0 && Math.abs(t - notch) < 0.12) bite += Math.min(0.35, len * 0.2) * (1 - Math.abs(t - notch) / 0.12);
+        bite = Math.min(bite, toward * 0.45);
+        x += ((cx - x) / toward) * bite;
+        z += ((cz - z) / toward) * bite;
+      }
+      out.push([x, z]);
+    }
+  }
+  return out;
 }
 
 class PackIce {
@@ -608,10 +703,11 @@ class PackIce {
       const corners = s.poly.map(([x, z]) => [((Math.atan2(z - cz, x - cx) % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2),
         Math.hypot(x - cx, z - cz)]).sort((a, b) => a[0] - b[0]);
       const reach = Math.max(...corners.map((c) => c[1]));
+      const thick = 0.6 + r() * 0.7;
       const block = iceBlock(r, {
-        reach: polygonReach(corners), width: 2, depth: 2, top: PACK_TOP * (0.8 + r() * 0.5),
-        draft: PACK_DRAFT * (0.8 + r() * 0.5), dome: 0.12, bulge: 0, blunt: 9, rough: 0.3, topRough: 0.45,
-        segments: Math.min(56, Math.round(14 + reach * 7)), capRows: s.home ? 6 : 2, cliffRows: 1, keelRows: 2,
+        reach: polygonReach(corners), width: 2, depth: 2, top: PACK_TOP * thick, draft: PACK_DRAFT * thick, dome: 0.12,
+        bulge: 0, blunt: 9, rough: 0.3, topRough: 0.45, segments: Math.min(84, Math.round(16 + reach * 18)),
+        capRows: s.home ? 6 : reach > 1 ? 2 : 1, cliffRows: 1, keelRows: 2,
       });
       const geo = block.geometry;
       geo.translate(cx, 0, cz);
@@ -639,7 +735,7 @@ class PackIce {
     this.chunks = Array.from({ length: CHUNKS }, () => ({ active: false }));
     this.chunkMesh = new THREE.InstancedMesh(shardGeometry, iceMat(), CHUNKS);
     this.chunkMesh.frustumCulled = false;
-    this.nextChunk = 0;
+    this.chunkMesh.castShadow = true;
     this.broken = 0;
     this.lastCrack = 0;
     group.add(this.mesh, this.chunkMesh);
@@ -650,6 +746,22 @@ class PackIce {
     this.posV = new THREE.Vector3();
     this.idle = new THREE.Matrix4().makeScale(0, 0, 0);
     for (let i = 0; i < CHUNKS; i++) this.chunkMesh.setMatrixAt(i, this.idle);
+    for (const b of seeds.brash) {
+      this.addChunk({ x: b.x, y: SURFACE_Y, z: b.z, vx: 0, vy: 0, vz: 0, sx: 0, sz: 0, size: b.size });
+    }
+  }
+
+  // A free piece of ice. When every slot is taken, the piece farthest from the sub makes way.
+  addChunk(props) {
+    let chunk = this.chunks.find((k) => !k.active);
+    if (!chunk) {
+      const from = this.lastHullX ?? props.x;
+      chunk = this.chunks.reduce((far, k) => (Math.abs(k.x - from) > Math.abs(far.x - from) ? k : far));
+    }
+    Object.assign(chunk, {
+      active: true, yaw: Math.random() * 6.3, rx: (Math.random() - 0.5) * 0.3, rz: (Math.random() - 0.5) * 0.3,
+      sx0: 0.7 + Math.random() * 0.6, sz0: 0.7 + Math.random() * 0.6, spinY: 0, phase: Math.random() * 6.3,
+    }, props);
   }
 
   update(dt, t, hull, effects) {
@@ -672,35 +784,53 @@ class PackIce {
         if (crushing) hull.vel.multiplyScalar(Math.exp(-dt * 2.2));
       }
     }
-    let any = false;
+    if (hull) this.lastHullX = hull.center.x;
     const m = this.matrix;
+    const c = hull?.center;
+    const e = hull?.extents;
     this.chunks.forEach((k, i) => {
       if (!k.active) return;
-      any = true;
-      k.life += dt;
-      // Thrown up and aside, the chunks splash back, rock on the swell and drift apart, then sink away.
-      k.vy -= (k.y > SURFACE_Y ? 14 : -10 * (SURFACE_Y - 0.08 - k.y)) * dt;
-      const drag = Math.exp(-dt * (k.y > SURFACE_Y ? 0.2 : 2.2));
+      // The hull shoulders aside any piece it runs into, setting it spinning.
+      if (hull && Math.abs(k.z) < 1.6 + k.size) {
+        const dx = k.x - c.x;
+        const dy = k.y - c.y;
+        const reach = e.hx + k.size * 0.6;
+        const along = Math.abs(dx) / reach;
+        if (along < 1 && Math.abs(dy) < e.hy * Math.sqrt(1 - along * along) + k.size * 0.5) {
+          const v = hull.vel;
+          k.vx += (v.x * 0.9 - k.vx) * 0.5 + Math.sign(dx || 1) * 1.2 * dt * 30;
+          k.vz += (Math.sign(k.z || Math.random() - 0.5) * (1 + Math.abs(v.x) * 0.25) - k.vz) * 0.4;
+          k.vy = Math.max(k.vy, Math.max(0, v.y) * 0.6 + (k.y >= SURFACE_Y - 0.1 ? 0.6 : 0));
+          k.sx += (Math.random() - 0.5) * 4;
+          k.sz += (Math.random() - 0.5) * 4;
+          k.spinY += (Math.random() - 0.5) * 3;
+        }
+      }
+      // Thrown clear of the water it falls back; afloat it bobs at the surface and drifts to a stop.
+      const afloat = k.y <= SURFACE_Y + 0.02;
+      k.vy += (afloat ? (SURFACE_Y - k.y) * 18 - k.vy * 4 : -14) * dt;
+      const drag = Math.exp(-dt * (afloat ? 0.9 : 0.15));
       k.vx *= drag;
       k.vz *= drag;
-      k.vy *= k.y > SURFACE_Y ? 1 : Math.exp(-dt * 3);
       k.x += k.vx * dt;
-      k.y += k.vy * dt - (k.life > 18 ? (k.life - 18) * 0.6 * dt : 0);
-      k.z += k.vz * dt;
-      k.rx += k.sx * dt * (k.y > SURFACE_Y ? 1 : 0.15);
-      k.rz += k.sz * dt * (k.y > SURFACE_Y ? 1 : 0.15);
-      if (k.life > 22) {
-        k.active = false;
-        this.chunkMesh.setMatrixAt(i, this.idle);
-        return;
+      k.y += k.vy * dt;
+      k.z = THREE.MathUtils.clamp(k.z + k.vz * dt, this.depth[0] - 2, this.depth[1] + 3);
+      // Afloat, a tipped piece rocks back flat.
+      if (afloat) {
+        k.sx += (-k.rx * 12 - k.sx * 3) * dt;
+        k.sz += (-k.rz * 12 - k.sz * 3) * dt;
+        k.spinY *= Math.exp(-dt * 1.5);
       }
+      k.rx += k.sx * dt;
+      k.rz += k.sz * dt;
+      k.yaw += k.spinY * dt;
+      const bob = afloat ? Math.sin(t * 1.3 + k.phase) * 0.03 : 0;
       this.euler.set(k.rx, k.yaw, k.rz);
-      m.compose(this.posV.set(k.x, k.y, k.z), this.quat.setFromEuler(this.euler),
+      m.compose(this.posV.set(k.x, k.y + bob, k.z), this.quat.setFromEuler(this.euler),
         this.scaleV.set(k.size * k.sx0, k.size, k.size * k.sz0));
       this.chunkMesh.setMatrixAt(i, m);
     });
-    if (any || this.dirty) this.chunkMesh.instanceMatrix.needsUpdate = true;
-    this.dirty = any;
+    this.chunkMesh.instanceMatrix.needsUpdate = true;
   }
 
   shatter(p, hull, effects) {
@@ -712,19 +842,16 @@ class PackIce {
     this.broken++;
     if (this.broken >= 40) unlock('icebreaker');
     const v = hull.vel;
-    const pieces = Math.min(7, 2 + Math.round(p.rad * 2.5));
+    const pieces = Math.min(9, 2 + Math.round(p.rad * 3));
     for (let k = 0; k < pieces; k++) {
-      const chunk = this.chunks[this.nextChunk];
-      this.nextChunk = (this.nextChunk + 1) % CHUNKS;
       const a = Math.random() * Math.PI * 2;
       const d = Math.random() * p.rad * 0.7;
-      Object.assign(chunk, {
-        active: true, life: 0, x: p.x + Math.cos(a) * d, y: SURFACE_Y, z: p.z + Math.sin(a) * d,
+      this.addChunk({
+        x: p.x + Math.cos(a) * d, y: SURFACE_Y, z: p.z + Math.sin(a) * d,
         vx: v.x * 0.5 + (Math.random() - 0.5) * 2.5, vy: 1.2 + Math.random() * 2.2 + Math.max(0, v.y) * 0.4,
-        vz: Math.sign(p.z || Math.random() - 0.5) * (0.8 + Math.random() * 2.2), yaw: Math.random() * 6.3,
-        rx: 0, rz: 0, sx: (Math.random() - 0.5) * 8, sz: (Math.random() - 0.5) * 8,
-        size: (0.45 + Math.random() * 0.5) * Math.min(1.2, p.rad * 0.8), sx0: 0.7 + Math.random() * 0.6,
-        sz0: 0.7 + Math.random() * 0.6,
+        vz: Math.sign(p.z || Math.random() - 0.5) * (0.8 + Math.random() * 2.2),
+        sx: (Math.random() - 0.5) * 8, sz: (Math.random() - 0.5) * 8,
+        size: (0.4 + Math.random() * 0.5) * Math.min(1.3, p.rad * 0.85),
       });
     }
     effects?.splash({ x: p.x, y: SURFACE_Y, z: p.z }, 0.6 + p.rad * 0.3);
@@ -769,18 +896,18 @@ class Floe {
     this.place();
   }
 
-  // The bottom of the floe over x, tipped and lifted with it.
-  underside(x) {
-    const u = this.spec.underside;
+  // The floe's bottom and top over x, tipped and lifted with it.
+  span(x) {
     const cos = Math.cos(this.tilt);
     const lx = (x - this.x) / cos;
-    const i = (lx - u.x0) / UNDERSIDE_STEP;
-    const k = Math.floor(i);
-    if (k < 0 || k + 1 >= u.samples.length) return Infinity;
-    const a = u.samples[k];
-    const b = u.samples[k + 1];
-    if (a === Infinity || b === Infinity) return Infinity;
-    return SURFACE_Y + this.lift + lx * Math.sin(this.tilt) + (a + (b - a) * (i - k)) * cos;
+    const s = sliceAt(this.spec.slice, lx);
+    if (!s) return null;
+    const base = SURFACE_Y + this.lift + lx * Math.sin(this.tilt);
+    return { bottom: base + s.bottom * cos, top: base + s.top * cos };
+  }
+
+  underside(x) {
+    return this.span(x)?.bottom ?? Infinity;
   }
 
   place() {
@@ -800,8 +927,9 @@ class Floe {
       const offset = c.x - this.x;
       // The floe stops the sub just short of it when driven into from the side, so look a little either way too.
       const pos = hull.group.position;
-      const bottom = (x) => this.underside(x);
-      const touching = [-0.35, 0, 0.35].some((d) => hull.iceDepth(pos.x + d, pos.y, bottom) > -0.15);
+      const span = (x) => this.span(x);
+      const touching = [-0.35, 0, 0.35].some((d) => hull.iceOverlap(pos.x + d, pos.y + 0.1, span)
+        || hull.iceOverlap(pos.x + d, pos.y - 0.1, span));
       if (touching && Math.abs(offset) < half + e.hx) {
         // Struck from below the floe bucks up; struck near an end it tips; driven into from the side it is shoved.
         // The floe stops the sub dead, so the blow is as hard as the sub was going the frame before.
@@ -882,8 +1010,9 @@ class Floe {
         p.state = 'swim';
         p.swimTime = 0;
         const dir = Math.sign(p.vel.x || 1);
-        Object.assign(p, { yaw: dir > 0 ? 0 : Math.PI, pitch: -0.5, roll: 0, speed: 2 });
-        p.target = new THREE.Vector3(obj.position.x + dir * 40, SURFACE_Y - 4 - Math.random() * 4, SWIM_Z[0]);
+        // Each goes its own way at its own pace, flippers out of step with the rest.
+        Object.assign(p, { yaw: dir > 0 ? 0 : Math.PI, pitch: -0.3 - Math.random() * 0.5, roll: 0,
+          speed: 1 + Math.random() * 2, stroke: Math.random() * 6.3, cruise: 4 + Math.random() * 3, retarget: 0 });
         effects?.splash({ x: obj.position.x, y: SURFACE_Y, z: obj.position.z }, 0.7);
         sfx.splash();
         this.knocked = (this.knocked ?? 0) + 1;
@@ -894,9 +1023,16 @@ class Floe {
     if (p.state === 'swim') {
       // Off and away from the plunge, curving back out of the sub's lane into the water behind it.
       p.swimTime += dt;
-      steerSwimmer(obj, p, p.target, dt, 6);
-      if (swimStroke(p.rig, p, dt, p.speed / 6)) jet(effects, obj.position, swimmerBack(p));
-      if (p.swimTime > 6) {
+      p.retarget -= dt;
+      if (p.retarget <= 0) {
+        const ahead = Math.cos(p.yaw) >= 0 ? 1 : -1;
+        p.target = new THREE.Vector3(obj.position.x + ahead * (15 + Math.random() * 30),
+          SURFACE_Y - 2.5 - Math.random() * 8, SWIM_Z[0] + Math.random() * (SWIM_Z[1] - SWIM_Z[0]));
+        p.retarget = 1.5 + Math.random() * 2.5;
+      }
+      steerSwimmer(obj, p, p.target, dt, p.cruise);
+      if (swimStroke(p.rig, p, dt, p.speed / 7)) jet(effects, obj.position, swimmerBack(p));
+      if (p.swimTime > 9 + p.phase) {
         p.state = 'gone';
         obj.visible = false;
       }
@@ -1000,6 +1136,9 @@ function makeCrystals(scene) {
   return crystals;
 }
 
+// How readily a berg gives to a bump from the sub: divided by the berg's bulk.
+const BERG_HEFT = 18;
+
 // Milliseconds a frame may spend laying out and building the ice of a pole that is coming up.
 const BUILD_BUDGET = 3;
 
@@ -1049,8 +1188,9 @@ export class Polar {
     for (const index of wanted) {
       const ice = layouts.get(index);
       if (!ice.built) continue;
+      this.drift(ice, dt, hull);
       this.animate(ice, dt, t, cx, camera);
-      ice.built.field?.update(dt, t, hull, effects);
+      for (const pack of ice.built.fields) pack.update(dt, t, hull, effects);
       for (const floe of ice.built.floes) floe.update(dt, t, hull, effects);
     }
     this.updateSwimmers(dt, t, cx, cy, sub, effects);
@@ -1059,6 +1199,29 @@ export class Polar {
     if (sub && p.amount > 0.9) {
       unlock(p.kind === 'north' ? 'north_pole' : 'south_pole');
     }
+  }
+
+  // Bergs are enormously heavy but they do float: a bump from the sub nudges one along a little and sets it rocking,
+  // and the water slowly brings it back to rest where it was.
+  drift(ice, dt, hull) {
+    const bump = hull?.iceBump;
+    for (const b of ice.bergs) {
+      if (!b.lane) continue;
+      if (bump && bump.x > b.left + b.offset - 1.5 && bump.x < b.right + b.offset + 1.5) {
+        const heft = BERG_HEFT / (b.width * b.depth * (b.top + b.draft));
+        b.drift += bump.vx * heft;
+        b.rockSpeed += (bump.vy * 0.6 - bump.vx * 0.3 * Math.sign(bump.x - b.x - b.offset)) * heft * 0.05;
+      }
+      b.drift += (-b.offset * 0.06 - b.drift * 0.6) * dt;
+      b.offset = THREE.MathUtils.clamp(b.offset + b.drift * dt, -0.8, 0.8);
+      b.rockSpeed += (-b.rock * 0.8 - b.rockSpeed * 0.7) * dt;
+      b.rock += b.rockSpeed * dt;
+      if (b.mesh) {
+        b.mesh.position.x = b.x + b.offset;
+        b.mesh.rotation.z = b.rock;
+      }
+    }
+    if (hull) hull.iceBump = null;
   }
 
   // Bears plod about their bergs and penguins go about their business, while near enough to be seen.

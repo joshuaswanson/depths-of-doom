@@ -32,6 +32,9 @@ const uniformSet = (names) => Object.fromEntries(names.map((n) => [n, { value: 0
 // The polar bear is rigged, with a walk cycle and two idles baked in Blender (blender/rig_polar_bear.py). One walk
 // cycle carries it this far, in model units.
 const BEAR_STRIDE = 0.2;
+// Walking speed and the radius it turns round in, in world units.
+const BEAR_PACE = 0.7;
+const BEAR_TURN = 0.9;
 
 export function rigBear(obj) {
   const mixer = new THREE.AnimationMixer(obj);
@@ -223,23 +226,29 @@ export class BearMind {
   constructor(b, size) {
     this.b = b;
     this.size = size;
+    this.homeZ = b.dz;
     // Half the bear's length, and a little more, from its middle to any edge.
-    const margin = size * 0.55;
-    const can = (dx) => b.berg.walkable(dx, b.dz, margin);
-    let lo = b.dx;
-    let hi = b.dx;
-    while (can(lo - 0.25) && lo > b.dx - 30) lo -= 0.25;
-    while (can(hi + 0.25) && hi < b.dx + 30) hi += 0.25;
-    this.bounds = [lo, hi];
-    this.roomy = hi - lo > 1.5;
+    this.margin = size * 0.55;
+    this.measure();
     this.dir = Math.random() < 0.5 ? -1 : 1;
     this.act = 'walk';
     this.left = rand(3, 8);
     this.weights = { walk: 1, sniff: 0, scent: 0 };
-    // Heading stays between π (facing left) and 2π (facing right), so every turn swings round through facing the camera.
+    this.speed = 0;
     b.yaw = this.dir > 0 ? Math.PI * 2 : Math.PI;
-    this.turnTo = b.yaw;
     this.started = false;
+  }
+
+  // How far it can walk along its current line before it must turn back.
+  measure() {
+    const b = this.b;
+    const can = (dx) => b.berg.walkable(dx, b.dz, this.margin);
+    let lo = b.dx;
+    let hi = b.dx;
+    while (can(lo - 0.25) && lo > b.dx - 30) lo -= 0.25;
+    while (can(hi + 0.25) && hi < b.dx + 30) hi += 0.25;
+    this.bounds = [lo + BEAR_TURN, hi - BEAR_TURN];
+    this.roomy = this.bounds[1] - this.bounds[0] > 1;
   }
 
   update(dt, t, rig) {
@@ -250,7 +259,9 @@ export class BearMind {
       this.started = true;
     }
     this.left -= dt;
+    let pace = 0;
     if (this.act === 'walk') {
+      pace = BEAR_PACE;
       const end = this.dir > 0 ? b.dx >= this.bounds[1] : b.dx <= this.bounds[0];
       if (end || !this.roomy || this.left <= 0) {
         this.act = Math.random() < 0.5 ? 'sniff' : 'scent';
@@ -259,36 +270,48 @@ export class BearMind {
     } else if (this.act === 'sniff' || this.act === 'scent') {
       if (this.left <= 0) this.turnRound();
     } else if (this.act === 'turn') {
-      b.yaw = approach(b.yaw, this.turnTo, dt, 1.4);
-      if (Math.abs(b.yaw - this.turnTo) < 0.04) {
+      // It walks round in a tight arc, slowing into the turn, so its paws keep pace with the ground.
+      pace = this.shuffle ? 0.2 : BEAR_PACE * 0.75;
+      const step = (this.shuffle ? 0.6 : this.speed / BEAR_TURN) * dt;
+      const left = this.turnTo - b.yaw;
+      b.yaw += Math.sign(left) * Math.min(Math.abs(left), step);
+      if (Math.abs(this.turnTo - b.yaw) < 1e-3) {
+        b.yaw = Math.cos(b.yaw) > 0 ? Math.PI * 2 : Math.PI;
         this.act = 'walk';
         this.left = rand(5, 12);
+        this.measure();
       }
     }
-    const target = { walk: this.act === 'walk' || this.act === 'turn' ? 1 : 0, sniff: this.act === 'sniff' ? 1 : 0,
-      scent: this.act === 'scent' ? 1 : 0 };
+    const target = { walk: pace > 0 ? 1 : 0, sniff: this.act === 'sniff' ? 1 : 0, scent: this.act === 'scent' ? 1 : 0 };
     for (const name of Object.keys(this.weights)) {
-      this.weights[name] = approach(this.weights[name], target[name], dt, 2.5);
+      this.weights[name] = approach(this.weights[name], target[name], dt, 2);
       rig.actions[name].setEffectiveWeight(this.weights[name]);
     }
-    // Walking pace matches the stride, so the paws stay planted as the body passes over them; turning on the spot
-    // it shuffles round at half pace.
+    this.speed = approach(this.speed, pace, dt, 2);
+    // Walking pace matches the stride, so the paws stay planted as the body passes over them.
     const clip = rig.actions.walk.getClip().duration;
-    const speed = 0.7 * (this.act === 'turn' ? 0 : this.weights.walk);
-    rig.actions.walk.timeScale = this.act === 'turn' ? 0.5 : (0.7 / (BEAR_STRIDE * this.size)) * clip;
-    b.dx = THREE.MathUtils.clamp(b.dx + this.dir * speed * dt, this.bounds[0], this.bounds[1]);
+    rig.actions.walk.timeScale = Math.max(0.15, this.speed / (BEAR_STRIDE * this.size)) * clip;
+    const travel = this.act === 'turn' && this.shuffle ? 0 : this.speed;
+    b.dx += Math.cos(b.yaw) * travel * dt;
+    b.dz -= Math.sin(b.yaw) * travel * dt;
     rig.mixer.update(dt);
   }
 
   turnRound() {
-    const middle = (this.bounds[0] + this.bounds[1]) / 2;
-    if ((this.b.dx - middle) * this.dir > 0 || Math.random() < 0.5) this.dir = -this.dir;
+    const b = this.b;
+    // Round toward the camera or away from it, whichever keeps it on its line and has room for the arc; with room
+    // for neither it shuffles round on the spot.
+    const fits = (side) => b.berg.walkable(b.dx + Math.cos(b.yaw) * BEAR_TURN, b.dz + side * BEAR_TURN, this.margin * 0.8)
+      && b.berg.walkable(b.dx, b.dz + side * BEAR_TURN * 2, this.margin);
+    const prefer = b.dz <= this.homeZ ? 1 : -1;
+    const side = fits(prefer) ? prefer : fits(-prefer) ? -prefer : 0;
+    this.shuffle = side === 0;
+    const towardCamera = side >= 0;
+    const facingRight = Math.cos(b.yaw) > 0;
+    // Yaw π faces left, 2π right; 3π/2 faces the camera.
+    this.turnTo = b.yaw + (facingRight === towardCamera ? -Math.PI : Math.PI);
+    this.dir = -this.dir;
     this.act = 'turn';
-    this.turnTo = this.dir > 0 ? Math.PI * 2 : Math.PI;
-    if (Math.abs(this.turnTo - this.b.yaw) < 0.1) {
-      this.act = 'walk';
-      this.left = rand(5, 12);
-    }
   }
 }
 

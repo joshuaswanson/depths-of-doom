@@ -104,7 +104,7 @@ export function jaggedOutline(r, corners, irregular) {
 export function iceBlock(r, o) {
   const {
     reach, width, depth, top, draft, dome = 0.1, bulge = 0.15, blunt = 2, rough = 1, topRough = 1, lean = 0, cuts = [],
-    segments = 96,
+    rams = [], lobes = 0, segments = 96,
     capRows = 10, cliffRows = 6, keelRows = 16,
   } = o;
   const hx = width / 2;
@@ -138,10 +138,19 @@ export function iceBlock(r, o) {
     // Waves wear a notch in just below the waterline.
     const notch = 1 - 0.07 * Math.exp(-(((y + Math.min(0.35, draft * 0.15)) / Math.min(0.3, draft * 0.12)) ** 2));
     const profile = (1 + bulge * Math.sin(Math.PI * Math.min(1, t * 1.3))) * Math.pow(1 - Math.pow(t, blunt), 1 / blunt);
-    rows.push({ scale: (1 + batter) * profile * notch, y, up: -Math.pow(t, 3), shift: lean * t * t });
+    rows.push({ scale: (1 + batter) * profile * notch, y, up: -Math.pow(t, 3), shift: lean * t * t, keel: t });
   }
   const outline = new Float32Array(segments);
   for (let i = 0; i < segments; i++) outline[i] = reach((i / segments) * Math.PI * 2);
+  // Under the water the keel hangs deeper on some sides than others, and rams, broad spurs of ice, jut out just below
+  // the waterline.
+  const hang = Array.from({ length: 3 }, (_, k) => [k + 1, r() * 6.28, lobes * (r() - 0.3) / (k + 1)]);
+  const deepen = (a) => THREE.MathUtils.clamp(1 + hang.reduce((sum, [f, p, amp]) => sum + Math.sin(a * f + p) * amp, 0),
+    0.55, 1.5);
+  const ramOut = (a, t) => rams.reduce((sum, ram) => {
+    const da = Math.atan2(Math.sin(a - ram.angle), Math.cos(a - ram.angle));
+    return sum + ram.size * Math.exp(-((da / ram.spread) ** 2)) * Math.exp(-(((t - ram.depth) / 0.09) ** 2));
+  }, 0);
 
   // The snowy top swells and dips gently; the sides carry broad lumps, vertical meltwater grooves on the cliffs,
   // and smaller knobbly detail everywhere.
@@ -151,7 +160,9 @@ export function iceBlock(r, o) {
     const small = fbm(x * 0.45 + ox, y * 0.45 + oy, z * 0.45 + oz, 3);
     if (up >= 1) return (big * top * 0.22 + small * 0.08) * topRough;
     const grooves = y > -1 ? noise3(x * 0.9 + ox, y * 0.06, z * 0.9 + oz) * 0.22 * rough * Math.min(1, top) : 0;
-    return big * lump + small * 0.22 * rough + grooves;
+    // Below the water melt swells the ice into great rounded bulges.
+    const swell = y < -0.5 ? fbm(x * 0.05 + oz, y * 0.07 + ox, z * 0.05 + oy, 2) * lump * 2.2 * Math.min(1, -y / 2) : 0;
+    return big * lump + small * 0.22 * rough + grooves + swell;
   };
   const position = [];
   const v = new THREE.Vector3();
@@ -168,11 +179,13 @@ export function iceBlock(r, o) {
   for (const row of rows) {
     for (let i = 0; i < segments; i++) {
       const a = (i / segments) * Math.PI * 2;
-      pushVertex(Math.cos(a) * hx * outline[i] * row.scale + (row.shift ?? 0) * hx, row.y,
-        Math.sin(a) * hz * outline[i] * row.scale, row.up);
+      const keel = row.keel !== undefined;
+      const scale = row.scale * (keel ? 1 + ramOut(a, row.keel) : 1);
+      pushVertex(Math.cos(a) * hx * outline[i] * scale + (row.shift ?? 0) * hx, keel ? row.y * deepen(a) : row.y,
+        Math.sin(a) * hz * outline[i] * scale, row.up);
     }
   }
-  pushVertex(lean * hx, -draft, 0, -1);
+  pushVertex(lean * hx, -draft * deepen(0) * 0.5 - draft * 0.5, 0, -1);
   // Calving leaves flat fracture faces: each cut shears off everything beyond a plane, `keep` of the way out from the
   // middle to the farthest point in that direction.
   const planes = cuts.map(({ dir, keep }) => {
@@ -241,10 +254,12 @@ export function iceBlock(r, o) {
   return { geometry: geo, topAt, walkable };
 }
 
-// The lowest point of the geometry's surface above each step along x in the plane z = zPlane, by slicing every
-// triangle that crosses the plane. Steps with nothing above them are Infinity.
-export function undersideAlong(geo, zPlane, x0, step, count) {
+// The cross-section of a closed shape in the plane z = zPlane, at each step along x: the lowest point of its surface
+// there (`bottom`) and the highest (`top`), found by slicing every triangle that crosses the plane. Steps outside the
+// shape are Infinity and -Infinity.
+export function sliceAlong(geo, zPlane, x0, step, count) {
   const samples = new Array(count).fill(Infinity);
+  const tops = new Array(count).fill(-Infinity);
   const pos = geo.attributes.position.array;
   const idx = geo.index.array;
   const pts = [];
@@ -268,9 +283,10 @@ export function undersideAlong(geo, zPlane, x0, step, count) {
       const x = x0 + s * step;
       const y = xb - xa > 1e-6 ? ya + (yb - ya) * ((x - xa) / (xb - xa)) : Math.min(ya, yb);
       if (y < samples[s]) samples[s] = y;
+      if (y > tops[s]) tops[s] = y;
     }
   }
-  return samples;
+  return { bottom: samples, top: tops };
 }
 
 const loader = new THREE.TextureLoader();
@@ -361,7 +377,7 @@ export function iceMaterial({ name = 'ice', bob = false, snow = false } = {}) {
           vec2 bz = texture2D( uSoftNormal, big.xy ).rg * 2.0 - 1.0;
           vec3 fine = vec3( 0.0, dx.y, dx.x ) * w.x + vec3( dy.x, 0.0, dy.y ) * w.y + vec3( dz.x, dz.y, 0.0 ) * w.z;
           vec3 broad = vec3( 0.0, bx.y, bx.x ) * w.x + vec3( by.x, 0.0, by.y ) * w.y + vec3( bz.x, bz.y, 0.0 ) * w.z;
-          vec3 n = normalize( n0 + fine * mix( 0.15, 1.0, above ) + broad * mix( 1.6, 0.3, above ) );
+          vec3 n = normalize( n0 + fine * mix( 0.04, 1.0, above ) + broad * mix( 1.3, 0.3, above ) );
           normal = normalize( n.x * vAxisX + n.y * vAxisY + n.z * vAxisZ );
           #ifdef DOUBLE_SIDED
             normal *= faceDirection;
@@ -375,14 +391,17 @@ export function iceMaterial({ name = 'ice', bob = false, snow = false } = {}) {
           // Kept below full white, so sunlit snow stays clear of the bloom threshold.
           vec3 top = mix( wall, snowColor, snowy ) * 0.7;
           float deep = clamp( -h / 12.0, 0.0, 1.0 );
-          vec3 under = mix( vec3( 0.5, 0.8, 0.82 ), vec3( 0.1, 0.38, 0.46 ), sqrt( deep ) );
-          // Faces turned up to the light from the surface glow; overhangs and undersides fall into deep teal shadow.
+          // Below the water there is no snow, only bare glassy ice: pale turquoise near the surface, deepening down the
+          // keel, with faint streaks of trapped bubbles.
+          vec3 under = mix( vec3( 0.45, 0.86, 0.84 ), vec3( 0.08, 0.42, 0.46 ), sqrt( deep ) );
+          under *= 0.9 + 0.2 * smoothstep( 0.55, 0.9, texture2D( uWindAlbedo, vIcePos.xy * 0.05 ).r );
+          // Faces turned up to the light from the surface glow; overhangs and undersides fall into deep shadow.
           under *= mix( 0.45, 1.15, smoothstep( -0.8, 0.7, n.y ) );
           diffuseColor.rgb = mix( under, top, above );
-          roughnessFactor = mix( 0.12, mix( 0.55, 0.9, snowy ), above );
+          roughnessFactor = mix( 0.04, mix( 0.55, 0.9, snowy ), above );
           // Light scattering through the ice: strongest at grazing angles and in the clear ice under the water.
           float rim = 1.0 - abs( dot( normal, normalize( vViewPosition ) ) );
-          iceGlow = vec3( 0.05, 0.3, 0.34 ) * ( 0.35 + 0.65 * rim * rim ) * ( 1.0 - deep * 0.7 ) * ( 1.0 - above );
+          iceGlow = vec3( 0.04, 0.32, 0.32 ) * ( 0.3 + 0.9 * rim * rim * rim ) * ( 1.0 - deep * 0.7 ) * ( 1.0 - above );
         }`)
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += iceGlow;');
   };
