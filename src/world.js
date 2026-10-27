@@ -512,24 +512,28 @@ function makeSeabedMaterial(uniforms) {
         uniform float uTime;
         ${NOISE_GLSL}
         // Caustic net: bright lines along the borders of slowly wobbling cells, like light focused by surface waves.
+        // Arithmetic hash (Dave Hoskins, "Hash without Sine"): random per cell, no repeats, no transcendental maths.
         vec2 cHash( vec2 p ) {
-          p = vec2( dot( p, vec2( 127.1, 311.7 ) ), dot( p, vec2( 269.5, 183.3 ) ) );
-          return fract( sin( p ) * 43758.5453 );
+          vec3 p3 = fract( vec3( p.xyx ) * vec3( 0.1031, 0.1030, 0.0973 ) );
+          p3 += dot( p3, p3.yzx + 33.33 );
+          return fract( ( p3.xx + p3.yz ) * p3.zy );
         }
         float caustic( vec2 p, float speed ) {
           vec2 i = floor( p );
           vec2 f = fract( p );
-          float d1 = 8.0;
-          float d2 = 8.0;
+          // Nearest and second-nearest squared distances; only those two need a square root.
+          float d1 = 64.0;
+          float d2 = 64.0;
           for ( int y = -1; y <= 1; y++ ) {
             for ( int x = -1; x <= 1; x++ ) {
               vec2 g = vec2( float( x ), float( y ) );
-              vec2 o = 0.5 + 0.42 * sin( uTime * speed + 6.2831 * cHash( i + g ) );
-              float d = length( g + o - f );
-              if ( d < d1 ) { d2 = d1; d1 = d; } else if ( d < d2 ) { d2 = d; }
+              vec2 r = g + 0.5 + 0.42 * sin( uTime * speed + 6.2831 * cHash( i + g ) ) - f;
+              float d = dot( r, r );
+              d2 = min( d2, max( d1, d ) );
+              d1 = min( d1, d );
             }
           }
-          return 1.0 - smoothstep( 0.0, 0.11, d2 - d1 );
+          return 1.0 - smoothstep( 0.0, 0.11, sqrt( d2 ) - sqrt( d1 ) );
         }`)
       .replace('#include <color_fragment>', /* glsl */ `#include <color_fragment>
         vec3 sp = vec3( vSeaWorld.x, vSeaWorld.y * 0.5, vSeaWorld.z );
