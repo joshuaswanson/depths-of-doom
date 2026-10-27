@@ -4,6 +4,7 @@ import { unlock } from './achievements.js';
 import { animationsOf, cloneMaterial, findNode, plainMaterials, spawn, spawnSkinned, tint } from './assets.js';
 import { sfx } from './audio.js';
 import { Polar, nearIce, polarAt } from './polar.js';
+import { ReefFish } from './reeffish.js';
 import { CURRENT_MATERIALS, NOISE_GLSL, SHADER_TIME, WHALE_BEND, addTailBeat, addWaterline, addWingFlap } from './surface.js';
 import {
   ABYSS_Y, CAMERA_Z, SHADOW_FAR, SHADOW_NEAR, SHADOW_SPAN, SHELF_Y, SURFACE_Y, TAN_HALF_FOV, WATER_GRADIENT_GLSL,
@@ -164,6 +165,17 @@ function makeMound(cell) {
     polar: polarAt(x).shelf !== null,
     murk: murkAt(x),
   };
+}
+
+// The coral reefs and kelp forests between x0 and x1, for the reef fish to live around.
+function reefsBetween(x0, x1) {
+  const found = [];
+  for (let c = Math.floor(x0 / MOUND_CELL); c <= Math.floor(x1 / MOUND_CELL); c++) {
+    const m = moundOf(c);
+    if (m.reef) found.push({ id: c, x: m.x, z: MOUND_Z, height: m.height, kind: 'reef' });
+    else if (!m.polar && m.murk > 0.5 && floorY(m.x) > SHELF_Y - 3) found.push({ id: c, x: m.x, z: MOUND_Z, kind: 'kelp' });
+  }
+  return found;
 }
 
 function moundHeight(x, z) {
@@ -1933,6 +1945,7 @@ export class World {
     this.dust = makeDust();
     scene.add(this.dust);
     this.polar = new Polar(scene);
+    this.reefFish = new ReefFish(scene, reefsBetween, (x, z) => seabedAt(x, z));
 
     this.props = [];
     for (const layer of LAYERS) this.populate(layer);
@@ -2285,6 +2298,7 @@ export class World {
     });
     this.spotRange = hull?.spotRange ?? 0;
     this.polar.update(dt, this.time, cx, cy, sub, camera, hull, this.effects);
+    this.reefFish.update(dt, this.time, cx, sub);
     if (this.updateGulls(dt, cx, cy, hull, camera.position.z) > 0) {
       sfx.gull();
       unlock('gulls');
