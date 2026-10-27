@@ -5,7 +5,7 @@ import { sfx } from './audio.js';
 import { spawn, spawnSkinned } from './assets.js';
 import { SHELF_Y, SURFACE_Y, darkness } from './water.js';
 import { floorY } from './world.js';
-import { BearMind, PenguinMind, rigBear, rigPenguin, steerSwimmer, swimStroke, swimmerBack } from './critters.js';
+import { BearMind, LAY_FLAT, PenguinMind, rigBear, rigPenguin, steerSwimmer, swimStroke, swimmerBack } from './critters.js';
 import { fbm, iceBlock, iceMaterial, jaggedOutline, polygonReach, sliceAlong } from './ice.js';
 
 // Shelves are numbered outward from the one the dive starts on. Going right from the start, the first wide shelf
@@ -915,6 +915,7 @@ class Floe {
       return p;
     });
     this.local = new THREE.Vector3();
+    this.pose = new THREE.Quaternion();
     this.place();
   }
 
@@ -1029,17 +1030,49 @@ class Floe {
       // Flippers flung out and flailing.
       p.rig.uDrop.value = -0.2 + Math.sin(t * 22) * 0.3;
       if (obj.position.y < SURFACE_Y - 0.3) {
-        p.state = 'swim';
+        p.state = 'plunge';
         p.swimTime = 0;
         const dir = Math.sign(p.vel.x || 1);
-        // Each goes its own way at its own pace, flippers out of step with the rest.
-        Object.assign(p, { yaw: dir > 0 ? 0 : Math.PI, pitch: -0.3 - Math.random() * 0.5, roll: 0,
-          speed: 1 + Math.random() * 2, stroke: Math.random() * 6.3, cruise: 4 + Math.random() * 3, retarget: 0 });
-        effects?.splash({ x: obj.position.x, y: SURFACE_Y, z: obj.position.z }, 0.7);
+        // Each comes to its senses after its own moment, then rights itself and goes its own way at its own pace,
+        // flippers out of step with the rest.
+        Object.assign(p, { yaw: dir > 0 ? 0 : Math.PI, pitch: -0.2 - Math.random() * 0.4, roll: 0, speed: 0.3,
+          stroke: Math.random() * 6.3, cruise: 4 + Math.random() * 3, retarget: 0,
+          dazed: 0.25 + Math.random() * 1.1, righting: 0, rightRate: 1.2 + Math.random() * 1.6 });
+        const at = { x: obj.position.x, y: SURFACE_Y, z: obj.position.z };
+        effects?.splash(at, 0.9 + Math.min(1, -p.vel.y * 0.08));
+        for (let i = 0; i < 10; i++) {
+          effects?.bubble({ x: at.x, y: at.y - 0.4, z: at.z }, { spread: 0.35, size: [0.05, 0.16],
+            vel: { x: p.vel.x * 0.2, y: -1.5 - Math.random() }, life: [0.6, 1.4] });
+        }
         sfx.splash();
         this.knocked = (this.knocked ?? 0) + 1;
         if (this.knocked >= 3) unlock('penguin_bowl');
       }
+      return;
+    }
+    if (p.state === 'plunge') {
+      // Carried down by the plunge, still tumbling, until the water slows it and it gathers itself.
+      p.swimTime += dt;
+      p.vel.multiplyScalar(Math.exp(-dt * 2.8));
+      p.vel.y += 1.2 * dt;
+      obj.position.addScaledVector(p.vel, dt);
+      p.spinVel.multiplyScalar(Math.exp(-dt * 2.5));
+      if (Math.random() < dt * 6) {
+        effects?.bubble(obj.position, { spread: 0.15, size: [0.04, 0.1], vel: { x: 0, y: 0.6 }, life: [0.5, 1.1] });
+      }
+      if (p.swimTime < p.dazed) {
+        obj.rotation.x += p.spinVel.x * dt;
+        obj.rotation.y += p.spinVel.y * dt;
+        obj.rotation.z += p.spinVel.z * dt;
+        p.rig.uDrop.value = -0.2 + Math.sin(t * 9 + p.stroke) * 0.25;
+        return;
+      }
+      // Rolling round to swim belly down, slowly at first and faster as it finds its way, flippers starting to beat.
+      p.righting = Math.min(1, p.righting + dt * p.rightRate);
+      swimPose(p, this.pose);
+      obj.quaternion.slerp(this.pose, 1 - Math.exp(-dt * (1.5 + p.righting * 6)));
+      swimStroke(p.rig, p, dt, p.righting * 0.4);
+      if (p.righting >= 1 && obj.quaternion.angleTo(this.pose) < 0.08) p.state = 'swim';
       return;
     }
     if (p.state === 'swim') {
@@ -1062,12 +1095,20 @@ class Floe {
   }
 }
 
+// A swimmer's pose for its heading and pitch, level and belly down.
+const qPose = new THREE.Quaternion();
+function swimPose(s, out) {
+  out.setFromAxisAngle(new THREE.Vector3(0, 1, 0), s.yaw);
+  qPose.setFromAxisAngle(new THREE.Vector3(0, 0, 1), s.pitch);
+  return out.multiply(qPose).multiply(LAY_FLAT);
+}
+
 // A little jet of bubbles thrown back off a swimming penguin's tail as its flippers sweep down.
 function jet(effects, pos, back) {
   if (!effects) return;
   const tail = { x: pos.x + back.x * 0.65, y: pos.y + back.y * 0.65, z: pos.z };
-  effects.bubbleStreak(tail, { x: -back.x, y: -back.y }, 1.1);
-  for (let i = 0; i < 3; i++) {
+  effects.bubbleStreak(tail, { x: -back.x, y: -back.y }, 1.3);
+  for (let i = 0; i < 5; i++) {
     effects.bubble(tail, { spread: 0.08, size: [0.05, 0.12], vel: { x: back.x * 2.5, y: back.y * 2.5 }, life: [0.5, 1] });
   }
 }
