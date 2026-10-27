@@ -178,7 +178,7 @@ window.addEventListener('resize', resize);
 // then the extras (bloom and full-rate, full-size shadows), then the resolution keeps falling.
 const LOW_PIXEL_RATIO = Math.min(1, MAX_PIXEL_RATIO);
 let lite = false;
-const fpsWindow = { time: 0, frames: 0, good: 0, bad: 0, locked: false, need: 2, sinceRaise: Infinity };
+const fpsWindow = { time: 0, frames: 0, good: 0, bad: 0, locked: false, need: 2, sinceRaise: Infinity, settle: 0 };
 
 function setPixelRatio(r) {
   pixelRatio = Math.round(r * 100) / 100;
@@ -221,6 +221,11 @@ function adaptQuality(dt) {
   const fps = fpsWindow.frames / fpsWindow.time;
   fpsWindow.time = 0;
   fpsWindow.frames = 0;
+  // The second after a change can hold a shader compile, which says nothing about the new setting's speed.
+  if (fpsWindow.settle > 0) {
+    fpsWindow.settle--;
+    return;
+  }
   fpsWindow.sinceRaise++;
   fpsWindow.bad = fps < 48 ? fpsWindow.bad + 1 : 0;
   fpsWindow.good = fps > 56 ? fpsWindow.good + 1 : 0;
@@ -229,8 +234,12 @@ function adaptQuality(dt) {
     lowerQuality();
     if (fps < 12) lowerQuality();
     fpsWindow.bad = 0;
+    fpsWindow.settle = 1;
   } else if (fpsWindow.good >= fpsWindow.need) {
-    if (raiseQuality()) fpsWindow.sinceRaise = 0;
+    if (raiseQuality()) {
+      fpsWindow.sinceRaise = 0;
+      fpsWindow.settle = 1;
+    }
     fpsWindow.good = 0;
   }
 }
