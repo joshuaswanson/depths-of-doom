@@ -57,6 +57,12 @@ float dFbm( vec3 p ) {
   }
   return v;
 }
+// A thin line where a noise value crosses its middle, \`width\` wide in noise units. Where the line would be thinner
+// than a pixel it widens to one and dims to match, so it keeps its average look without sparkling as it moves.
+float dLine( float n, float width ) {
+  float w = max( fwidth( n ), width );
+  return ( 1.0 - smoothstep( 0.0, w, abs( n - 0.5 ) ) ) * width / w;
+}
 vec3 dPerturb( vec3 surfPos, vec3 surfNorm, vec2 dHdxy, float faceDir ) {
   vec3 sx = normalize( dFdx( surfPos ) );
   vec3 sy = normalize( dFdy( surfPos ) );
@@ -83,20 +89,20 @@ function detailShader(p, kind) {
     decl.push(`float dScratchMask = smoothstep( 0.5, 0.68, dNoise( dp * 0.7 + 11.0 ) );
       vec3 dAlong = dp * vec3( 1.4, 16.0, 16.0 );
       vec3 dAcross = vec3( dp.x + dp.y, dp.y - dp.x, dp.z * 1.4 ) * vec3( 1.0, 11.3, 11.3 ) + 31.0;
-      float dLineA = 1.0 - smoothstep( 0.0, 0.025, abs( dNoise( dAlong ) - 0.5 ) );
-      float dLineB = 1.0 - smoothstep( 0.0, 0.025, abs( dNoise( dAcross ) - 0.5 ) );
+      float dLineA = dLine( dNoise( dAlong ), 0.025 );
+      float dLineB = dLine( dNoise( dAcross ), 0.025 );
       float dCutA = smoothstep( 0.6, 0.72, dNoise( dp * vec3( 3.5, 8.0, 8.0 ) + 3.0 ) );
       float dCutB = smoothstep( 0.6, 0.72, dNoise( dp * vec3( 3.5, 8.0, 8.0 ) + 17.0 ) );
       float dScratch = max( dLineA * dCutA, dLineB * dCutB * 0.7 ) * dScratchMask;`);
   } else if (has.scratch) {
     decl.push(`float dScratchMask = smoothstep( 0.5, 0.68, dNoise( dp * 0.7 + 11.0 ) );
-      float dScratch = ( 1.0 - smoothstep( 0.0, 0.035, abs( dNoise( dp * vec3( 9.0, 1.3, 9.0 ) ) - 0.5 ) ) ) * dScratchMask;`);
+      float dScratch = dLine( dNoise( dp * vec3( 9.0, 1.3, 9.0 ) ), 0.035 ) * dScratchMask;`);
   } else decl.push('float dScratch = 0.0;');
-  decl.push(has.crack ? 'float dCrack = 1.0 - smoothstep( 0.0, 0.035, abs( dFbm( dp * 1.3 + 7.0 ) - 0.5 ) );' : 'float dCrack = 0.0;');
+  decl.push(has.crack ? 'float dCrack = dLine( dFbm( dp * 1.3 + 7.0 ), 0.035 );' : 'float dCrack = 0.0;');
   decl.push(has.rust ? `float dRust = smoothstep( 0.55, 0.75, dNoise( dp * 0.9 + 21.0 ) ) * ${f(p.rust)};` : 'float dRust = 0.0;');
   decl.push(kind === 'wood' ? 'float dGrain = 0.5 + 0.5 * sin( dp.x * 26.0 + dNoise( dp * vec3( 0.5, 3.0, 3.0 ) ) * 9.0 );' : 'float dGrain = 0.0;');
   decl.push(kind === 'weed' ? 'float dVein = 1.0 - smoothstep( 0.0, 0.12, abs( fract( dp.y * 1.5 + dMottle ) - 0.5 ) );' : 'float dVein = 0.0;');
-  decl.push(kind === 'coral' ? 'float dPore = smoothstep( 0.62, 0.72, dNoise( dp * 1.8 ) );' : 'float dPore = 0.0;');
+  decl.push(kind === 'coral' ? 'float dPoreN = dNoise( dp * 1.8 ); float dPoreW = max( fwidth( dPoreN ), 0.05 ); float dPore = smoothstep( 0.67 - dPoreW, 0.67 + dPoreW, dPoreN );' : 'float dPore = 0.0;');
 
   const color = [`diffuseColor.rgb *= 1.0 + ( dMottle - 0.5 ) * 2.0 * ${f(p.mottle)};`];
   if (has.grime) {

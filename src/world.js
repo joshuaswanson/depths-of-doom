@@ -539,7 +539,14 @@ function makeSeabedMaterial(uniforms) {
       .replace('#include <color_fragment>', /* glsl */ `#include <color_fragment>
         vec3 sp = vec3( vSeaWorld.x, vSeaWorld.y * 0.5, vSeaWorld.z );
         float sRipple = 0.5 + 0.5 * sin( sp.x * 2.6 + sp.z * 0.8 + dNoise( sp * 0.6 ) * 4.0 );
-        float sPebble = smoothstep( 0.68, 0.74, dNoise( sp * 3.5 ) );
+        // Detail finer than about a pixel only shimmers as the view moves, so it fades to its average there: pebble
+        // edges soften to a pixel's width, pebbles too small to see blend into an even tone, and the finest bumps go.
+        float sTexel = length( fwidth( sp ) );
+        float sPebbleNoise = dNoise( sp * 3.5 );
+        float sPebbleEdge = max( fwidth( sPebbleNoise ), 0.03 );
+        float sPebbleFade = smoothstep( 0.12, 0.3, sTexel );
+        float sPebble = mix( smoothstep( 0.71 - sPebbleEdge, 0.71 + sPebbleEdge, sPebbleNoise ), 0.08, sPebbleFade );
+        float sFine = 1.0 - smoothstep( 0.05, 0.12, sTexel );
         float sPatch = dNoise( sp * 0.15 );
         float sShallow = smoothstep( -30.0, -12.0, vSeaWorld.y );
         float sGrassMask = sShallow * ( 1.0 - vReef );
@@ -553,7 +560,8 @@ function makeSeabedMaterial(uniforms) {
         reflectedLight.directDiffuse *= mix( 0.5, 1.0, sunShadow );
         reflectedLight.indirectDiffuse *= mix( 0.65, 1.0, sunShadow );`)
       .replace('#include <normal_fragment_maps>', /* glsl */ `#include <normal_fragment_maps>
-        float sHeight = sRipple * 0.4 * ( 1.0 - sSteep ) + sPebble * 0.8 + dNoise( sp * 7.0 ) * 0.25 + sPatch * sSteep * 1.2;
+        float sHeight = sRipple * 0.4 * ( 1.0 - sSteep ) + sPebble * 0.8 * ( 1.0 - sPebbleFade )
+          + dNoise( sp * 7.0 ) * 0.25 * sFine + sPatch * sSteep * 1.2;
         normal = dPerturb( - vViewPosition, normal, vec2( dFdx( sHeight ), dFdy( sHeight ) ) * 0.25, faceDirection );`)
       .replace('#include <emissivemap_fragment>', /* glsl */ `#include <emissivemap_fragment>
         // In shadow the floor loses its caustics and much of its light, all of which is sunlight.
