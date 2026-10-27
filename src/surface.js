@@ -32,20 +32,59 @@ const PROFILES = {
   weed: { scale: 4.0, mottle: 0.22, scratch: 0.0, grime: 0.2, rust: 0.0, bump: 0.6, crack: 0.0, rough: 0.0 },
 };
 
-export const NOISE_GLSL = /* glsl */ `
-float dHash( vec3 p ) {
-  p = fract( p * 0.3183099 + 0.1 );
-  p *= 17.0;
-  return fract( p.x * p.y * p.z * ( p.x + p.y + p.z ) );
+// Value noise reads its lattice from a tiling table: each texel holds the hash at its corner and at the three corners
+// beside it in x and y, so one lookup costs two texture reads where hashing the eight corners took dozens of operations.
+const LATTICE = 64;
+
+function latticeHash(x, y, z) {
+  const fx = (((x * 0.3183099 + 0.1) % 1) + 1) % 1 * 17;
+  const fy = (((y * 0.3183099 + 0.1) % 1) + 1) % 1 * 17;
+  const fz = (((z * 0.3183099 + 0.1) % 1) + 1) % 1 * 17;
+  const v = fx * fy * fz * (fx + fy + fz);
+  return v - Math.floor(v);
 }
+
+function makeLattice() {
+  const n = LATTICE;
+  const data = new Uint8Array(n * n * n * 4);
+  const h = (x, y, z) => Math.round(latticeHash(x % n, y % n, z % n) * 255);
+  for (let z = 0; z < n; z++) {
+    for (let y = 0; y < n; y++) {
+      for (let x = 0; x < n; x++) {
+        const o = ((z * n + y) * n + x) * 4;
+        data[o] = h(x, y, z);
+        data[o + 1] = h(x + 1, y, z);
+        data[o + 2] = h(x, y + 1, z);
+        data[o + 3] = h(x + 1, y + 1, z);
+      }
+    }
+  }
+  const tex = new THREE.Data3DTexture(data, n, n, n);
+  tex.minFilter = tex.magFilter = THREE.NearestFilter;
+  tex.unpackAlignment = 1;
+  tex.needsUpdate = true;
+  return tex;
+}
+
+export const NOISE_LATTICE = { value: makeLattice() };
+
+// Every shader that includes NOISE_GLSL binds the table with this.
+export function bindNoise(shader) {
+  shader.uniforms.uNoiseLattice = NOISE_LATTICE;
+}
+
+export const NOISE_GLSL = /* glsl */ `
+uniform highp sampler3D uNoiseLattice;
 float dNoise( vec3 x ) {
   vec3 i = floor( x );
   vec3 f = fract( x );
   f = f * f * ( 3.0 - 2.0 * f );
-  return mix( mix( mix( dHash( i ), dHash( i + vec3( 1, 0, 0 ) ), f.x ),
-                   mix( dHash( i + vec3( 0, 1, 0 ) ), dHash( i + vec3( 1, 1, 0 ) ), f.x ), f.y ),
-              mix( mix( dHash( i + vec3( 0, 0, 1 ) ), dHash( i + vec3( 1, 0, 1 ) ), f.x ),
-                   mix( dHash( i + vec3( 0, 1, 1 ) ), dHash( i + vec3( 1, 1, 1 ) ), f.x ), f.y ), f.z );
+  ivec3 c = ivec3( i ) & ${LATTICE - 1};
+  vec4 lo = texelFetch( uNoiseLattice, c, 0 );
+  vec4 hi = texelFetch( uNoiseLattice, ivec3( c.xy, ( c.z + 1 ) & ${LATTICE - 1} ), 0 );
+  vec4 m = mix( lo, hi, f.z );
+  vec2 e = mix( m.xz, m.yw, f.x );
+  return mix( e.x, e.y, f.y );
 }
 float dFbm( vec3 p ) {
   float v = 0.0;
@@ -131,6 +170,7 @@ function patch(material, profileName) {
   const code = detailShader(p, profileName);
   material.customProgramCacheKey = () => `detail-${profileName}`;
   material.onBeforeCompile = (shader) => {
+    bindNoise(shader);
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vDetailPos;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvDetailPos = transformed;');

@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { animationsOf, findNode, plainMaterials, spawn, spawnSkinned, tint } from './assets.js';
 import { sfx } from './audio.js';
-import { CURRENT_MATERIALS, NOISE_GLSL, SHADER_TIME, WHALE_BEND, addTailBeat, addWaterline, addWingFlap } from './surface.js';
+import { CURRENT_MATERIALS, NOISE_GLSL, SHADER_TIME, WHALE_BEND, addTailBeat, addWaterline, addWingFlap, bindNoise } from './surface.js';
 import {
   ABYSS_Y, CAMERA_Z, SHADOW_FAR, SHADOW_NEAR, SHADOW_SPAN, SHELF_Y, SURFACE_Y, TAN_HALF_FOV, WATER_GRADIENT_GLSL,
   darkness, depthShift,
@@ -501,6 +501,7 @@ function makeSeabedMaterial(uniforms) {
   const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0, color: SEABED_TINT });
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uTime = uniforms.uTime;
+    bindNoise(shader);
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vSeaWorld;\nattribute float aReef;\nvarying float vReef;')
       .replace('#include <worldpos_vertex>',
@@ -1496,6 +1497,7 @@ function jellyMaterial(base, color, uniforms, wave, ribbon = false) {
   m.side = THREE.DoubleSide;
   m.onBeforeCompile = (shader) => {
     shader.uniforms.uTime = uniforms.uTime;
+    bindNoise(shader);
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vJellyPos;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvJellyPos = position;');
