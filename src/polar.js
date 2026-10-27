@@ -2,10 +2,10 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { unlock } from './achievements.js';
 import { sfx } from './audio.js';
-import { spawn } from './assets.js';
+import { spawn, spawnSkinned } from './assets.js';
 import { SHELF_Y, SURFACE_Y, darkness } from './water.js';
 import { floorY } from './world.js';
-import { BearMind, PenguinMind, rigBear, rigPenguin, swimStroke } from './critters.js';
+import { BearMind, PenguinMind, rigBear, rigPenguin, steerSwimmer, swimStroke, swimmerBack } from './critters.js';
 import { fbm, iceBlock, iceMaterial, jaggedOutline, polygonReach, undersideAlong } from './ice.js';
 
 // Shelves are numbered outward from the one the dive starts on. Going right from the start, the first wide shelf
@@ -116,15 +116,35 @@ function seeded(seed) {
   };
 }
 
-// An iceberg: either tabular, a slab with sheer cliffs and a nearly flat snowy top, or weathered into a dome. Most
-// of its bulk hides under the water in a broad, rounded keel.
+// An iceberg, in one of the shapes calving leaves them: a tabular slab with sheer walls and a flat top, a blocky berg
+// broken off along a few fracture faces, or a wedge whose top slopes up to a sharp ridge or peak. Under the water each
+// has a broad keel, itself sheared into flat faces in places. Most of its bulk hides below.
 function iceberg(r, width, depth, top, draft, segments) {
-  const tabular = r() < 0.55;
-  const dome = tabular ? 0.06 + r() * 0.08 : 0.45 + r() * 0.6;
+  const kind = r();
+  const tabular = kind < 0.45;
+  const wedge = kind > 0.75;
+  const dome = tabular ? 0.04 + r() * 0.06 : wedge ? 0.5 + r() * 0.5 : 0.15 + r() * 0.25;
+  const cuts = [];
+  const walls = tabular ? 3 + Math.floor(r() * 3) : 2 + Math.floor(r() * 3);
+  for (let i = 0; i < walls; i++) {
+    const a = r() * Math.PI * 2;
+    cuts.push({ dir: [Math.cos(a), (r() - 0.5) * 0.25, Math.sin(a)], keep: 0.72 + r() * 0.2 });
+  }
+  for (let i = 0; i < 2 + Math.floor(r() * 3); i++) {
+    const a = r() * Math.PI * 2;
+    cuts.push({ dir: [Math.cos(a), -0.35 - r() * 0.5, Math.sin(a)], keep: 0.7 + r() * 0.2 });
+  }
+  if (wedge) {
+    const a = r() < 0.5 ? 0 : Math.PI;
+    cuts.push({ dir: [Math.cos(a) * 0.7, 1, (r() - 0.5) * 0.6], keep: 0.55 + r() * 0.2 });
+  } else if (!tabular && r() < 0.6) {
+    const a = r() * Math.PI * 2;
+    cuts.push({ dir: [Math.cos(a), 0.6 + r() * 0.6, Math.sin(a)], keep: 0.7 + r() * 0.15 });
+  }
   return iceBlock(r, {
-    reach: jaggedOutline(r, 5 + Math.floor(r() * 4), tabular ? 0.22 : 0.32),
-    width, depth, top: top / (1 + dome), draft, dome, bulge: 0.08 + r() * 0.22, blunt: 2.2 + r() * 1.6,
-    lean: (r() - 0.5) * 0.5, rough: 0.9 + r() * 0.5, segments,
+    reach: jaggedOutline(r, 5 + Math.floor(r() * 4), tabular ? 0.2 : 0.3),
+    width, depth, top: top / (1 + dome), draft, dome, bulge: 0.05 + r() * 0.15, blunt: 2.4 + r() * 2,
+    lean: (r() - 0.5) * 0.5, rough: 0.7 + r() * 0.5, cuts, segments,
   });
 }
 
@@ -201,19 +221,22 @@ function* layoutIce(s, ice) {
     // The igloo's floe sits just behind the lane, where a sub breaking through comes up beside it.
     field.home = { x: (field.start + field.end) / 2 + (r() - 0.5) * 6, z: -11, topAt: () => PACK_TOP };
     animals.push({ type: 'igloo', berg: field.home, dx: -2.2, dz: -0.5 });
-    animals.push({ type: 'bear', berg: field.home, dx: 1.5, dz: 2.2, range: 2.2 });
+    // The bear paces along the front of the floe, clear of the igloo's tunnel.
+    animals.push({ type: 'bear', berg: field.home, dx: 1.5, dz: 3.7 });
     for (const b of roomy) {
       if (r() > 0.5) continue;
-      animals.push({ type: 'bear', berg: b, dx: (r() - 0.5) * b.width * 0.2, dz: (r() - 0.5) * b.depth * 0.12,
-        range: b.width * 0.22 });
+      const dx = (r() - 0.5) * b.width * 0.2;
+      const dz = (r() - 0.5) * b.depth * 0.12;
+      if (b.walkable(dx, dz, ANIMAL_SIZE.bear * 0.6)) animals.push({ type: 'bear', berg: b, dx, dz });
     }
   } else {
     for (const b of roomy) {
       if (r() > 0.6) continue;
       const count = 3 + Math.floor(r() * 5);
       for (let i = 0; i < count; i++) {
-        animals.push({ type: 'penguin', berg: b, dx: (r() - 0.5) * b.width * 0.35, dz: (r() - 0.5) * b.depth * 0.25,
-          yaw: (r() - 0.5) * 1.6 + (r() < 0.5 ? 0 : Math.PI), phase: r() * 6.3, range: Math.min(2.5, b.width * 0.12) });
+        const spot = { type: 'penguin', berg: b, dx: (r() - 0.5) * b.width * 0.35, dz: (r() - 0.5) * b.depth * 0.25,
+          yaw: (r() - 0.5) * 1.6 + (r() < 0.5 ? 0 : Math.PI), phase: r() * 6.3, range: Math.min(2.5, b.width * 0.12) };
+        if (b.walkable(spot.dx, spot.dz, 0.4)) animals.push(spot);
       }
     }
   }
@@ -225,6 +248,8 @@ function* layoutIce(s, ice) {
     }));
     const box = f.geometry.boundingBox;
     f.half = Math.max(-box.min.x, box.max.x);
+    const x0 = -f.half - 1;
+    f.underside = { x0, samples: undersideAlong(f.geometry, 0, x0, UNDERSIDE_STEP, Math.ceil((f.half * 2 + 2) / UNDERSIDE_STEP) + 1) };
     // The floe drifts when rammed, but only as far as the bergs either side of it.
     const lane = bergs.filter((b) => b.lane);
     f.room = [Math.max(-Infinity, ...lane.filter((b) => b.right <= f.x).map((b) => b.right)) + 0.4,
@@ -295,6 +320,7 @@ export function iceCeiling(x) {
     }
     ceiling = Math.min(ceiling, a + (c - a) * (i - k));
   }
+  for (const floe of iceFor(p.shelf).built?.floes ?? []) ceiling = Math.min(ceiling, floe.underside(x));
   return ceiling;
 }
 
@@ -417,7 +443,7 @@ function footOf(type, obj) {
 
 function makeAnimal(a) {
   if (a.type === 'igloo') return makeIgloo();
-  const obj = spawn(a.type === 'bear' ? 'polar_bear' : 'penguin');
+  const obj = a.type === 'bear' ? spawnSkinned('polar_bear') : spawn('penguin');
   obj.scale.setScalar(ANIMAL_SIZE[a.type]);
   obj.userData.rig = a.type === 'bear' ? rigBear(obj) : rigPenguin(obj);
   obj.userData.foot = footOf(a.type, obj);
@@ -445,10 +471,10 @@ function* buildIce(ice, scene) {
     obj.userData = u;
     if (a.type === 'bear') {
       obj.rotation.order = 'YZX';
-      u.mind = new BearMind(u, a.range);
+      u.mind = new BearMind(u, ANIMAL_SIZE.bear);
     } else if (a.type === 'penguin') {
       obj.rotation.order = 'YXZ';
-      u.mind = new PenguinMind(u, a.range);
+      u.mind = new PenguinMind(u, a.range, (dx, dz) => a.berg.walkable(dx, dz, 0.35));
     }
     group.add(obj);
     placeAnimal(obj);
@@ -584,7 +610,7 @@ class PackIce {
       const reach = Math.max(...corners.map((c) => c[1]));
       const block = iceBlock(r, {
         reach: polygonReach(corners), width: 2, depth: 2, top: PACK_TOP * (0.8 + r() * 0.5),
-        draft: PACK_DRAFT * (0.8 + r() * 0.5), dome: 0.3, bulge: 0, blunt: 4, rough: 0.3, topRough: 0.45,
+        draft: PACK_DRAFT * (0.8 + r() * 0.5), dome: 0.12, bulge: 0, blunt: 9, rough: 0.3, topRough: 0.45,
         segments: Math.min(56, Math.round(14 + reach * 7)), capRows: s.home ? 6 : 2, cliffRows: 1, keelRows: 2,
       });
       const geo = block.geometry;
@@ -599,7 +625,10 @@ class PackIce {
       this.plates.push({ x: cx, z: cz, rad: reach, start, count: indices, broken: false,
         breakable: !s.home && Math.abs(cz) < reach + 1.1 });
       start += indices;
-      if (s.home && field.home) field.home.topAt = (dx, dz) => block.topAt(field.home.x + dx - cx, field.home.z + dz - cz);
+      if (s.home && field.home) {
+        field.home.topAt = (dx, dz) => block.topAt(field.home.x + dx - cx, field.home.z + dz - cz);
+        field.home.walkable = (dx, dz, margin) => block.walkable(field.home.x + dx - cx, field.home.z + dz - cz, margin);
+      }
     }
     const merged = mergeGeometries(parts);
     for (const g of parts) g.dispose();
@@ -733,11 +762,25 @@ class Floe {
       group.add(obj);
       const p = { ...spot, obj, rig: obj.userData.rig, foot: obj.userData.foot, state: 'stand', vel: new THREE.Vector3(),
         spinVel: new THREE.Vector3() };
-      p.mind = new PenguinMind(p, Math.min(1.2, spec.width * 0.12));
+      p.mind = new PenguinMind(p, Math.min(1.2, spec.width * 0.12), (dx, dz) => spec.walkable(dx, dz, 0.4));
       return p;
     });
     this.local = new THREE.Vector3();
     this.place();
+  }
+
+  // The bottom of the floe over x, tipped and lifted with it.
+  underside(x) {
+    const u = this.spec.underside;
+    const cos = Math.cos(this.tilt);
+    const lx = (x - this.x) / cos;
+    const i = (lx - u.x0) / UNDERSIDE_STEP;
+    const k = Math.floor(i);
+    if (k < 0 || k + 1 >= u.samples.length) return Infinity;
+    const a = u.samples[k];
+    const b = u.samples[k + 1];
+    if (a === Infinity || b === Infinity) return Infinity;
+    return SURFACE_Y + this.lift + lx * Math.sin(this.tilt) + (a + (b - a) * (i - k)) * cos;
   }
 
   place() {
@@ -748,19 +791,26 @@ class Floe {
 
   update(dt, t, hull, effects) {
     this.cooldown -= dt;
+    const before = this.approach;
+    this.approach = hull ? hull.vel.length() : 0;
     if (hull && this.cooldown <= 0) {
       const c = hull.center;
       const e = hull.extents;
       const half = this.spec.half;
       const offset = c.x - this.x;
-      if (Math.abs(offset) < half + e.hx * 0.8 && hull.top > SURFACE_Y - FLOE_DRAFT - 0.1 && c.y < SURFACE_Y + 1) {
+      // The floe stops the sub just short of it when driven into from the side, so look a little either way too.
+      const pos = hull.group.position;
+      const bottom = (x) => this.underside(x);
+      const touching = [-0.35, 0, 0.35].some((d) => hull.iceDepth(pos.x + d, pos.y, bottom) > -0.15);
+      if (touching && Math.abs(offset) < half + e.hx) {
         // Struck from below the floe bucks up; struck near an end it tips; driven into from the side it is shoved.
-        const speed = hull.vel.length();
+        // The floe stops the sub dead, so the blow is as hard as the sub was going the frame before.
+        const speed = Math.max(hull.vel.length(), before ?? 0);
         const hit = 1.2 + speed * 0.35;
         this.vy += hit * 0.9;
         this.spin += -Math.sign(offset || 1) * hit * 0.5 * Math.min(1, Math.abs(offset) / half + 0.3);
         this.vx += hull.vel.x * 0.4;
-        hull.vel.y = Math.min(hull.vel.y, -1.5);
+        hull.vel.y = Math.min(hull.vel.y, 0);
         hull.vel.x *= 0.6;
         this.cooldown = 0.45;
         effects?.splash({ x: this.x + Math.sign(offset) * half * 0.8, y: SURFACE_Y, z: 0.5 }, 1.2);
@@ -831,8 +881,9 @@ class Floe {
       if (obj.position.y < SURFACE_Y - 0.3) {
         p.state = 'swim';
         p.swimTime = 0;
-        p.dir = Math.sign(p.vel.x || 1);
-        p.depth = SURFACE_Y - 1.6 - Math.random() * 1.6;
+        const dir = Math.sign(p.vel.x || 1);
+        Object.assign(p, { yaw: dir > 0 ? 0 : Math.PI, pitch: -0.5, roll: 0, speed: 2 });
+        p.target = new THREE.Vector3(obj.position.x + dir * 40, SURFACE_Y - 4 - Math.random() * 4, SWIM_Z[0]);
         effects?.splash({ x: obj.position.x, y: SURFACE_Y, z: obj.position.z }, 0.7);
         sfx.splash();
         this.knocked = (this.knocked ?? 0) + 1;
@@ -841,16 +892,10 @@ class Floe {
       return;
     }
     if (p.state === 'swim') {
-      // Bobbing back up from the plunge, then off and away, belly down, beating hard.
+      // Off and away from the plunge, curving back out of the sub's lane into the water behind it.
       p.swimTime += dt;
-      const speed = Math.min(6, p.swimTime * 4);
-      obj.position.x += p.dir * speed * dt;
-      const climb = (p.depth - obj.position.y) * (1 - Math.exp(-dt * 2));
-      obj.position.y += climb;
-      const pitch = Math.atan2(climb / Math.max(dt, 1e-3), Math.max(speed, 0.5)) * 0.6;
-      obj.rotation.set(0, p.dir > 0 ? 0 : Math.PI, 0);
-      obj.rotateZ(-Math.PI / 2 + pitch);
-      if (swimStroke(p.rig, p, dt, speed / 6)) jet(effects, obj.position, p.dir, pitch);
+      steerSwimmer(obj, p, p.target, dt, 6);
+      if (swimStroke(p.rig, p, dt, p.speed / 6)) jet(effects, obj.position, swimmerBack(p));
       if (p.swimTime > 6) {
         p.state = 'gone';
         obj.visible = false;
@@ -860,9 +905,8 @@ class Floe {
 }
 
 // A little jet of bubbles thrown back off a swimming penguin's tail as its flippers sweep down.
-function jet(effects, pos, dir, pitch) {
+function jet(effects, pos, back) {
   if (!effects) return;
-  const back = { x: -dir * Math.cos(pitch), y: -Math.sin(pitch) };
   const tail = { x: pos.x + back.x * 0.65, y: pos.y + back.y * 0.65, z: pos.z };
   effects.bubbleStreak(tail, { x: -back.x, y: -back.y }, 1.1);
   for (let i = 0; i < 3; i++) {
@@ -879,19 +923,16 @@ function dropIce(ice, scene) {
 
 // Penguins diving and darting through the water under the southern ice.
 const SWIMMERS = 5;
+// They keep to the water behind the sub's lane.
+const SWIM_Z = [-22, -9];
 
 function makeSwimmers(scene) {
   return Array.from({ length: SWIMMERS }, () => {
     const holder = new THREE.Group();
     const body = makeAnimal({ type: 'penguin' });
-    // Lying along its line of travel: head forward, belly down.
-    body.rotation.z = -Math.PI / 2;
     holder.add(body);
     holder.visible = false;
-    // Roll about its own length first, then pitch, then face left or right.
-    holder.rotation.order = 'YZX';
-    holder.userData = { body, rig: body.userData.rig, vel: new THREE.Vector2(), target: null, phase: Math.random() * 6,
-      retarget: 0 };
+    holder.userData = { body, rig: body.userData.rig, target: null, retarget: 0, yaw: 0, pitch: 0, roll: 0, speed: 0 };
     scene.add(holder);
     return holder;
   });
@@ -1042,31 +1083,25 @@ export class Polar {
         u.target = null;
         continue;
       }
-      const ceiling = Math.min(SURFACE_Y - 1, iceCeiling(s.position.x) - 1);
       if (!s.visible) {
         s.visible = true;
-        s.position.set(cx + (Math.random() - 0.5) * 50, SURFACE_Y - 4 - Math.random() * 10, -3 - Math.random() * 10);
+        s.position.set(cx + (Math.random() - 0.5) * 50, SURFACE_Y - 4 - Math.random() * 10,
+          SWIM_Z[0] + Math.random() * (SWIM_Z[1] - SWIM_Z[0]));
+        u.yaw = Math.random() < 0.5 ? 0 : Math.PI;
       }
       u.retarget -= dt;
+      // Off to a new spot in the water behind the lane every few seconds, or sooner once it gets there.
       if (!u.target || u.retarget <= 0) {
-        // Dart off to a new spot, often swooping close past the sub.
-        const near = sub && Math.random() < 0.4;
-        u.target = new THREE.Vector2(near ? sub.x + (Math.random() - 0.5) * 8 : cx + (Math.random() - 0.5) * 50,
-          (near ? sub.y : SURFACE_Y - 3 - Math.random() * 16) + (Math.random() - 0.5) * 4);
-        u.retarget = 1.5 + Math.random() * 2.5;
+        u.target = new THREE.Vector3(cx + (Math.random() - 0.5) * 60, SURFACE_Y - 3 - Math.random() * 16,
+          SWIM_Z[0] + Math.random() * (SWIM_Z[1] - SWIM_Z[0]));
+        u.retarget = 4 + Math.random() * 4;
       }
-      const want = new THREE.Vector2(u.target.x - s.position.x, u.target.y - s.position.y);
-      if (want.lengthSq() > 0.01) want.setLength(6.5);
-      u.vel.lerp(want, 1 - Math.exp(-dt * 2.2));
-      s.position.x += u.vel.x * dt;
-      s.position.y = THREE.MathUtils.clamp(s.position.y + u.vel.y * dt, floorY(s.position.x) + 2, ceiling);
+      const effort = THREE.MathUtils.clamp(u.speed / 6.5, 0, 1);
+      if (steerSwimmer(s, u, u.target, dt, 6.5) < 3) u.retarget = 0;
+      s.position.y = THREE.MathUtils.clamp(s.position.y, floorY(s.position.x) + 2,
+        Math.min(SURFACE_Y - 1, iceCeiling(s.position.x) - 1));
       if (Math.abs(s.position.x - cx) > 60) s.position.x = cx - Math.sign(s.position.x - cx) * 55;
-      // Nose along its path, flippers beating so the body rolls a little with each stroke.
-      const heading = Math.atan2(u.vel.y, Math.abs(u.vel.x));
-      const effort = THREE.MathUtils.clamp(u.vel.length() / 6.5, 0, 1);
-      const beat = swimStroke(u.rig, u, dt, effort);
-      s.rotation.set(Math.sin(u.stroke) * 0.12, u.vel.x >= 0 ? 0 : Math.PI, heading);
-      if (beat && effort > 0.3) jet(effects, s.position, Math.sign(u.vel.x) || 1, heading);
+      if (swimStroke(u.rig, u, dt, effort) && effort > 0.3) jet(effects, s.position, swimmerBack(u));
       if (sub && s.position.distanceTo(new THREE.Vector3(sub.x, sub.y, s.position.z)) < 5) unlock('penguin_swim');
     }
   }

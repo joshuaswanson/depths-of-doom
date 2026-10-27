@@ -103,7 +103,8 @@ export function jaggedOutline(r, corners, irregular) {
 // Returns the geometry and `topAt(x, z)`, the height of the snow surface over a point well inside the top.
 export function iceBlock(r, o) {
   const {
-    reach, width, depth, top, draft, dome = 0.1, bulge = 0.15, blunt = 2, rough = 1, topRough = 1, lean = 0, segments = 96,
+    reach, width, depth, top, draft, dome = 0.1, bulge = 0.15, blunt = 2, rough = 1, topRough = 1, lean = 0, cuts = [],
+    segments = 96,
     capRows = 10, cliffRows = 6, keelRows = 16,
   } = o;
   const hx = width / 2;
@@ -172,6 +173,25 @@ export function iceBlock(r, o) {
     }
   }
   pushVertex(lean * hx, -draft, 0, -1);
+  // Calving leaves flat fracture faces: each cut shears off everything beyond a plane, `keep` of the way out from the
+  // middle to the farthest point in that direction.
+  const planes = cuts.map(({ dir, keep }) => {
+    const n = new THREE.Vector3(...dir).normalize();
+    let reachOut = 0;
+    for (let i = 0; i < position.length; i += 3) {
+      reachOut = Math.max(reachOut, n.x * position[i] + n.y * position[i + 1] + n.z * position[i + 2]);
+    }
+    return { n, c: reachOut * keep };
+  });
+  for (const { n, c } of planes) {
+    for (let i = 0; i < position.length; i += 3) {
+      const d = n.x * position[i] + n.y * position[i + 1] + n.z * position[i + 2] - c;
+      if (d <= 0) continue;
+      position[i] -= n.x * d;
+      position[i + 1] -= n.y * d;
+      position[i + 2] -= n.z * d;
+    }
+  }
   const index = [];
   const ring = (k, i) => 1 + k * segments + (i % segments);
   for (let i = 0; i < segments; i++) index.push(0, ring(0, i + 1), ring(0, i));
@@ -198,9 +218,27 @@ export function iceBlock(r, o) {
     const out = THREE.MathUtils.lerp(outline[i % segments], outline[(i + 1) % segments], f - i);
     const p = Math.min(1, Math.hypot(x / hx, z / hz) / out / (1 - shoulderScale));
     const y = capTop + domeHeight * (1 - p * p);
-    return y + displace(x, y, z, 1);
+    let surface = y + displace(x, y, z, 1);
+    for (const { n, c } of planes) {
+      if (n.y > 0.2) surface = Math.min(surface, (c - n.x * x - n.z * z) / n.y);
+    }
+    return surface;
   };
-  return { geometry: geo, topAt };
+  // Whether a point on the top lies at least `margin` in from every edge on fairly level snow, where something can
+  // stand.
+  const walkable = (x, z, margin) => {
+    const a = Math.atan2(z / hz, x / hx);
+    const f = (((a / (Math.PI * 2)) % 1) + 1) % 1 * segments;
+    const i = Math.floor(f);
+    const out = THREE.MathUtils.lerp(outline[i % segments], outline[(i + 1) % segments], f - i);
+    const r = Math.hypot(x / hx, z / hz) * size;
+    if (r > out * (1 - shoulderScale) * size - margin) return false;
+    const y = topAt(x, z);
+    // Nothing stands on a steep slope.
+    if (Math.hypot(topAt(x + 0.5, z) - topAt(x - 0.5, z), topAt(x, z + 0.5) - topAt(x, z - 0.5)) > 0.3) return false;
+    return planes.every(({ n, c }) => n.y > 0.5 || n.x * x + n.y * y + n.z * z <= c - margin);
+  };
+  return { geometry: geo, topAt, walkable };
 }
 
 // The lowest point of the geometry's surface above each step along x in the plane z = zPlane, by slicing every
@@ -245,19 +283,25 @@ function iceTexture(name) {
 }
 let textures = null;
 
-// Ice that looks like ice: packed snow on top, pale grooved cliffs banded with layers and blue veins, and below the
-// waterline clear glacial blue worn into melt scallops, deepening with depth and glowing faintly where light passes
-// through. Everything is worked out from the surface's own position and facing, so it needs no UVs and stays put on
-// ice that moves. `bob` makes each piece of a merged field of pack ice rock on the swell on its own; `snow` makes the
-// whole surface packed snow.
+// Ice that looks like ice, from photographed snow (Poly Haven, CC0): soft packed snow on whatever faces up,
+// wind-streaked snow on the walls, pale blue in the shaded hollows. Below the waterline it is smooth, wet,
+// translucent ice, pale aqua near the surface and deepening to teal, glowing faintly where light passes through.
+// Everything is worked out from the surface's own position and facing, so it needs no UVs and stays put on ice that
+// moves. `bob` makes each piece of a merged field of pack ice rock on the swell on its own; `snow` makes the whole
+// surface packed snow.
 export function iceMaterial({ name = 'ice', bob = false, snow = false } = {}) {
-  textures ??= { normals: iceTexture('ice_normals.webp'), detail: iceTexture('ice_detail.webp') };
-  const mat = new THREE.MeshStandardMaterial({ name, roughness: 0.4, metalness: 0, envMapIntensity: 1.1 });
+  textures ??= {
+    softAlbedo: iceTexture('snow_soft_albedo.webp'), softNormal: iceTexture('snow_soft_normal.webp'),
+    windAlbedo: iceTexture('snow_wind_albedo.webp'), windNormal: iceTexture('snow_wind_normal.webp'),
+  };
+  const mat = new THREE.MeshStandardMaterial({ name, roughness: 0.6, metalness: 0, envMapIntensity: 1 });
   const time = { value: 0 };
   mat.userData.time = time;
   mat.onBeforeCompile = (shader) => {
-    shader.uniforms.uIceNormals = { value: textures.normals };
-    shader.uniforms.uIceDetail = { value: textures.detail };
+    shader.uniforms.uSoftAlbedo = { value: textures.softAlbedo };
+    shader.uniforms.uSoftNormal = { value: textures.softNormal };
+    shader.uniforms.uWindAlbedo = { value: textures.windAlbedo };
+    shader.uniforms.uWindNormal = { value: textures.windNormal };
     shader.uniforms.uIceTime = time;
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', /* glsl */ `#include <common>
@@ -284,8 +328,10 @@ export function iceMaterial({ name = 'ice', bob = false, snow = false } = {}) {
         vAxisZ = normalize( normalMatrix * ( iceBasis * vec3( 0.0, 0.0, 1.0 ) ) );`);
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', /* glsl */ `#include <common>
-        uniform sampler2D uIceNormals;
-        uniform sampler2D uIceDetail;
+        uniform sampler2D uSoftAlbedo;
+        uniform sampler2D uSoftNormal;
+        uniform sampler2D uWindAlbedo;
+        uniform sampler2D uWindNormal;
         varying vec3 vIcePos;
         varying vec3 vIceNormal;
         varying vec3 vAxisX;
@@ -295,49 +341,48 @@ export function iceMaterial({ name = 'ice', bob = false, snow = false } = {}) {
       .replace('#include <normal_fragment_maps>', /* glsl */ `#include <normal_fragment_maps>
         {
           vec3 n0 = normalize( vIceNormal );
-          vec3 w = pow( abs( n0 ), vec3( 4.0 ) );
+          vec3 w = pow( abs( n0 ), vec3( 6.0 ) );
           w /= w.x + w.y + w.z;
           float h = vIcePos.y;
-          float above = smoothstep( -0.12, 0.2, h );
-          // Melt scallops are a hand's width to a stride across; snow and cliff grain is finer.
-          vec3 p = vIcePos * 0.16;
-          vec4 nx = texture2D( uIceNormals, p.zy );
-          vec4 ny = texture2D( uIceNormals, p.xz );
-          vec4 nz = texture2D( uIceNormals, p.xy );
-          vec3 q = vIcePos * 0.05;
-          vec3 detail = texture2D( uIceDetail, q.zy ).rgb * w.x + texture2D( uIceDetail, q.xz ).rgb * w.y
-            + texture2D( uIceDetail, q.xy ).rgb * w.z;
-          float snowy = ${snow ? '1.0' : 'smoothstep( 0.45, 0.8, n0.y ) * above'};
-          float scallopAmount = mix( 1.0, mix( 0.3, 0.12, snowy ), above );
-          float grainAmount = mix( 0.35, mix( 0.55, 0.7, snowy ), above );
-          vec2 dx = ( nx.rg * 2.0 - 1.0 ) * scallopAmount + ( nx.ba * 2.0 - 1.0 ) * grainAmount;
-          vec2 dy = ( ny.rg * 2.0 - 1.0 ) * scallopAmount + ( ny.ba * 2.0 - 1.0 ) * grainAmount;
-          vec2 dz = ( nz.rg * 2.0 - 1.0 ) * scallopAmount + ( nz.ba * 2.0 - 1.0 ) * grainAmount;
-          vec3 n = normalize( n0 + vec3( 0.0, dx.y, dx.x ) * w.x + vec3( dy.x, 0.0, dy.y ) * w.y
-            + vec3( dz.x, dz.y, 0.0 ) * w.z );
+          float above = smoothstep( -0.15, 0.15, h );
+          // Walls take the wind-streaked snow, running up and down them; tops take the soft snow.
+          vec2 uvX = vec2( vIcePos.z, vIcePos.y * 0.6 ) * 0.22;
+          vec2 uvZ = vec2( vIcePos.x, vIcePos.y * 0.6 ) * 0.22;
+          vec2 uvY = vIcePos.xz * 0.3;
+          float albedo = texture2D( uWindAlbedo, uvX ).r * w.x + texture2D( uSoftAlbedo, uvY ).r * w.y
+            + texture2D( uWindAlbedo, uvZ ).r * w.z;
+          vec2 dx = texture2D( uWindNormal, uvX ).rg * 2.0 - 1.0;
+          vec2 dy = texture2D( uSoftNormal, uvY ).rg * 2.0 - 1.0;
+          vec2 dz = texture2D( uWindNormal, uvZ ).rg * 2.0 - 1.0;
+          // Underwater the ice is melted smooth into broad, shallow hollows.
+          vec3 big = vIcePos * 0.06;
+          vec2 bx = texture2D( uSoftNormal, big.zy ).rg * 2.0 - 1.0;
+          vec2 by = texture2D( uSoftNormal, big.xz ).rg * 2.0 - 1.0;
+          vec2 bz = texture2D( uSoftNormal, big.xy ).rg * 2.0 - 1.0;
+          vec3 fine = vec3( 0.0, dx.y, dx.x ) * w.x + vec3( dy.x, 0.0, dy.y ) * w.y + vec3( dz.x, dz.y, 0.0 ) * w.z;
+          vec3 broad = vec3( 0.0, bx.y, bx.x ) * w.x + vec3( by.x, 0.0, by.y ) * w.y + vec3( bz.x, bz.y, 0.0 ) * w.z;
+          vec3 n = normalize( n0 + fine * mix( 0.15, 1.0, above ) + broad * mix( 1.6, 0.3, above ) );
           normal = normalize( n.x * vAxisX + n.y * vAxisY + n.z * vAxisZ );
           #ifdef DOUBLE_SIDED
             normal *= faceDirection;
           #endif
 
-          float mottle = detail.b;
-          vec3 snow = vec3( 0.95, 0.975, 1.0 ) * ( 0.9 + 0.1 * mottle );
-          vec3 cliff = mix( vec3( 0.74, 0.87, 0.94 ), vec3( 0.92, 0.965, 0.99 ), mottle );
-          float strata = smoothstep( 0.82, 1.0, sin( h * 2.6 + mottle * 4.0 ) );
-          cliff = mix( cliff, vec3( 0.6, 0.8, 0.91 ), strata * 0.4 );
-          cliff = mix( cliff, vec3( 0.28, 0.6, 0.84 ), detail.g * 0.5 );
+          float snowy = ${snow ? '1.0' : 'smoothstep( 0.5, 0.85, n0.y )'};
+          float lum = smoothstep( 0.25, 0.95, albedo );
+          // Shaded hollows and the ice of the walls pick up the blue of the ice beneath the snow.
+          vec3 wall = mix( vec3( 0.48, 0.66, 0.74 ), vec3( 0.8, 0.86, 0.9 ), lum );
+          vec3 snowColor = mix( vec3( 0.66, 0.74, 0.8 ), vec3( 0.86, 0.9, 0.93 ), lum );
           // Kept below full white, so sunlit snow stays clear of the bloom threshold.
-          vec3 top = mix( cliff, snow, snowy ) * 0.66;
-          float deep = clamp( -h / 11.0, 0.0, 1.0 );
-          vec3 under = mix( vec3( 0.5, 0.84, 0.93 ), vec3( 0.13, 0.43, 0.64 ), deep );
-          under *= 0.8 + 0.35 * detail.r;
-          under = mix( under, vec3( 0.12, 0.4, 0.66 ), detail.g * 0.45 );
+          vec3 top = mix( wall, snowColor, snowy ) * 0.7;
+          float deep = clamp( -h / 12.0, 0.0, 1.0 );
+          vec3 under = mix( vec3( 0.5, 0.8, 0.82 ), vec3( 0.1, 0.38, 0.46 ), sqrt( deep ) );
+          // Faces turned up to the light from the surface glow; overhangs and undersides fall into deep teal shadow.
+          under *= mix( 0.45, 1.15, smoothstep( -0.8, 0.7, n.y ) );
           diffuseColor.rgb = mix( under, top, above );
-          roughnessFactor = mix( 0.2, mix( 0.3, 0.85, snowy ), above );
-          // Light scattering through the ice: strongest at grazing angles and in the clear ice below the water.
+          roughnessFactor = mix( 0.12, mix( 0.55, 0.9, snowy ), above );
+          // Light scattering through the ice: strongest at grazing angles and in the clear ice under the water.
           float rim = 1.0 - abs( dot( normal, normalize( vViewPosition ) ) );
-          iceGlow = mix( vec3( 0.06, 0.32, 0.48 ), vec3( 0.1, 0.3, 0.4 ), above ) * ( 0.25 + 0.75 * rim * rim )
-            * mix( 1.0 - deep * 0.6, 0.35 * ( 1.0 - snowy ), above );
+          iceGlow = vec3( 0.05, 0.3, 0.34 ) * ( 0.35 + 0.65 * rim * rim ) * ( 1.0 - deep * 0.7 ) * ( 1.0 - above );
         }`)
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += iceGlow;');
   };

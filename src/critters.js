@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { cloneMaterial } from './assets.js';
+import { animationsOf, cloneMaterial } from './assets.js';
 
 const rand = (a, b) => a + Math.random() * (b - a);
 
@@ -29,30 +29,21 @@ function pose(obj, controls, key, uniforms, glsl) {
 
 const uniformSet = (names) => Object.fromEntries(names.map((n) => [n, { value: 0 }]));
 
-// The polar bear model is one unit long with its head toward +x, its back up +y and its legs already set in a stride:
-// the hind pair hangs from the hips at about x = -0.33 and the front pair from the shoulders at about x = 0.07.
-// Each leg swings from its hip a quarter of a walk cycle after the last, left hind, left front, right hind, right
-// front, lifting its paw on the way forward; the body rises and falls twice a cycle and the head nods with each step.
-const BEAR_UNIFORMS = ['uStep', 'uWalk', 'uHeadYaw', 'uHeadPitch'];
-const BEAR_GLSL = /* glsl */ `
-  float legW = smoothstep( 0.0, -0.13, transformed.y );
-  bool fore = transformed.x > -0.13;
-  float rightSide = transformed.z > 0.0 ? 1.0 : 0.0;
-  float legPhase = uStep + ( ( fore ? 0.25 : 0.0 ) + rightSide * 0.5 ) * 6.2832;
-  vec2 hip = fore ? vec2( 0.07, 0.0 ) : vec2( -0.33, 0.02 );
-  transformed.xy = critterTurn( transformed.xy, hip, sin( legPhase ) * 0.42 * uWalk * legW );
-  transformed.y += max( 0.0, cos( legPhase ) ) * 0.045 * uWalk * smoothstep( -0.12, -0.24, transformed.y );
-  transformed.y += sin( uStep * 2.0 ) * 0.007 * uWalk;
-  float headW = smoothstep( 0.14, 0.3, transformed.x );
-  float nod = uHeadPitch + sin( uStep * 2.0 + 0.6 ) * 0.06 * uWalk;
-  transformed.xy = critterTurn( transformed.xy, vec2( 0.17, 0.14 ), nod * headW );
-  transformed.xz = critterTurn( transformed.xz, vec2( 0.17, 0.0 ), -uHeadYaw * headW );
-`;
+// The polar bear is rigged, with a walk cycle and two idles baked in Blender (blender/rig_polar_bear.py). One walk
+// cycle carries it this far, in model units.
+const BEAR_STRIDE = 0.2;
 
 export function rigBear(obj) {
-  const controls = uniformSet(BEAR_UNIFORMS);
-  pose(obj, controls, 'bear-walk', BEAR_UNIFORMS, BEAR_GLSL);
-  return controls;
+  const mixer = new THREE.AnimationMixer(obj);
+  const actions = {};
+  for (const clip of animationsOf('polar_bear')) {
+    const action = mixer.clipAction(clip);
+    action.setEffectiveWeight(0);
+    action.play();
+    actions[clip.name] = action;
+  }
+  actions.walk.setEffectiveWeight(1);
+  return { mixer, actions };
 }
 
 // The penguin model stands 1.5 units tall facing +x, beak forward, flippers spread out and down along ±z from
@@ -74,7 +65,9 @@ const PENGUIN_GLSL = /* glsl */ `
   transformed = vec3( xz.x, zy.y, xz.y * side );
 
   float headW = smoothstep( 0.3, 0.48, transformed.y );
-  transformed.xy = critterTurn( transformed.xy, vec2( 0.0, 0.4 ), ( uHeadPitch + uSwim * 1.25 ) * headW );
+  transformed.xy = critterTurn( transformed.xy, vec2( 0.0, 0.4 ), uHeadPitch * headW );
+  // Swimming, the head turns about its own middle so the beak points straight on along the body.
+  transformed.xy = critterTurn( transformed.xy, vec2( 0.03, 0.58 ), uSwim * 1.5 * smoothstep( 0.42, 0.56, transformed.y ) );
   transformed.xz = critterTurn( transformed.xz, vec2( 0.0, 0.0 ), -uHeadYaw * headW );
 
   float footW = smoothstep( -0.56, -0.66, transformed.y );
@@ -97,8 +90,10 @@ const approach = (from, to, dt, rate) => from + (to - from) * (1 - Math.exp(-dt 
 // preens, throws its head back to call, and turns to face somewhere new. It keeps within `range` of where it started.
 // Drives `p.dx`, `p.dz`, `p.yaw`, the body's sway `p.roll` and lift `p.bob`, and the rig's controls.
 export class PenguinMind {
-  constructor(p, range) {
+  // `canStand(dx, dz)` says whether a spot on its ice has room for it.
+  constructor(p, range, canStand = () => true) {
     this.p = p;
+    this.canStand = canStand;
     this.home = { x: p.dx, z: p.dz };
     this.range = range;
     this.act = 'idle';
@@ -117,8 +112,8 @@ export class PenguinMind {
       const a = Math.random() * Math.PI * 2;
       const d = Math.random() * this.range;
       this.target = { x: this.home.x + Math.cos(a) * d, z: this.home.z + Math.sin(a) * d * 0.4 };
-      this.act = 'waddle';
-      this.left = 8;
+      this.act = this.canStand(this.target.x, this.target.z) ? 'waddle' : 'idle';
+      this.left = this.act === 'waddle' ? 8 : rand(1, 3);
     } else if (pick < 0.44) {
       this.act = 'flap';
       this.left = rand(0.8, 1.6);
@@ -221,65 +216,73 @@ export function swimStroke(rig, state, dt, effort) {
   return Math.floor(before / Math.PI) !== Math.floor(state.stroke / Math.PI);
 }
 
-// A polar bear's rounds on its patch of ice: it plods from one end to the other, stops to sniff the snow or lift its
-// nose to the wind, then turns round and plods back. Drives `b.dx` (within ±range of its start), `b.yaw` and the rig.
+// A polar bear's rounds on its patch of ice: it plods from one end to the other, stops to nose about in the snow or
+// lift its head into the wind, then turns round and plods back. It keeps to the stretch of its ice where it has room
+// to stand. Drives `b.dx`, `b.yaw` and the blend of the rig's walk and idle animations.
 export class BearMind {
-  constructor(b, range) {
+  constructor(b, size) {
     this.b = b;
-    this.home = b.dx;
-    this.range = range;
+    this.size = size;
+    // Half the bear's length, and a little more, from its middle to any edge.
+    const margin = size * 0.55;
+    const can = (dx) => b.berg.walkable(dx, b.dz, margin);
+    let lo = b.dx;
+    let hi = b.dx;
+    while (can(lo - 0.25) && lo > b.dx - 30) lo -= 0.25;
+    while (can(hi + 0.25) && hi < b.dx + 30) hi += 0.25;
+    this.bounds = [lo, hi];
+    this.roomy = hi - lo > 1.5;
     this.dir = Math.random() < 0.5 ? -1 : 1;
     this.act = 'walk';
     this.left = rand(3, 8);
-    this.step = Math.random() * 6;
-    this.walk = 0;
+    this.weights = { walk: 1, sniff: 0, scent: 0 };
     // Heading stays between π (facing left) and 2π (facing right), so every turn swings round through facing the camera.
     b.yaw = this.dir > 0 ? Math.PI * 2 : Math.PI;
     this.turnTo = b.yaw;
+    this.started = false;
   }
 
   update(dt, t, rig) {
     const b = this.b;
+    if (!this.started) {
+      // Each bear starts somewhere different in its cycles.
+      for (const action of Object.values(rig.actions)) action.time = Math.random() * action.getClip().duration;
+      this.started = true;
+    }
     this.left -= dt;
-    let walk = 0;
-    let headYaw = Math.sin(t * 0.4 + this.home) * 0.15;
-    let headPitch = -0.05;
     if (this.act === 'walk') {
-      walk = 1;
-      const pos = b.dx - this.home;
-      if (pos * this.dir > this.range || this.left <= 0) {
+      const end = this.dir > 0 ? b.dx >= this.bounds[1] : b.dx <= this.bounds[0];
+      if (end || !this.roomy || this.left <= 0) {
         this.act = Math.random() < 0.5 ? 'sniff' : 'scent';
-        this.left = rand(2, 5);
+        this.left = rand(3, 6);
       }
-    } else if (this.act === 'sniff') {
-      headPitch = -0.55 + Math.sin(t * 2.3) * 0.08;
-      headYaw = Math.sin(t * 0.9) * 0.35;
-      if (this.left <= 0) this.turnRound();
-    } else if (this.act === 'scent') {
-      headPitch = 0.35 + Math.sin(t * 3.1) * 0.05;
-      headYaw = Math.sin(t * 0.6) * 0.5;
+    } else if (this.act === 'sniff' || this.act === 'scent') {
       if (this.left <= 0) this.turnRound();
     } else if (this.act === 'turn') {
-      walk = 0.55;
-      b.yaw = approach(b.yaw, this.turnTo, dt, 1.6);
-      if (Math.abs(b.yaw - this.turnTo) < 0.05) {
+      b.yaw = approach(b.yaw, this.turnTo, dt, 1.4);
+      if (Math.abs(b.yaw - this.turnTo) < 0.04) {
         this.act = 'walk';
         this.left = rand(5, 12);
       }
     }
-    this.walk = approach(this.walk, walk, dt, 3);
-    const speed = 0.75 * this.walk * (this.act === 'turn' ? 0.25 : 1);
-    if (this.act !== 'turn') b.dx += this.dir * speed * dt;
-    // About 1.25 units a stride at the size bears stand in the game.
-    this.step += dt * (this.act === 'turn' ? 2.6 : (speed / 1.25) * Math.PI * 2);
-    rig.uStep.value = this.step;
-    rig.uWalk.value = this.walk;
-    rig.uHeadYaw.value = approach(rig.uHeadYaw.value, headYaw, dt, 2.5);
-    rig.uHeadPitch.value = approach(rig.uHeadPitch.value, headPitch - 0.05 * this.walk, dt, 2.5);
+    const target = { walk: this.act === 'walk' || this.act === 'turn' ? 1 : 0, sniff: this.act === 'sniff' ? 1 : 0,
+      scent: this.act === 'scent' ? 1 : 0 };
+    for (const name of Object.keys(this.weights)) {
+      this.weights[name] = approach(this.weights[name], target[name], dt, 2.5);
+      rig.actions[name].setEffectiveWeight(this.weights[name]);
+    }
+    // Walking pace matches the stride, so the paws stay planted as the body passes over them; turning on the spot
+    // it shuffles round at half pace.
+    const clip = rig.actions.walk.getClip().duration;
+    const speed = 0.7 * (this.act === 'turn' ? 0 : this.weights.walk);
+    rig.actions.walk.timeScale = this.act === 'turn' ? 0.5 : (0.7 / (BEAR_STRIDE * this.size)) * clip;
+    b.dx = THREE.MathUtils.clamp(b.dx + this.dir * speed * dt, this.bounds[0], this.bounds[1]);
+    rig.mixer.update(dt);
   }
 
   turnRound() {
-    if ((this.b.dx - this.home) * this.dir > 0 || Math.random() < 0.5) this.dir = -this.dir;
+    const middle = (this.bounds[0] + this.bounds[1]) / 2;
+    if ((this.b.dx - middle) * this.dir > 0 || Math.random() < 0.5) this.dir = -this.dir;
     this.act = 'turn';
     this.turnTo = this.dir > 0 ? Math.PI * 2 : Math.PI;
     if (Math.abs(this.turnTo - this.b.yaw) < 0.1) {
@@ -287,4 +290,47 @@ export class BearMind {
       this.left = rand(5, 12);
     }
   }
+}
+
+const turnToward = (from, to, step) => {
+  const d = Math.atan2(Math.sin(to - from), Math.cos(to - from));
+  return from + THREE.MathUtils.clamp(d, -step, step);
+};
+
+// Steer a swimming penguin toward a point the way a penguin swims: it banks round in smooth arcs and climbs or dives
+// gently, never snapping to a new heading. `s` holds its heading (`yaw`, about the vertical), `pitch`, `roll` and
+// speed. `lay` turns the model from standing to lying along +x, belly down. Returns the distance left to go.
+const qYaw = new THREE.Quaternion();
+const qPitch = new THREE.Quaternion();
+const qRoll = new THREE.Quaternion();
+const AXIS_X = new THREE.Vector3(1, 0, 0);
+const AXIS_Y = new THREE.Vector3(0, 1, 0);
+const AXIS_Z = new THREE.Vector3(0, 0, 1);
+export const LAY_FLAT = new THREE.Quaternion().setFromAxisAngle(AXIS_Z, -Math.PI / 2);
+export function steerSwimmer(holder, s, target, dt, cruise, lay = LAY_FLAT) {
+  const p = holder.position;
+  const dx = target.x - p.x;
+  const dz = target.z - p.z;
+  const flat = Math.hypot(dx, dz);
+  const before = s.yaw;
+  s.yaw = turnToward(s.yaw, Math.atan2(-dz, dx), dt * 1.5);
+  const turning = (s.yaw - before) / Math.max(dt, 1e-4);
+  const wantPitch = THREE.MathUtils.clamp(Math.atan2(target.y - p.y, Math.max(flat, 1)), -0.7, 0.7);
+  s.pitch = approach(s.pitch, wantPitch, dt, 1.5);
+  s.speed = approach(s.speed, cruise, dt, 1.2);
+  const across = Math.cos(s.pitch) * s.speed * dt;
+  p.x += Math.cos(s.yaw) * across;
+  p.z -= Math.sin(s.yaw) * across;
+  p.y += Math.sin(s.pitch) * s.speed * dt;
+  s.roll = approach(s.roll, THREE.MathUtils.clamp(-turning * 0.5, -0.8, 0.8), dt, 3);
+  qYaw.setFromAxisAngle(AXIS_Y, s.yaw);
+  qPitch.setFromAxisAngle(AXIS_Z, s.pitch);
+  qRoll.setFromAxisAngle(AXIS_X, s.roll + Math.sin(s.stroke ?? 0) * 0.08);
+  holder.quaternion.copy(qYaw).multiply(qPitch).multiply(qRoll).multiply(lay);
+  return Math.hypot(flat, target.y - p.y);
+}
+
+// The way back along a swimmer's body, from its heading.
+export function swimmerBack(s) {
+  return new THREE.Vector3(-Math.cos(s.pitch) * Math.cos(s.yaw), -Math.sin(s.pitch), Math.cos(s.pitch) * Math.sin(s.yaw));
 }
