@@ -29,6 +29,7 @@ const SIMPLIFY = {
   deep_jelly: [0.7, 0.003],
   manta: [0.35, 0.003],
   rusted_vessel: [0.5, 0.003],
+  polar_bear: [0.5, 0.002],
 };
 
 // Scenery whose shadow comes from a much coarser stand-in: the soft shadow blur hides the lost detail.

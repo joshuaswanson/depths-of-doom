@@ -14,6 +14,7 @@ const MODEL_NAMES = [
   'coral_brain', 'rock_a', 'rock_b', 'deep_jelly', 'kelp_tall', 'kelp_short', 'coral_staghorn', 'coral_fan',
   'coral_table', 'sponge_cluster', 'anemone_patch', 'reef_small', 'reef_large',
   'wreck_sub', 'anglerfish', 'seagull', 'humpback', 'sperm_whale', 'dolphin', 'marlin', 'manta', 'rusted_vessel',
+  'penguin', 'polar_bear',
 ];
 
 const models = {};
