@@ -56,6 +56,9 @@ if rig is None:
         bpy.ops.object.join()
     body = bpy.context.view_layer.objects.active
     body.name = name
+    # Static creatures are bent by shaders in the game; shape keys would only bloat the file.
+    if body.data.shape_keys:
+        body.shape_key_clear()
     body.matrix_world = fix @ body.matrix_world
     bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
 else:
