@@ -29,7 +29,7 @@ WATER.surface.value = SURFACE_Y;
 const canvas = document.getElementById('game');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
 const MAX_PIXEL_RATIO = Math.min(window.devicePixelRatio, 1.5);
-const MIN_PIXEL_RATIO = Math.min(0.5, MAX_PIXEL_RATIO);
+const MIN_PIXEL_RATIO = Math.min(1, MAX_PIXEL_RATIO);
 let pixelRatio = MAX_PIXEL_RATIO;
 renderer.setPixelRatio(pixelRatio);
 renderer.toneMapping = THREE.NeutralToneMapping;
@@ -69,7 +69,7 @@ overhead.shadow.camera.layers.enable(SHADOW_LAYER);
 overhead.shadow.bias = -0.0004;
 overhead.shadow.normalBias = 0.04;
 overhead.shadow.radius = 6;
-overhead.shadow.blurSamples = 8;
+overhead.shadow.blurSamples = 12;
 scene.add(overhead, overhead.target);
 const rim = new THREE.DirectionalLight('#7fdcff', 2.2);
 rim.position.set(4, 6, -12);
@@ -174,10 +174,7 @@ function resize() {
 }
 window.addEventListener('resize', resize);
 
-// Trade looks for frame rate when frames run long, and win them back with headroom. Sharpness above 1:1 goes first,
-// then the extras (bloom and full-rate, full-size shadows), then the resolution keeps falling.
-const LOW_PIXEL_RATIO = Math.min(1, MAX_PIXEL_RATIO);
-let lite = false;
+// Trade sharpness above 1:1 for frame rate when frames run long, and win it back with headroom.
 const fpsWindow = { time: 0, frames: 0, good: 0, bad: 0, locked: false, need: 2, sinceRaise: Infinity, settle: 0 };
 
 function setPixelRatio(r) {
@@ -186,33 +183,18 @@ function setPixelRatio(r) {
   resize();
 }
 
-function setLite(on) {
-  lite = on;
-  bloom.enabled = !on;
-  world?.setLite(on);
-  const size = on ? SHADOW_MAP / 2 : SHADOW_MAP;
-  overhead.shadow.mapSize.set(size, size);
-  overhead.shadow.blurSamples = on ? 6 : 8;
-  overhead.shadow.map?.dispose();
-  overhead.shadow.map = null;
-}
-
 function lowerQuality() {
-  if (pixelRatio > LOW_PIXEL_RATIO) setPixelRatio(Math.max(LOW_PIXEL_RATIO, pixelRatio - 0.1));
-  else if (!lite) setLite(true);
-  else if (pixelRatio > MIN_PIXEL_RATIO) setPixelRatio(Math.max(MIN_PIXEL_RATIO, pixelRatio - 0.1));
+  if (pixelRatio > MIN_PIXEL_RATIO) setPixelRatio(Math.max(MIN_PIXEL_RATIO, pixelRatio - 0.1));
 }
 
 function raiseQuality() {
-  if (pixelRatio < LOW_PIXEL_RATIO) setPixelRatio(Math.min(LOW_PIXEL_RATIO, pixelRatio + 0.15));
-  else if (lite) setLite(false);
-  else if (pixelRatio < MAX_PIXEL_RATIO) setPixelRatio(Math.min(MAX_PIXEL_RATIO, pixelRatio + 0.15));
-  else return false;
+  if (pixelRatio >= MAX_PIXEL_RATIO) return false;
+  setPixelRatio(Math.min(MAX_PIXEL_RATIO, pixelRatio + 0.15));
   return true;
 }
 
-// A slowdown lasting two straight seconds lowers quality, so a passing hitch never blurs the picture; a very slow
-// machine drops a step every second. Smooth seconds raise it again, and a raise that brings the slowdown straight
+// A slowdown lasting two straight seconds lowers the resolution, so a passing hitch never blurs the picture; a very
+// slow machine drops a step every second. Smooth seconds raise it again, and a raise that brings the slowdown straight
 // back makes the next one wait twice as long, so quality settles.
 function adaptQuality(dt) {
   if (fpsWindow.locked || document.hidden || dt > 1) return;
@@ -343,7 +325,6 @@ async function boot() {
   window.__game = game;
   window.__debug = { scene, world, bloom, renderer, composer, effects, player, get pixelRatio() { return pixelRatio; },
     lockResolution(r) { fpsWindow.locked = true; setPixelRatio(r); },
-    setLite,
     manual(on) { renderer.setAnimationLoop(on ? null : frame); },
     step(dt) { tick(dt); },
     set input(v) { scriptedInput = v; },
@@ -396,7 +377,6 @@ backgroundTicker.onmessage = () => {
 let scriptedInput = null;
 let cinematic = false;
 let cameraRig = null;
-let shadowFrame = 0;
 
 function tick(dt) {
   if (state !== 'paused') SHADER_TIME.value += dt;
@@ -447,10 +427,8 @@ function tick(dt) {
     hud.drawRadar(player, game.radarEnemies(), game.radarRange, game.radarSweep, game.radarCoins());
   }
   placeHints();
-  // Shadows fade out in the dark water, and a slow machine redraws them every other frame.
-  shadowFrame++;
-  renderer.shadowMap.needsUpdate = !overhead.shadow.map
-    || (overhead.shadow.intensity > 0 && (!lite || shadowFrame % 2 === 0));
+  // Shadows fade out completely in the dark water, so there is nothing to redraw.
+  renderer.shadowMap.needsUpdate = !overhead.shadow.map || overhead.shadow.intensity > 0;
   composer.render();
 }
 

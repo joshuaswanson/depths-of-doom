@@ -548,10 +548,7 @@ function makeSeabedMaterial(uniforms) {
         reflectedLight.directDiffuse *= mix( 0.5, 1.0, sunShadow );
         reflectedLight.indirectDiffuse *= mix( 0.65, 1.0, sunShadow );`)
       .replace('#include <normal_fragment_maps>', /* glsl */ `#include <normal_fragment_maps>
-        float sHeight = sRipple * 0.4 * ( 1.0 - sSteep ) + sPebble * 0.8 + sPatch * sSteep * 1.2;
-        #ifndef SEABED_LITE
-          sHeight += dNoise( sp * 7.0 ) * 0.25;
-        #endif
+        float sHeight = sRipple * 0.4 * ( 1.0 - sSteep ) + sPebble * 0.8 + dNoise( sp * 7.0 ) * 0.25 + sPatch * sSteep * 1.2;
         normal = dPerturb( - vViewPosition, normal, vec2( dFdx( sHeight ), dFdy( sHeight ) ) * 0.25, faceDirection );`)
       .replace('#include <emissivemap_fragment>', /* glsl */ `#include <emissivemap_fragment>
         // In shadow the floor loses its caustics and much of its light, all of which is sunlight.
@@ -582,13 +579,9 @@ function makeSeabedMaterial(uniforms) {
         vec2 cA = vSeaWorld.xz * vec2( 0.42, 0.3 ) + vec2( uTime * 0.05, uTime * 0.03 );
         cA += 0.45 * vec2( sin( cA.y * 1.9 + uTime * 0.6 ), cos( cA.x * 1.6 - uTime * 0.5 ) );
         float cNet = caustic( cA, 0.7 );
-        #ifdef SEABED_LITE
-          float cFine = 0.5;
-        #else
-          vec2 cB = vSeaWorld.xz * vec2( 0.78, 0.55 ) - vec2( uTime * 0.04, -uTime * 0.06 ) + 7.0;
-          cB += 0.4 * vec2( sin( cB.y * 2.3 - uTime * 0.7 ), cos( cB.x * 2.1 + uTime * 0.6 ) );
-          float cFine = caustic( cB, 1.1 );
-        #endif
+        vec2 cB = vSeaWorld.xz * vec2( 0.78, 0.55 ) - vec2( uTime * 0.04, -uTime * 0.06 ) + 7.0;
+        cB += 0.4 * vec2( sin( cB.y * 2.3 - uTime * 0.7 ), cos( cB.x * 2.1 + uTime * 0.6 ) );
+        float cFine = caustic( cB, 1.1 );
         float cLight = cNet * cNet * 0.8 + cNet * cFine * 0.6;
         float cBand = 0.35 + 0.9 * dNoise( vec3( vSeaWorld.xz * 0.18 + uTime * 0.08, uTime * 0.15 ) );
         totalEmissiveRadiance += vec3( 0.5, 0.9, 0.95 ) * cLight * 0.6 * fadeC * cBand * ( 1.0 + vReef * 1.3 ) * sunShadow;
@@ -1784,7 +1777,6 @@ export class World {
     scene.add(this.waterline);
 
     const seabedMat = makeSeabedMaterial(this.uniforms);
-    this.seabedMat = seabedMat;
     this.tiles = [0, 1, 2, 3, 4].map(() => {
       const tile = makeSeabedTile(seabedMat);
       scene.add(tile);
@@ -2007,12 +1999,6 @@ export class World {
   }
 
   // Reefs and kelp forests come in fixed clusters per stretch of seafloor, spawned as the stretch scrolls into view.
-  // A slow machine's seabed keeps one layer of caustics and drops its finest bumps.
-  setLite(on) {
-    this.seabedMat.defines = on ? { SEABED_LITE: '' } : {};
-    this.seabedMat.needsUpdate = true;
-  }
-
   updateClusters(cx) {
     const span = halfWidthAt(-16, this.aspect) + MOUND_CELL;
     const lo = Math.floor((cx - span) / MOUND_CELL);
