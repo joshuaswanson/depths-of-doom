@@ -400,8 +400,19 @@ export function iceMaterial({ name = 'ice', bob = false, snow = false } = {}) {
           diffuseColor.rgb = mix( under, top, above );
           roughnessFactor = mix( 0.04, mix( 0.55, 0.9, snowy ), above );
           // Light scattering through the ice: strongest at grazing angles and in the clear ice under the water.
-          float rim = 1.0 - abs( dot( normal, normalize( vViewPosition ) ) );
+          vec3 toEye = normalize( vViewPosition );
+          float facing = abs( dot( normal, toEye ) );
+          float rim = 1.0 - facing;
           iceGlow = vec3( 0.04, 0.32, 0.32 ) * ( 0.3 + 0.9 * rim * rim * rim ) * ( 1.0 - deep * 0.7 ) * ( 1.0 - above );
+          // Below the water the bare ice is glass: looked into face on it shows its deep clear blue-green, and toward
+          // its edges it mirrors the bright water and the light above, with sharp glints off every smooth hollow.
+          vec3 mirror = ( vec4( reflect( -toEye, normal ), 0.0 ) * viewMatrix ).xyz;
+          float fresnel = 0.06 + 0.94 * pow( rim, 4.0 );
+          vec3 sky = mix( vec3( 0.02, 0.16, 0.18 ), vec3( 0.55, 0.95, 0.95 ), smoothstep( -0.3, 0.9, mirror.y ) );
+          float glint = pow( max( mirror.y, 0.0 ), 60.0 ) * 1.4;
+          float glassy = ( 1.0 - above ) * ( 1.0 - deep * 0.6 );
+          iceGlow += ( sky * fresnel + glint ) * glassy;
+          diffuseColor.rgb *= mix( 1.0, 0.55 + 0.45 * rim, glassy );
         }`)
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += iceGlow;');
   };
