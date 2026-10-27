@@ -517,7 +517,9 @@ export class Player {
     this.box = { cx: c.x, cy: c.y, hx: s.x / 2, hy: s.y / 2, hz: s.z / 2 };
     this.updateExtents();
     this.shield.position.set(c.x, c.y, 0);
-    this.shield.scale.set(s.x * 0.62, s.y * 0.68, Math.max(s.y, s.x * 0.5) * 0.7);
+    // Always a round bubble. Length and depth count alike, so measuring mid-turn, with the hull swung toward the
+    // camera, gives the same size.
+    this.shield.scale.setScalar(Math.max(s.x * 0.62, s.z * 0.62, s.y * 0.68));
   }
 
   // Silhouette as seen by the camera for the current yaw; cx is signed, so it flips with the heading.
