@@ -71,6 +71,17 @@ export function installWaterFog() {
   ${WATER_GRADIENT_GLSL}
 #endif
 `;
+  // A pixel this deep in the haze ends up as pure water colour whatever is drawn there, so it skips its shading. The
+  // check runs at the start of every opaque fogged material, where three.js places the clipping chunk.
+  chunks.clipping_planes_fragment = /* glsl */ `${chunks.clipping_planes_fragment}
+#if defined( USE_FOG ) && defined( OPAQUE ) && !defined( FOG_EXP2 ) && !defined( FOG_CAP )
+  if ( smoothstep( fogNear, fogFar, vFogDepth ) > 0.998 ) {
+    gl_FragColor = vec4( seaColor( clamp( vFogScreenY / ${TAN_HALF_FOV.toFixed(5)} * 0.5 + 0.5, 0.0, 1.0 ), fogColor.r,
+      fogColor.g ), 1.0 );
+    return;
+  }
+#endif
+`;
   chunks.fog_fragment = /* glsl */ `
 #ifdef USE_FOG
   float fogT = clamp( vFogScreenY / ${TAN_HALF_FOV.toFixed(5)} * 0.5 + 0.5, 0.0, 1.0 );
