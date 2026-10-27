@@ -1666,6 +1666,36 @@ function layoutCluster(m, blockers) {
   return { pieces, footprints };
 }
 
+// Plain vertex-coloured materials that differ only in colour share one material, and so one draw per cluster; each
+// piece's colour moves into its vertex colours.
+const sharedMaterials = new Map();
+
+function sharedMaterial(m) {
+  if (!m.isMeshStandardMaterial || !m.vertexColors || m.transparent || m.map || m.normalMap || m.emissiveMap
+    || m.roughnessMap || m.aoMap) return m;
+  const key = [m.customProgramCacheKey(), m.roughness, m.metalness, m.emissive.getHex(), m.emissiveIntensity,
+    m.envMapIntensity, m.side].join('|');
+  if (!sharedMaterials.has(key)) {
+    const shared = m.clone();
+    shared.color.set('#ffffff');
+    shared.onBeforeCompile = m.onBeforeCompile;
+    shared.customProgramCacheKey = m.customProgramCacheKey;
+    sharedMaterials.set(key, shared);
+  }
+  return sharedMaterials.get(key);
+}
+
+function bakeColor(geo, color) {
+  const src = geo.attributes.color;
+  const out = new Float32Array(src.count * 3);
+  for (let i = 0; i < src.count; i++) {
+    out[i * 3] = src.getX(i) * color.r;
+    out[i * 3 + 1] = src.getY(i) * color.g;
+    out[i * 3 + 2] = src.getZ(i) * color.b;
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(out, 3));
+}
+
 // Bake a cluster of placed models into one mesh per material, anchored at the cluster's lowest point.
 function mergeCluster(pieces) {
   pieces.updateMatrixWorld(true);
@@ -1684,9 +1714,11 @@ function mergeCluster(pieces) {
         const count = geo.attributes.position.count;
         geo.setAttribute('aBase', new THREE.BufferAttribute(new Float32Array(count).fill(piece.position.y - base), 1));
       }
-      const key = `${o.material.uuid}|${Object.keys(geo.attributes).sort().join(',')}|${o.castShadow}|${o.layers.mask}`;
+      const material = sharedMaterial(o.material);
+      if (material !== o.material) bakeColor(geo, o.material.color);
+      const key = `${material.uuid}|${Object.keys(geo.attributes).sort().join(',')}|${o.castShadow}|${o.layers.mask}`;
       if (!buckets.has(key)) {
-        buckets.set(key, { material: o.material, order: o.renderOrder, cast: o.castShadow, layers: o.layers.mask, geos: [] });
+        buckets.set(key, { material, order: o.renderOrder, cast: o.castShadow, layers: o.layers.mask, geos: [] });
       }
       buckets.get(key).geos.push(geo);
     });
