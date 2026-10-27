@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { unlock } from './achievements.js';
-import { animationsOf, findNode, plainMaterials, spawn, spawnSkinned, tint } from './assets.js';
+import { animationsOf, cloneMaterial, findNode, plainMaterials, spawn, spawnSkinned, tint } from './assets.js';
 import { sfx } from './audio.js';
 import { CURRENT_MATERIALS, NOISE_GLSL, SHADER_TIME, WHALE_BEND, addTailBeat, addWaterline, addWingFlap } from './surface.js';
 import {
@@ -656,10 +656,21 @@ function makeFishGeometry() {
 const ANGLER_FLOOR = -170;
 const ANGLER_BAND = [4, 16];
 const ANGLER_SPACING = 18;
+// A fish held in the sub's spotlight this long (seconds) bolts away from the sub for a few seconds, tail thrashing.
+const ANGLER_GLARE = 1.5;
+const ANGLER_FLEE = [3.5, 5];
+const ANGLER_FLEE_SPEED = 2.4;
 
 function makeAngler() {
   const fish = spawn('anglerfish');
   fish.scale.setScalar(rand(1.0, 1.6));
+  // Its own tail beat, so one fish can thrash while the others glide.
+  const sway = { phase: { value: rand(0, 6) }, amp: { value: 1 } };
+  fish.traverse((o) => {
+    if (!o.isMesh || !o.material.name.startsWith('angler_')) return;
+    o.material = cloneMaterial(o.material);
+    o.material.userData.sway = sway;
+  });
   const esca = findNode(fish, 'Esca');
   esca.material = esca.material.clone();
   const halo = new THREE.Sprite(new THREE.SpriteMaterial({
@@ -671,6 +682,7 @@ function makeAngler() {
   fish.userData = {
     halo, esca, escaBase: esca.material.emissiveIntensity, glow: 0, flash: 0, untilFlash: rand(2, 12), phase: rand(0, 6),
     vel: new THREE.Vector2(rand(-0.5, 0.5), 0), target: null, retarget: 0, yaw: 0, facing: 1,
+    sway, glare: 0, flee: 0, panic: 0,
   };
   return fish;
 }
@@ -715,9 +727,26 @@ function updateAngler(a, dt, t, cx, sub, world) {
   const u = a.userData;
   const p = a.position;
   u.retarget -= dt;
-  const hull = a === world.anglers[0] && world.vesselSpan;
+  // Caught in the spotlight the fish grows uneasy, and held there too long it bolts away from the sub.
+  u.glare = sub && world.inSpotlight(p) ? u.glare + dt : Math.max(0, u.glare - dt * 0.5);
+  if (u.flee <= 0 && u.glare > ANGLER_GLARE) {
+    u.flee = rand(ANGLER_FLEE[0], ANGLER_FLEE[1]);
+    u.glare = 0;
+    const away = Math.sign(p.x - sub.x) || 1;
+    let reach = rand(18, 26);
+    while (reach > 4 && floorY(p.x + away * reach) > ANGLER_FLOOR) reach -= 2;
+    const x = p.x + away * reach;
+    u.targetZ = u.homeZ;
+    // Straight out along the trench, keeping roughly to its depth.
+    u.target = new THREE.Vector2(x, Math.max(world.anglerFloor(p.x, x, u.homeZ) + ANGLER_BAND[0], p.y + rand(-2, 2)));
+    u.retarget = u.flee + 2;
+  }
+  u.flee = Math.max(0, u.flee - dt);
+  const fleeing = u.flee > 0;
+  u.panic += ((fleeing ? 1 : 0) - u.panic) * (1 - Math.exp(-dt * (fleeing ? 3 : 0.8)));
+  const hull = !fleeing && a === world.anglers[0] && world.vesselSpan;
   const atShip = hull && p.x > hull[0] - SHIP_ANGLER_REACH && p.x < hull[1] + SHIP_ANGLER_REACH;
-  if (!u.target || u.retarget <= 0 || Math.hypot(u.target.x - p.x, u.target.y - p.y) < 1.5) {
+  if (!fleeing && (!u.target || u.retarget <= 0 || Math.hypot(u.target.x - p.x, u.target.y - p.y) < 1.5)) {
     let x = p.x + rand(-14, 14);
     if (floorY(x) > ANGLER_FLOOR) x = p.x - (x - p.x);
     // Anglers are loners: steer the next waypoint away from any neighbour that is too close.
@@ -746,7 +775,7 @@ function updateAngler(a, dt, t, cx, sub, world) {
   }
   p.z += (u.targetZ - p.z) * (1 - Math.exp(-dt * 0.4));
   const want = new THREE.Vector2(u.target.x - p.x, u.target.y - p.y);
-  const speed = 0.9;
+  const speed = THREE.MathUtils.lerp(0.9, ANGLER_FLEE_SPEED, u.panic);
   if (want.lengthSq() > 0.01) want.setLength(speed);
   for (const other of world.anglers) {
     if (other === a) continue;
@@ -754,17 +783,21 @@ function updateAngler(a, dt, t, cx, sub, world) {
     const gap = Math.abs(dx);
     if (gap < ANGLER_SPACING) want.x += Math.sign(dx || 1) * (1 - gap / ANGLER_SPACING) * 1.4;
   }
-  u.vel.lerp(want, 1 - Math.exp(-dt * 0.5));
+  u.vel.lerp(want, 1 - Math.exp(-dt * (0.5 + 1.5 * u.panic)));
   p.x += u.vel.x * dt;
-  p.y = Math.max(world.anglerFloor(p.x, p.x, p.z) + ANGLER_BAND[0] - 1,
-    p.y + u.vel.y * dt + Math.sin(t * 0.6 + u.phase) * 0.08 * dt);
+  // A fleeing fish jinks up and down a little as it goes.
+  const bob = Math.sin(t * 0.6 + u.phase) * 0.08 + Math.sin(t * 6.5 + u.phase) * 0.35 * u.panic;
+  p.y = Math.max(world.anglerFloor(p.x, p.x, p.z) + ANGLER_BAND[0] - 1, p.y + u.vel.y * dt + bob * dt);
   // Rise early ahead of the rusted boat's bow or stern, so a fish whose path crosses the hull glides up over it.
   const clear = world.anglerFloor(p.x, p.x + Math.sign(u.vel.x) * 8, p.z) + ANGLER_BAND[0];
   if (p.y < clear) p.y += (clear - p.y) * (1 - Math.exp(-dt * 1.5));
   if (Math.abs(u.vel.x) > 0.2) u.facing = Math.sign(u.vel.x);
-  u.yaw += ((u.facing > 0 ? 0 : -Math.PI) - u.yaw) * (1 - Math.exp(-dt * 0.8));
-  // The whole body swings a little in time with the tail wave, so the swimming reads from the side.
-  a.rotation.y = u.yaw + Math.sin(t * 3 + u.phase) * 0.14;
+  u.yaw += ((u.facing > 0 ? 0 : -Math.PI) - u.yaw) * (1 - Math.exp(-dt * (0.8 + 2.2 * u.panic)));
+  // The tail beats faster and a little wider while the fish flees, and the whole body swings in time with it, so
+  // the swimming reads from the side.
+  u.sway.phase.value += dt * 3 * (1 + 1.3 * u.panic);
+  u.sway.amp.value = 1 + 0.3 * u.panic;
+  a.rotation.y = u.yaw + Math.sin(u.sway.phase.value) * 0.14 * (1 + 0.4 * u.panic);
   a.rotation.z = THREE.MathUtils.clamp(Math.atan2(u.vel.y, Math.abs(u.vel.x) + 0.3), -0.35, 0.35) * u.facing * 0.8;
   // Mostly dark: now and then the lure flares for a couple of seconds, lighting the fish up before it vanishes again.
   const near = sub && a.position.distanceTo(sub) < 12 * a.scale.x;
@@ -1920,6 +1953,16 @@ export class World {
     this.vesselSpan = [Math.min(...ends), Math.max(...ends) + 1];
   }
 
+  // Whether a point lies inside one of the sub's spotlight beams, as worked out at the start of this frame.
+  inSpotlight(pos) {
+    return this.spotCones.some((c) => {
+      const dx = pos.x - c.origin.x;
+      const dy = pos.y - c.origin.y;
+      const d = Math.hypot(dx, dy);
+      return d < this.spotRange && dx * c.dir.x + dy * c.dir.y > d * Math.cos(0.45);
+    });
+  }
+
   // Achievements for what the sub reaches or swims beside.
   checkAchievements(hull) {
     const c = hull.center;
@@ -2181,6 +2224,12 @@ export class World {
     this.time += dt;
     const cx = camera.position.x;
     const cy = camera.position.y;
+    this.spotCones = (hull?.partsOf('spotlight') ?? []).map((part) => {
+      const origin = part.lens.getWorldPosition(new THREE.Vector3());
+      const dir = new THREE.Vector3(1, 0, 0).transformDirection(part.lens.matrixWorld);
+      return { origin, dir: new THREE.Vector2(dir.x, dir.y).normalize() };
+    });
+    this.spotRange = hull?.spotRange ?? 0;
     if (this.updateGulls(dt, cx, cy, hull, camera.position.z) > 0) {
       sfx.gull();
       unlock('gulls');

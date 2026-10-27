@@ -256,17 +256,24 @@ const SWAY_GLSL = /* glsl */ `
   transformed.xy = vec2( ${JAW_HINGE[0]}, ${JAW_HINGE[1]} )
     + vec2( cos( jawA ) * jawP.x + sin( jawA ) * jawP.y, -sin( jawA ) * jawP.x + cos( jawA ) * jawP.y );
   float swayRear = smoothstep( 0.3, -1.7, transformed.x );
-  transformed.z += sin( uTime * 3.0 - transformed.x * 2.2 + swaySeed ) * 0.42 * swayRear * swayRear;
+  transformed.z += sin( uSwayPhase - transformed.x * 2.2 + swaySeed ) * 0.42 * uSwayAmp * swayRear * swayRear;
 `;
+
+// The tail beat's phase and strength. A fish can carry its own in material.userData.sway, to beat faster or harder
+// than the rest; otherwise it beats at the steady default.
+const STEADY_SWAY = { phase: { get value() { return SHADER_TIME.value * 3.0; } }, amp: { value: 1 } };
 
 function addSway(material) {
   const previous = material.onBeforeCompile;
   const key = material.customProgramCacheKey?.() ?? material.name;
-  material.onBeforeCompile = (shader, renderer) => {
-    previous?.call(material, shader, renderer);
+  material.onBeforeCompile = function (shader, renderer) {
+    previous?.call(this, shader, renderer);
     shader.uniforms.uTime = SHADER_TIME;
+    const sway = this.userData.sway ?? STEADY_SWAY;
+    shader.uniforms.uSwayPhase = sway.phase;
+    shader.uniforms.uSwayAmp = sway.amp;
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nuniform float uTime;')
+      .replace('#include <common>', '#include <common>\nuniform float uTime;\nuniform float uSwayPhase;\nuniform float uSwayAmp;')
       .replace('#include <begin_vertex>', `#include <begin_vertex>\n${SWAY_GLSL}`);
   };
   material.customProgramCacheKey = () => `${key}-sway`;
