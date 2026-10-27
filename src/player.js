@@ -24,6 +24,11 @@ const HULL_SAMPLES = [-1.12, -0.75, -0.45, -0.15, 0.15, 0.45, 0.75, 1.12];
 const OUTLINE_SLICES = 18;
 export const RIG_SCALE = 0.82;
 const WALL_BOUNCE_SPEED = 3;
+// Ice above the water is slick, and the sub lands on it with barely a bounce.
+const ICE_FRICTION = 0.06;
+const ICE_BOUNCE = 0.15;
+// A berg dips under the sub's weight on whichever side it sits, so even a flat top sheds it toward the nearer edge.
+const ICE_TIP = 1.6;
 const REGEN_DELAY = 5;
 // From this hull level the sub gets the long "car" hull with a flat front deck and a deck-mounted gun.
 const BIG_HULL_LEVEL = 4;
@@ -50,6 +55,36 @@ const BASE_RADIUS = {
   spotlight: 0.18, junk: 0.25,
 };
 const REGEN_RATE = 3;
+
+// The shortest way out of the ice for a point inside it, as a direction and a distance; null when the point is clear.
+function iceExit(span, x, y) {
+  const s = span(x);
+  if (!s || y >= s.top || y <= s.bottom) return null;
+  const up = s.top - y;
+  const down = y - s.bottom;
+  const outside = (d) => {
+    const t = span(x + d);
+    return !t || y >= t.top || y <= t.bottom;
+  };
+  const reach = Math.min(up, down, 0.8);
+  for (let d = 0.05; d < reach; d += 0.05) {
+    if (outside(d)) return { nx: 1, ny: 0, depth: d };
+    if (outside(-d)) return { nx: -1, ny: 0, depth: d };
+  }
+  if (down < up) return { nx: 0, ny: -1, depth: down };
+  const slope = ((span(x + 0.25)?.top ?? s.top) - (span(x - 0.25)?.top ?? s.top)) / 0.5;
+  const n = Math.hypot(slope, 1);
+  return { nx: -slope / n, ny: 1 / n, depth: up / n };
+}
+
+// How far from x along the ice the nearer of its two ends lies, signed toward it.
+function nearerEnd(span, x) {
+  for (let d = 0.5; d < 60; d += 0.5) {
+    if (!span(x + d)) return 1;
+    if (!span(x - d)) return -1;
+  }
+  return 0;
+}
 
 function hullRadius(x) {
   const t = x / 2;
@@ -296,6 +331,8 @@ export class Player {
     this.pitchVel = 0;
     this.pitch = 0;
     this.airborne = false;
+    this.tumbling = false;
+    this.spin = 0;
     this.invuln = 0;
     this.sinceHit = 99;
     this.shieldCharges = 0;
@@ -668,6 +705,72 @@ export class Player {
     return hit ? { down, up } : null;
   }
 
+  // Landed on ice above the water, the sub is a loose body. It falls, slides and tips over its own outline, so it
+  // settles on whichever of its hull, periscope or parts meets the ice, until it slips back into the sea.
+  tumble(dt, span) {
+    const p = this.group.position;
+    const f = Math.cos(this.yaw);
+    const ox = this.box.cx * f;
+    const oy = this.box.cy;
+    const hx = this.extents.hx;
+    const hy = this.box.hy;
+    const inertia = (hx * hx + hy * hy) / 4;
+    let a = this.screenTilt;
+    let cx = p.x + ox * Math.cos(a) - oy * Math.sin(a);
+    let cy = p.y + ox * Math.sin(a) + oy * Math.cos(a);
+    const tip = nearerEnd(span, cx);
+    const steps = 4;
+    const h = dt / steps;
+    for (let step = 0; step < steps; step++) {
+      this.vel.y -= GRAVITY * h;
+      this.spin *= Math.exp(-h * 0.6);
+      cx += this.vel.x * h;
+      cy += this.vel.y * h;
+      a += this.spin * h;
+      const cos = Math.cos(a);
+      const sin = Math.sin(a);
+      let deepest = null;
+      for (const q of this.outline) {
+        for (const qy of [q.y, q.low]) {
+          const lx = q.x * f - ox;
+          const ly = qy - oy;
+          const rx = lx * cos - ly * sin;
+          const ry = lx * sin + ly * cos;
+          const out = iceExit(span, cx + rx, cy + ry);
+          if (!out) continue;
+          if (!deepest || out.depth > deepest.depth) deepest = out;
+          const vx = this.vel.x - this.spin * ry;
+          const vy = this.vel.y + this.spin * rx;
+          const vn = vx * out.nx + vy * out.ny;
+          if (vn >= 0) continue;
+          if (vn < -1) this.iceBump = { x: cx + rx, vx: this.vel.x, vy: this.vel.y };
+          const rn = rx * out.ny - ry * out.nx;
+          const jn = (-(1 + (vn < -1 ? ICE_BOUNCE : 0)) * vn) / (1 + (rn * rn) / inertia);
+          const tx = out.ny;
+          const ty = -out.nx;
+          const rt = rx * ty - ry * tx;
+          const vt = vx * tx + vy * ty;
+          const jt = THREE.MathUtils.clamp(-vt / (1 + (rt * rt) / inertia), -ICE_FRICTION * jn, ICE_FRICTION * jn);
+          this.vel.x += jn * out.nx + jt * tx;
+          this.vel.y += jn * out.ny + jt * ty;
+          this.spin += (jn * rn + jt * rt) / inertia;
+        }
+      }
+      if (deepest) {
+        cx += deepest.nx * deepest.depth;
+        cy += deepest.ny * deepest.depth;
+        if (deepest.ny > 0.5) {
+          this.vel.x += tip * ICE_TIP * deepest.ny * h;
+          this.vel.y += tip * ICE_TIP * -deepest.nx * h;
+        }
+      }
+    }
+    p.x = cx - (ox * Math.cos(a) - oy * Math.sin(a));
+    p.y = cy - (ox * Math.sin(a) + oy * Math.cos(a));
+    this.pitch = a * this.facingSign;
+    this.pitchVel = this.spin * this.facingSign;
+  }
+
   get center() {
     const e = this.extents;
     const a = this.screenTilt;
@@ -737,10 +840,29 @@ export class Player {
     }
     const drag = this.airborne ? AIR_DRAG : DRAG / this.mass;
     this.vel.addScaledVector(thrust, this.speed * (1 + this.cruise * CRUISE_BOOST) * drag * dt);
-    if (this.airborne) this.vel.y -= GRAVITY * dt;
     this.vel.multiplyScalar(Math.exp(-drag * dt));
     const p = this.group.position;
-    const e = this.extents;
+    const ice = bounds.ice;
+    this.iceBump = null;
+    if (this.airborne && ice && !this.tumbling) {
+      this.tumbling = !!this.iceOverlap(p.x + this.vel.x * dt, p.y + this.vel.y * dt, ice);
+      if (this.tumbling) this.spin = this.pitchVel * this.facingSign;
+    }
+    if (this.tumbling) this.tumble(dt, ice);
+    else this.move(dt, bounds);
+    if (bounds.left !== undefined) p.x = THREE.MathUtils.clamp(p.x, bounds.left, bounds.right);
+    if (bounds.top !== undefined) p.y = Math.min(p.y, bounds.top);
+    this.airborne = p.y > SURFACE_Y + 0.3;
+    if (!this.airborne && this.tumbling) {
+      this.tumbling = false;
+      this.righting = true;
+    }
+    this.steer(dt, input, pushDir);
+  }
+
+  move(dt, bounds) {
+    if (this.airborne) this.vel.y -= GRAVITY * dt;
+    const p = this.group.position;
     const dx = this.vel.x * dt;
     const nx = p.x + dx;
     // Gentle slopes lift the sub as it slides along them; anything steeper is a wall. Floating ice works the same
@@ -752,7 +874,6 @@ export class Player {
     const deep = (o) => (o ? Math.min(o.down, o.up) : 0);
     const pressBefore = ice ? deep(this.iceOverlap(p.x, p.y, ice)) : 0;
     const press = ice ? deep(this.iceOverlap(nx, p.y, ice)) : 0;
-    this.iceBump = null;
     const walled = press - pressBefore > Math.abs(dx) * MAX_CLIMB;
     if ((lift > 0 && lift > Math.abs(dx) * MAX_CLIMB) || walled) {
       if (walled) this.iceBump = { x: nx + Math.sign(dx) * this.extents.hx, vx: this.vel.x, vy: 0 };
@@ -777,14 +898,13 @@ export class Player {
       p.y += sunk;
       this.vel.y *= -0.2;
     }
-    if (bounds.left !== undefined) p.x = THREE.MathUtils.clamp(p.x, bounds.left, bounds.right);
-    if (bounds.top !== undefined) p.y = Math.min(p.y, bounds.top);
-    this.airborne = p.y > SURFACE_Y + 0.3;
+  }
 
+  steer(dt, input, pushDir) {
     // Holding left or right spins the turn up; letting go lets it coast to a stop wherever it ends up.
     // Each turnaround picks at random whether the nose swings past the camera or away from it. Reversing mid-turn
     // heads back the way it came.
-    if (Math.abs(input.x) > 0.1) {
+    if (Math.abs(input.x) > 0.1 && !this.tumbling) {
       const dir = Math.sign(input.x);
       if (dir !== this.facing) {
         this.facing = dir;
@@ -821,9 +941,16 @@ export class Player {
     this.updateExtents();
     // The nose tips toward where you push with some momentum, and coasts to a stop at whatever tilt it reached when
     // you let go. In the air it follows the arc of the jump.
+    if (this.tumbling) {
+      this.pitchPivot.rotation.z = this.pitch;
+      return this.animate(dt);
+    }
     let wantPitch = null;
     if (this.airborne) wantPitch = Math.atan2(this.vel.y, Math.abs(this.vel.x) + 0.3);
     else if (pushDir) wantPitch = Math.atan2(pushDir.y, Math.abs(pushDir.x));
+    // After a fall off the ice the sub levels out by itself until it is steered.
+    if (pushDir || this.airborne) this.righting = false;
+    else if (this.righting) wantPitch = 0;
     if (wantPitch === null) {
       this.pitchVel *= Math.exp(-dt * TURN_DRAG);
     } else {
@@ -832,9 +959,18 @@ export class Player {
       const accel = this.airborne ? PITCH_ACCEL * 2 : PITCH_ACCEL;
       this.pitchVel += THREE.MathUtils.clamp(rate - this.pitchVel, -dt * accel, dt * accel);
     }
-    this.pitch = THREE.MathUtils.clamp(this.pitch + this.pitchVel * dt, -MAX_PITCH, MAX_PITCH);
-    if (Math.abs(this.pitch) >= MAX_PITCH) this.pitchVel = 0;
+    // A sub that tipped past the steepest climb on the ice swings back within it on its own.
+    const beyond = Math.abs(this.pitch) > MAX_PITCH;
+    this.pitch += this.pitchVel * dt;
+    if (!beyond && Math.abs(this.pitch) >= MAX_PITCH) {
+      this.pitch = THREE.MathUtils.clamp(this.pitch, -MAX_PITCH, MAX_PITCH);
+      this.pitchVel = 0;
+    }
     this.pitchPivot.rotation.z = this.pitch;
+    this.animate(dt);
+  }
+
+  animate(dt) {
     this.pitchPivot.rotation.x = Math.sin(this.time * 1.7) * 0.03;
     this.rig.position.y = Math.sin(this.time * 2.1) * 0.08;
 
