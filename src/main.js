@@ -189,6 +189,7 @@ function setPixelRatio(r) {
 function setLite(on) {
   lite = on;
   bloom.enabled = !on;
+  world?.setLite(on);
   const size = on ? SHADOW_MAP / 2 : SHADOW_MAP;
   overhead.shadow.mapSize.set(size, size);
   overhead.shadow.map?.dispose();
