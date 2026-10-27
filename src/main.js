@@ -10,7 +10,7 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 
-import { loadModels, warmUp } from './assets.js';
+import { SHADOW_LAYER, loadModels, warmUp } from './assets.js';
 import { SHADER_TIME, WATER } from './surface.js';
 import { setAmbience, setMusic, toggleMute, unlockAudio } from './audio.js';
 import { Effects } from './effects.js';
@@ -65,6 +65,7 @@ overhead.shadow.mapSize.set(SHADOW_MAP, SHADOW_MAP);
 Object.assign(overhead.shadow.camera, { left: -SHADOW_SPAN, right: SHADOW_SPAN, top: SHADOW_SPAN,
   bottom: -SHADOW_SPAN, near: SHADOW_NEAR, far: SHADOW_FAR });
 overhead.shadow.camera.updateProjectionMatrix();
+overhead.shadow.camera.layers.enable(SHADOW_LAYER);
 overhead.shadow.bias = -0.0004;
 overhead.shadow.normalBias = 0.04;
 overhead.shadow.radius = 6;

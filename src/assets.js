@@ -26,6 +26,28 @@ export function castsShadow(material) {
   return !material.transparent && !FINE_DETAIL.test(material.name);
 }
 
+// Creatures swimming far above the floor, whose shadows would land too faint and far off to see.
+const SHADOWLESS = /^(seagull|humpback|sperm_whale|dolphin|marlin|manta)$/;
+
+// Dense scenery casts its shadow from a coarse stand-in that only the shadow camera sees.
+const SHADOW_PROXIES = ['reef_large', 'reef_small', 'coral_staghorn', 'coral_fan', 'coral_brain', 'coral_table',
+  'sponge_cluster'];
+export const SHADOW_LAYER = 1;
+const proxyMaterial = new THREE.MeshBasicMaterial({ name: 'shadow_proxy' });
+const proxies = {};
+
+function mergedPositions(root) {
+  root.updateMatrixWorld(true);
+  const geos = [];
+  root.traverse((o) => {
+    if (!o.isMesh) return;
+    const geo = new THREE.BufferGeometry().setAttribute('position', o.geometry.attributes.position.clone());
+    geo.setIndex(o.geometry.index);
+    geos.push(geo.applyMatrix4(o.matrixWorld));
+  });
+  return mergeGeometries(geos, false);
+}
+
 export async function loadModels(onProgress) {
   const draco = new DRACOLoader().setDecoderPath(`${import.meta.env.BASE_URL}draco/`);
   const loader = new GLTFLoader().setDRACOLoader(draco);
@@ -35,7 +57,7 @@ export async function loadModels(onProgress) {
     gltf.scene.traverse((o) => {
       if (!o.isMesh) return;
       o.material.envMapIntensity = 0.55;
-      o.castShadow = castsShadow(o.material);
+      o.castShadow = castsShadow(o.material) && !SHADOWLESS.test(name) && !SHADOW_PROXIES.includes(name);
       // The sub and its parts are closed shapes, so their front faces alone cast the shadow. That keeps them on the
       // shadow shader everything else already uses, so their first shadow never stalls a frame.
       if (/^(player_|part_)/.test(name)) o.material.shadowSide = THREE.FrontSide;
@@ -44,6 +66,10 @@ export async function loadModels(onProgress) {
     models[name] = gltf.scene;
     clips[name] = gltf.animations;
     onProgress?.(++done / MODEL_NAMES.length);
+  }));
+  await Promise.all(SHADOW_PROXIES.map(async (name) => {
+    const gltf = await loader.loadAsync(`${import.meta.env.BASE_URL}models/shadow/${name}.glb`);
+    proxies[name] = mergedPositions(gltf.scene);
   }));
   draco.dispose();
   addSkullDecals(models);
@@ -129,7 +155,14 @@ export function spawnSkinned(name) {
 }
 
 export function spawn(name) {
-  return models[name].clone(true);
+  const obj = models[name].clone(true);
+  if (proxies[name]) {
+    const proxy = new THREE.Mesh(proxies[name], proxyMaterial);
+    proxy.layers.set(SHADOW_LAYER);
+    proxy.castShadow = true;
+    obj.add(proxy);
+  }
+  return obj;
 }
 
 // Blender suffixes repeated object names (propeller.001), which glTF exports as propeller001.

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { animationsOf, castsShadow, findNode, plainMaterials, spawn, spawnSkinned, tint } from './assets.js';
+import { animationsOf, findNode, plainMaterials, spawn, spawnSkinned, tint } from './assets.js';
 import { sfx } from './audio.js';
 import { CURRENT_MATERIALS, NOISE_GLSL, SHADER_TIME, WHALE_BEND, addTailBeat, addWaterline, addWingFlap } from './surface.js';
 import {
@@ -1680,20 +1680,23 @@ function mergeCluster(pieces) {
         const count = geo.attributes.position.count;
         geo.setAttribute('aBase', new THREE.BufferAttribute(new Float32Array(count).fill(piece.position.y - base), 1));
       }
-      const key = `${o.material.uuid}|${Object.keys(geo.attributes).sort().join(',')}`;
-      if (!buckets.has(key)) buckets.set(key, { material: o.material, order: o.renderOrder, geos: [] });
+      const key = `${o.material.uuid}|${Object.keys(geo.attributes).sort().join(',')}|${o.castShadow}|${o.layers.mask}`;
+      if (!buckets.has(key)) {
+        buckets.set(key, { material: o.material, order: o.renderOrder, cast: o.castShadow, layers: o.layers.mask, geos: [] });
+      }
       buckets.get(key).geos.push(geo);
     });
   }
   const cluster = new THREE.Group();
   cluster.position.y = base;
-  for (const { material, order, geos } of buckets.values()) {
+  for (const { material, order, cast, layers, geos } of buckets.values()) {
     const merged = mergeGeometries(geos, false);
     for (const g of geos) g.dispose();
     if (!merged) continue;
     const mesh = new THREE.Mesh(merged, material);
     mesh.renderOrder = order;
-    mesh.castShadow = castsShadow(material);
+    mesh.castShadow = cast;
+    mesh.layers.mask = layers;
     cluster.add(mesh);
   }
   return cluster;
