@@ -670,6 +670,32 @@ function makeAngler() {
   return fish;
 }
 
+// A wreck's outline in each one-unit slice along x: its highest point and how far it reaches in front and behind.
+function hullSlices(obj) {
+  const slices = new Map();
+  const v = new THREE.Vector3();
+  obj.updateMatrixWorld(true);
+  obj.traverse((o) => {
+    if (!o.isMesh) return;
+    const pos = o.geometry.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      v.fromBufferAttribute(pos, i).applyMatrix4(o.matrixWorld);
+      const k = Math.floor(v.x);
+      const sl = slices.get(k) ?? { top: -Infinity, back: Infinity, front: -Infinity };
+      sl.top = Math.max(sl.top, v.y);
+      sl.back = Math.min(sl.back, v.z);
+      sl.front = Math.max(sl.front, v.z);
+      slices.set(k, sl);
+    }
+  });
+  return slices;
+}
+
+// Room an anglerfish's body needs around the hull.
+const HULL_CLEARANCE = 2.5;
+// The boat draws one anglerfish to it: it noses along the hull just in front, its lure lighting up the rust.
+const SHIP_ANGLER_REACH = 45;
+
 // Anglerfish wander between waypoints near the trench floor and light their lure when the sub comes close.
 // Each lure flash lasts about two seconds: a quick swell, a hold, and a fade back to darkness.
 const FLASH_TIME = 2.2;
@@ -684,6 +710,8 @@ function updateAngler(a, dt, t, cx, sub, world) {
   const u = a.userData;
   const p = a.position;
   u.retarget -= dt;
+  const hull = a === world.anglers[0] && world.vesselSpan;
+  const atShip = hull && p.x > hull[0] - SHIP_ANGLER_REACH && p.x < hull[1] + SHIP_ANGLER_REACH;
   if (!u.target || u.retarget <= 0 || Math.hypot(u.target.x - p.x, u.target.y - p.y) < 1.5) {
     let x = p.x + rand(-14, 14);
     if (floorY(x) > ANGLER_FLOOR) x = p.x - (x - p.x);
@@ -693,10 +721,25 @@ function updateAngler(a, dt, t, cx, sub, world) {
         x += Math.sign(x - other.position.x || 1) * ANGLER_SPACING;
       }
     }
-    if (floorY(x) > ANGLER_FLOOR) x = p.x;
-    u.target = new THREE.Vector2(x, floorY(x) + rand(ANGLER_BAND[0], ANGLER_BAND[1]));
+    if (atShip) {
+      x = THREE.MathUtils.clamp(x, hull[0] + 3, hull[1] - 3);
+      u.shipGap = rand(0.6, 2);
+      u.target = new THREE.Vector2(x, floorY(x) + rand(3.5, 8));
+    } else {
+      if (floorY(x) > ANGLER_FLOOR) x = p.x;
+      u.targetZ = u.homeZ;
+      u.target = new THREE.Vector2(x, world.anglerFloor(p.x, x, u.homeZ) + rand(ANGLER_BAND[0], ANGLER_BAND[1]));
+    }
     u.retarget = rand(5, 11);
   }
+  if (atShip) {
+    // Hug the front of the hull where the fish is, or at the nearer end while it is still swimming up to the boat.
+    const k0 = THREE.MathUtils.clamp(Math.floor(p.x), hull[0], hull[1] - 1);
+    let front = -Infinity;
+    for (let k = k0 - 4; k <= k0 + 4; k++) front = Math.max(front, world.vesselSlices.get(k)?.front ?? -Infinity);
+    u.targetZ = front + HULL_CLEARANCE + (u.shipGap ?? 1);
+  }
+  p.z += (u.targetZ - p.z) * (1 - Math.exp(-dt * 0.4));
   const want = new THREE.Vector2(u.target.x - p.x, u.target.y - p.y);
   const speed = 0.9;
   if (want.lengthSq() > 0.01) want.setLength(speed);
@@ -708,7 +751,11 @@ function updateAngler(a, dt, t, cx, sub, world) {
   }
   u.vel.lerp(want, 1 - Math.exp(-dt * 0.5));
   p.x += u.vel.x * dt;
-  p.y = Math.max(floorY(p.x) + ANGLER_BAND[0] - 1, p.y + u.vel.y * dt + Math.sin(t * 0.6 + u.phase) * 0.08 * dt);
+  p.y = Math.max(world.anglerFloor(p.x, p.x, p.z) + ANGLER_BAND[0] - 1,
+    p.y + u.vel.y * dt + Math.sin(t * 0.6 + u.phase) * 0.08 * dt);
+  // Rise early ahead of the rusted boat's bow or stern, so a fish whose path crosses the hull glides up over it.
+  const clear = world.anglerFloor(p.x, p.x + Math.sign(u.vel.x) * 8, p.z) + ANGLER_BAND[0];
+  if (p.y < clear) p.y += (clear - p.y) * (1 - Math.exp(-dt * 1.5));
   if (Math.abs(u.vel.x) > 0.2) u.facing = Math.sign(u.vel.x);
   u.yaw += ((u.facing > 0 ? 0 : -Math.PI) - u.yaw) * (1 - Math.exp(-dt * 0.8));
   // The whole body swings a little in time with the tail wave, so the swimming reads from the side.
@@ -1813,6 +1860,7 @@ export class World {
     this.anglers = Array.from({ length: 3 }, (_, i) => {
       const a = makeAngler();
       a.position.set(-36 + i * 36 + rand(-5, 5), -200, rand(-20, -4));
+      a.userData.homeZ = a.userData.targetZ = a.position.z;
       a.position.y = floorY(a.position.x) + rand(ANGLER_BAND[0], ANGLER_BAND[1]);
       scene.add(a);
       return a;
@@ -1848,6 +1896,22 @@ export class World {
     hazeCap(this.vessel).value = VESSEL.haze;
     scene.add(this.vessel);
     freeze(this.vessel);
+    this.vesselSlices = hullSlices(this.vessel);
+    const ends = [...this.vesselSlices.keys()];
+    this.vesselSpan = [Math.min(...ends), Math.max(...ends) + 1];
+  }
+
+  // The lowest an anglerfish at depth z may swim anywhere between x0 and x1: the trench floor, or the top of the
+  // rusted boat wherever the fish would otherwise run into the hull.
+  anglerFloor(x0, x1, z) {
+    let top = Math.max(floorY(x0), floorY(x1));
+    if (!this.vesselSlices) return top;
+    const reach = Math.ceil(HULL_CLEARANCE) + 1;
+    for (let k = Math.floor(Math.min(x0, x1)) - reach; k <= Math.floor(Math.max(x0, x1)) + reach; k++) {
+      const sl = this.vesselSlices.get(k);
+      if (sl && z > sl.back - HULL_CLEARANCE && z < sl.front + HULL_CLEARANCE) top = Math.max(top, sl.top);
+    }
+    return top;
   }
 
   setAspect(aspect) {
@@ -2181,7 +2245,7 @@ export class World {
       const wrapped = wrap(a.position.x, cx, 50);
       if (Math.abs(wrapped - a.position.x) > 1) {
         a.position.x = wrapped;
-        a.position.y = floorY(wrapped) + ANGLER_BAND[1] - 2;
+        a.position.y = this.anglerFloor(wrapped, wrapped, a.position.z) + ANGLER_BAND[1] - 2;
         a.userData.target = null;
       }
       const floor = floorY(a.position.x);
