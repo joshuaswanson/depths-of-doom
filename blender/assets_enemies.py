@@ -173,14 +173,6 @@ def enemy_sub(P, name="enemy_sub", length=3.4, radius=0.85, tower=True, skull_ma
                 (nose_x + 0.75 * rn, rn * 1.16)]
         part.extrude(P["enemy_plate"], brow, depth=0.7 * rn, loc=(0, side * 0.4 * rn, 0),
                      rot=(math.pi / 2 + side * 0.35, 0, 0), bevel=0.03)
-    # Swept-back hydroplanes low on the flanks, like a shark's pectoral fins.
-    # Rooted on the hull surface itself, a little below the waterline of the flank.
-    for side in (-1, 1):
-        x0 = -h * 0.42
-        root_at = b.point(x0 + 0.35 * radius, (math.pi if side > 0 else 0) - math.radians(18), -0.03)
-        fin = [(x0, 0), (x0 + 0.85 * radius, 0.75 * radius), (x0 + 1.05 * radius, 0.68 * radius), (x0 + 0.7 * radius, 0)]
-        part.extrude(P["gunmetal"], [(x, y * side) for x, y in fin], depth=0.07 * radius,
-                     loc=(0, root_at.y, root_at.z), rot=(0.18 * side, 0, 0), bevel=0.02)
 
     k = radius / 0.85
     seam(part, P["enemy_plate"], b, -h * 0.62, h * 0.7, -math.pi / 2, radius=0.016 * k, rivets=14,
