@@ -131,6 +131,26 @@ const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.35, 0.4, 1.4);
 // The glow is soft enough to compute at a quarter of the screen's resolution.
 const bloomSetSize = bloom.setSize.bind(bloom);
 bloom.setSize = (w, h) => bloomSetSize(Math.max(1, w / 2), Math.max(1, h / 2));
+// Each pixel of the bright pass covers a 4x4 block of the screen. Thresholding each 2x2 quarter of the block, and not
+// only its middle, keeps a small bright speck gliding between pixels from switching the glow, spread across the whole
+// screen, on and off.
+bloom.materialHighPassFilter.fragmentShader = /* glsl */ `
+  uniform sampler2D tDiffuse;
+  uniform vec3 defaultColor;
+  uniform float defaultOpacity;
+  uniform float luminosityThreshold;
+  uniform float smoothWidth;
+  varying vec2 vUv;
+  vec4 bright( vec2 uv ) {
+    vec4 texel = texture2D( tDiffuse, uv );
+    float v = smoothstep( luminosityThreshold, luminosityThreshold + smoothWidth, luminance( texel.rgb ) );
+    return mix( vec4( defaultColor, defaultOpacity ), texel, v );
+  }
+  void main() {
+    vec2 step = 1.0 / vec2( textureSize( tDiffuse, 0 ) );
+    gl_FragColor = 0.25 * ( bright( vUv + step * vec2( -1.0, -1.0 ) ) + bright( vUv + step * vec2( 1.0, -1.0 ) )
+      + bright( vUv + step * vec2( -1.0, 1.0 ) ) + bright( vUv + step * vec2( 1.0, 1.0 ) ) );
+  }`;
 composer.addPass(bloom);
 composer.addPass(new OutputPass());
 // Smooths the stair-stepped edges, which otherwise crawl as anything moves, most visibly against the dark deep water.
