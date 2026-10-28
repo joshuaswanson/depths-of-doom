@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { SURFACE_Y } from './water.js';
 
 // Smooth 3D gradient noise, -1 to 1.
 const PERM = new Uint8Array(512);
@@ -335,6 +336,7 @@ export function iceMaterial({ name = 'ice', bob = false, snow = false } = {}) {
         varying vec3 vAxisX;
         varying vec3 vAxisY;
         varying vec3 vAxisZ;
+        varying float vIceHeight;
         ${bob ? 'attribute vec4 aPlate;\nuniform float uIceTime;' : ''}`)
       .replace('#include <begin_vertex>', /* glsl */ `#include <begin_vertex>
         vIcePos = position;
@@ -350,7 +352,13 @@ export function iceMaterial({ name = 'ice', bob = false, snow = false } = {}) {
         #endif
         vAxisX = normalize( normalMatrix * ( iceBasis * vec3( 1.0, 0.0, 0.0 ) ) );
         vAxisY = normalize( normalMatrix * ( iceBasis * vec3( 0.0, 1.0, 0.0 ) ) );
-        vAxisZ = normalize( normalMatrix * ( iceBasis * vec3( 0.0, 0.0, 1.0 ) ) );`);
+        vAxisZ = normalize( normalMatrix * ( iceBasis * vec3( 0.0, 0.0, 1.0 ) ) );
+        // Height above the sea, so a piece thrown clear of the water dries off and one tipped under it turns glassy.
+        vec4 iceWorld = vec4( transformed, 1.0 );
+        #ifdef USE_INSTANCING
+          iceWorld = instanceMatrix * iceWorld;
+        #endif
+        vIceHeight = ( modelMatrix * iceWorld ).y - ${SURFACE_Y.toFixed(2)};`);
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', /* glsl */ `#include <common>
         uniform sampler2D uSoftAlbedo;
@@ -362,13 +370,14 @@ export function iceMaterial({ name = 'ice', bob = false, snow = false } = {}) {
         varying vec3 vAxisX;
         varying vec3 vAxisY;
         varying vec3 vAxisZ;
+        varying float vIceHeight;
         vec3 iceGlow;`)
       .replace('#include <normal_fragment_maps>', /* glsl */ `#include <normal_fragment_maps>
         {
           vec3 n0 = normalize( vIceNormal );
           vec3 w = pow( abs( n0 ), vec3( 6.0 ) );
           w /= w.x + w.y + w.z;
-          float h = vIcePos.y;
+          float h = vIceHeight;
           float above = smoothstep( -0.15, 0.15, h );
           // Walls take the wind-streaked snow, running up and down them; tops take the soft snow.
           vec2 uvX = vec2( vIcePos.z, vIcePos.y * 0.6 ) * 0.22;
