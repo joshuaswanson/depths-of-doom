@@ -1298,10 +1298,16 @@ function makeSpermWhale() {
     const parentQ = bone.parent.getWorldQuaternion(new THREE.Quaternion()).invert();
     return { bone, rest: bone.quaternion.clone(), axis: lateral.clone().applyQuaternion(parentQ).normalize(), bend: SPERM_BEND[i] };
   });
+  // Points along the body from head to flukes, where a spotlight beam can pick the whale out.
+  const box = new THREE.Box3().setFromObject(body);
+  const mid = box.getCenter(new THREE.Vector3());
+  const marks = [0.1, 0.3, 0.5, 0.7, 0.9].map((f) => new THREE.Vector3(THREE.MathUtils.lerp(box.min.x, box.max.x, f), mid.y, mid.z));
   holder.visible = false;
-  holder.userData = { spine, haze: hazeCap(body), active: false, wait: 20, t: 0, swing: new THREE.Quaternion() };
+  holder.userData = { spine, marks, haze: hazeCap(body), active: false, wait: 20, t: 0, swing: new THREE.Quaternion() };
   return holder;
 }
+
+const markAt = new THREE.Vector3();
 
 function strokeSpermWhale(u, time) {
   u.spine.forEach((j, i) => {
@@ -1311,7 +1317,7 @@ function strokeSpermWhale(u, time) {
   });
 }
 
-function updateSpermWhale(whale, dt, cx, cy, humpback, aspect) {
+function updateSpermWhale(whale, dt, cx, cy, humpback, aspect, world) {
   const u = whale.userData;
   if (!u.active) {
     whale.visible = false;
@@ -1372,7 +1378,10 @@ function updateSpermWhale(whale, dt, cx, cy, humpback, aspect) {
   const hide = Math.max(sunk, nearFloor, u.wall > 0.98 ? 1 : u.wall, old);
   u.haze.value = THREE.MathUtils.lerp(1, 0.5, arrive * (1 - hide));
   whale.visible = u.haze.value < 0.995;
-  if (u.haze.value < 0.75 && Math.abs(p.x - cx) < halfWidthAt(p.z, aspect)) unlock('sperm_whale');
+  if (u.haze.value < 0.75 && world.spotCones.length) {
+    whale.updateMatrixWorld();
+    if (u.marks.some((m) => world.inSpotlight(whale.localToWorld(markAt.copy(m))))) unlock('sperm_whale');
+  }
   if ((u.t > 2 && hide > 0.99) || Math.abs(p.x - cx) > 130) {
     u.active = false;
     u.wall = 0;
@@ -2420,7 +2429,7 @@ export class World {
     const submerged = !hull || hull.top < SURFACE_Y;
     sfx.whaleHeard(submerged);
     updateWhale(this.whale, dt, this.time, cx, cy, this.aspect, (this.calm ?? true) && submerged);
-    updateSpermWhale(this.spermWhale, dt, cx, cy, this.whale, this.aspect);
+    updateSpermWhale(this.spermWhale, dt, cx, cy, this.whale, this.aspect, this);
     updateWhaleShark(this.whaleShark, dt, this.time, cx, cy, this.aspect);
     updateDolphins(this, dt, this.time, cx, cy, halfWidthAt(-10, this.aspect), sub);
     updateMarlin(this.marlin, dt, this.time, cx, cy, halfWidthAt(-18, this.aspect), sub);

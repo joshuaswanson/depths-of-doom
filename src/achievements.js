@@ -14,7 +14,7 @@ export const ACHIEVEMENTS = [
   { id: 'grapple_kill', name: 'Get Over Here', desc: 'Sink an enemy sub with the grapple claw.' },
   { id: 'dazzle', name: 'Lights Out', desc: 'Dazzle an enemy with your spotlight.' },
   { id: 'whale_song', name: 'Whale Song', desc: 'Hear the humpback sing.' },
-  { id: 'sperm_whale', name: 'Something Big', desc: 'Spot the sperm whale down in a trench.' },
+  { id: 'sperm_whale', name: 'Something Big', desc: 'Light up the sperm whale down in a trench with your spotlight.' },
   { id: 'whale_shark', name: 'Gentle Giant', desc: 'Spot the whale shark cruising the open ocean.' },
   { id: 'shipwreck', name: 'Shipwrecked', desc: 'Light up the rusted fishing boat on a trench floor with your spotlight.' },
   { id: 'angler', name: 'Lure-d In', desc: 'Swim up to an anglerfish as its lure flashes.' },
