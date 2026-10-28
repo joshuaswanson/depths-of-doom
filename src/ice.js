@@ -424,7 +424,7 @@ export function iceMaterial({ name = 'ice', bob = false, snow = false } = {}) {
           float deep = clamp( -h / 10.0, 0.0, 1.0 );
           // Below the water there is no snow, only bare glassy ice: clear blue near the surface, darkening down the
           // keel, with faint streaks of trapped bubbles.
-          vec3 under = mix( vec3( 0.3, 0.68, 0.8 ), vec3( 0.03, 0.16, 0.25 ), sqrt( deep ) );
+          vec3 under = mix( vec3( 0.32, 0.78, 0.86 ), vec3( 0.04, 0.2, 0.28 ), sqrt( deep ) );
           under *= 0.9 + 0.2 * smoothstep( 0.55, 0.9, texture2D( uWindAlbedo, vIcePos.xy * 0.05 ).r );
           // Faces turned up to the light from the surface glow; overhangs and undersides fall into deep shadow.
           under *= mix( 0.45, 1.1, smoothstep( -0.8, 0.7, n.y ) );
@@ -438,7 +438,7 @@ export function iceMaterial({ name = 'ice', bob = false, snow = false } = {}) {
           // Daylight soaking down through the ice from above: bright just under the surface and gone a few strides
           // down. Thin ice lets it all the way through, so the undersides of floes glow.
           float through = exp( min( h, 0.0 ) / 2.2 ) * ( 1.0 - above );
-          iceGlow += vec3( 0.05, 0.3, 0.4 ) * through * ( 0.6 + 0.4 * rim );
+          iceGlow += vec3( 0.06, 0.38, 0.46 ) * through * ( 0.6 + 0.4 * rim );
           iceGlow += vec3( 0.12, 0.4, 0.46 ) * through * through * smoothstep( 0.2, -0.8, n.y );
           // Below the water the bare ice is glass: looked into face on it shows its deep clear blue-green, and toward
           // its edges it mirrors the bright water and the light above, with sharp glints off every smooth hollow.
