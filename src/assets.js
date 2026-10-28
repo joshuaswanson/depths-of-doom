@@ -61,7 +61,15 @@ export async function loadModels(onProgress) {
       // shadow shader everything else already uses, so their first shadow never stalls a frame.
       if (/^(player_|part_)/.test(name)) o.material.shadowSide = THREE.FrontSide;
     });
-    applySurfaceDetail(gltf.scene);
+    // Coins are freshly minted gold, free of the scratches and grime worn into the subs' metal. Less of a mirror than
+    // the subs' gold, their rims catch the light where a mirror would show the dark water.
+    if (name === 'pickup_coin') {
+      gltf.scene.traverse((o) => {
+        if (o.isMesh) Object.assign(o.material, { metalness: 0.6, roughness: 0.3 });
+      });
+    } else {
+      applySurfaceDetail(gltf.scene);
+    }
     models[name] = gltf.scene;
     clips[name] = gltf.animations;
     onProgress?.(++done / MODEL_NAMES.length);
