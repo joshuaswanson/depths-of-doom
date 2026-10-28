@@ -266,7 +266,15 @@ def paw(name, phase):
     swing = SWING[name]
     x = centre - reach / 2 + reach * sample(swing["ease"], p)
     lift = sample(swing["lift"], p) * (g["top"].z - GROUND)
-    pitch = 0.3 * (1 - p) ** 2 - 0.12 * math.sin(math.pi * p)
+    # Lifted, the paw hangs limp from the wrist or ankle, the fore paws furthest, then swings out flat to land, toes
+    # tipping up just before they touch.
+    droop = (0.7 if g["hind"] else 1.2) * math.sin(math.pi * min(1.0, p / 0.8)) ** 1.3
+    pitch = 0.3 * (1 - p) ** 2 + droop - 0.1 * math.sin(math.pi * max(0.0, (p - 0.8) / 0.2))
+    # The wrist rises high enough for the hanging toes to clear the snow.
+    foot = g["toe"] - g["ankle"]
+    rest = math.asin((g["ankle"].z - g["toe"].z) / foot.length)
+    toes = foot.length * math.sin(min(math.pi / 2, rest + pitch)) - (g["ankle"].z - GROUND - 0.01)
+    lift = max(lift, toes + 0.006 * min(1.0, (1 - p) * 5))
     return Vector((x, 0, lift)), pitch
 
 
