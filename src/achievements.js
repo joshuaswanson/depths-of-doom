@@ -16,7 +16,7 @@ export const ACHIEVEMENTS = [
   { id: 'whale_song', name: 'Whale Song', desc: 'Hear the humpback sing.' },
   { id: 'sperm_whale', name: 'Something Big', desc: 'Spot the sperm whale down in a trench.' },
   { id: 'whale_shark', name: 'Gentle Giant', desc: 'Spot the whale shark cruising the open ocean.' },
-  { id: 'shipwreck', name: 'Shipwrecked', desc: 'Find the rusted fishing boat on a trench floor.' },
+  { id: 'shipwreck', name: 'Shipwrecked', desc: 'Light up the rusted fishing boat on a trench floor with your spotlight.' },
   { id: 'angler', name: 'Lure-d In', desc: 'Swim up to an anglerfish as its lure flashes.' },
   { id: 'gulls', name: 'Gull-ible', desc: 'Send the seagulls flying.' },
   { id: 'flying_sub', name: 'Flying Sub', desc: 'Launch clear out of the water.' },

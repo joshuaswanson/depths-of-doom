@@ -2115,6 +2115,13 @@ export class World {
     this.vesselSlices = hullSlices(this.vessel);
     const ends = [...this.vesselSlices.keys()];
     this.vesselSpan = [Math.min(...ends), Math.max(...ends) + 1];
+    // Points along the hull, on its deck line and halfway down its side, that a spotlight beam can pick out.
+    this.vesselPoints = [];
+    for (const [k, sl] of this.vesselSlices) {
+      if (k % 2) continue;
+      const floor = seabedAt(k + 0.5, VESSEL.z);
+      this.vesselPoints.push({ x: k + 0.5, y: sl.top - 1 }, { x: k + 0.5, y: (sl.top + floor) / 2 });
+    }
   }
 
   // Whether a point lies inside one of the sub's spotlight beams, as worked out at the start of this frame.
@@ -2136,8 +2143,7 @@ export class World {
     }
     const floor = floorY(c.x);
     if (floor < ANGLER_FLOOR && c.y - hull.extents.hy - seabedAt(c.x) < 1.5) unlock('abyss');
-    const span = this.vesselSpan;
-    if (span && c.x > span[0] - 5 && c.x < span[1] + 5 && c.y < floor + 40) unlock('shipwreck');
+    if (this.vesselPoints?.some((p) => this.inSpotlight(p))) unlock('shipwreck');
   }
 
   // The lowest an anglerfish at depth z may swim anywhere between x0 and x1: the trench floor, or the top of the
