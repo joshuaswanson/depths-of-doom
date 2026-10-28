@@ -1,5 +1,6 @@
 import { ACHIEVEMENTS, isUnlocked, unlockedCount } from './achievements.js';
 import { UPGRADES, upgradeCost } from './upgrades.js';
+import { touchScreen } from './touch.js';
 
 const ICON = (name) => `${import.meta.env.BASE_URL}icons/${name}.webp`;
 const LOGO = `<div class="logo-wrap"><img class="logo-img" src="${import.meta.env.BASE_URL}logo.webp" alt="Depths of Doom">
@@ -42,7 +43,7 @@ function el(tag, cls, html) {
 }
 
 export class Hud {
-  constructor(root, { onBuy, onStart, onResume, onPause, onHost, onJoin }) {
+  constructor(root, { onBuy, onStart, onResume, onPause, onHost, onJoin, onMute, muted }) {
     this.root = root;
     this.onBuy = onBuy;
 
@@ -107,8 +108,11 @@ export class Hud {
     this.onHost = onHost;
     this.onJoin = onJoin;
     this.onResume = onResume;
+    this.onMute = onMute;
+    this.muted = muted;
     this.room = el('div', 'room-code');
-    root.append(this.room);
+    this.rotateNote = el('div', 'rotate-note', `<div class="rotate-phone"></div>Turn your phone sideways to dive`);
+    root.append(this.room, this.rotateNote);
     this.lastPips = '';
   }
 
@@ -203,8 +207,17 @@ export class Hud {
   showPause() {
     this.overlay.className = 'overlay show';
     this.overlay.innerHTML = `<div class="panel"><div class="logo small">Paused</div>
-      <button class="big-btn">Resume</button></div>`;
+      <button class="big-btn">Resume</button><div><button class="coop-btn sound-btn"></button></div></div>`;
     this.overlay.querySelector('.big-btn').addEventListener('click', () => this.onResume());
+    const sound = this.overlay.querySelector('.sound-btn');
+    const label = () => {
+      sound.textContent = this.muted() ? 'Sound: off' : 'Sound: on';
+    };
+    label();
+    sound.addEventListener('click', () => {
+      this.onMute();
+      label();
+    });
   }
 
   hideOverlay() {
@@ -226,7 +239,8 @@ export class Hud {
   // The controls, shown to the right of the sub at the start of the first dive until it first moves.
   showControlHints() {
     this.hints?.remove();
-    this.hints = el('div', 'hints', `<div class="hint">
+    this.hints = el('div', 'hints', touchScreen ? `<div class="hint"><div class="hint-swim">
+        <div class="hint-stick"><i></i></div><div class="hint-label">drag anywhere to swim</div></div></div>` : `<div class="hint">
         <div class="hint-swim"><div class="hint-keys">${keyCluster('W', 'A', 'S', 'D')}<span class="hint-or">or</span>
         ${keyCluster('&uarr;', '&larr;', '&darr;', '&rarr;')}</div><div class="hint-label">swim</div></div>
         <div class="hint-more"><div><kbd>P</kbd> pause</div><div><kbd>M</kbd> mute</div></div></div>`);

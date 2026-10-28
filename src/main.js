@@ -1,3 +1,4 @@
+import './style.css';
 import '@fontsource/fredoka/400.css';
 import '@fontsource/fredoka/500.css';
 import '@fontsource/fredoka/600.css';
@@ -14,7 +15,7 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 import { ACHIEVEMENT_REWARD, onUnlock, setActive, unlock } from './achievements.js';
 import { SHADOW_LAYER, loadModels, warmUp } from './assets.js';
 import { SHADER_TIME, WATER } from './surface.js';
-import { setAmbience, setMusic, sfx, toggleMute, unlockAudio } from './audio.js';
+import { isMuted, setAmbience, setMusic, sfx, toggleMute, unlockAudio } from './audio.js';
 import { Effects } from './effects.js';
 import { Game } from './game.js';
 import { Hud } from './hud.js';
@@ -23,6 +24,7 @@ import { Player } from './player.js';
 import {
   CAMERA_FOV, CAMERA_Z, SHADOW_FAR, SHADOW_NEAR, SHADOW_SPAN, SURFACE_Y, installLightSkips, installWaterFog,
 } from './water.js';
+import { TouchStick, touchScreen } from './touch.js';
 import { World } from './world.js';
 
 installWaterFog();
@@ -32,7 +34,8 @@ WATER.surface.value = SURFACE_Y;
 const canvas = document.getElementById('game');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
 const MAX_PIXEL_RATIO = Math.min(window.devicePixelRatio, 1.5);
-const MIN_PIXEL_RATIO = Math.min(1, MAX_PIXEL_RATIO);
+// Phone graphics chips are far slower, so there the picture may soften below 1:1 to keep the frame rate up.
+const MIN_PIXEL_RATIO = Math.min(touchScreen ? 0.6 : 1, MAX_PIXEL_RATIO);
 let pixelRatio = MAX_PIXEL_RATIO;
 renderer.setPixelRatio(pixelRatio);
 renderer.toneMapping = THREE.NeutralToneMapping;
@@ -171,6 +174,8 @@ const hud = new Hud(hudRoot, {
   onPause: () => {
     if (state === 'playing' && !net) pause();
   },
+  onMute: () => toggleMute(),
+  muted: () => isMuted(),
 });
 hud.showLoading(0);
 
@@ -191,12 +196,24 @@ window.addEventListener('keydown', (e) => {
   if ((e.code === 'Enter' || e.code === 'Space') && (state === 'title' || state === 'gameover')) startGame();
 });
 window.addEventListener('keyup', (e) => keys.delete(e.code));
-window.addEventListener('blur', () => {
+const stick = new TouchStick(canvas, hudRoot);
+// Leaving the page, or turning a phone upright where the game asks to be turned back, stops the dive.
+function pauseIfAway() {
   keys.clear();
+  stick.release();
   if (state === 'playing' && !net) pause();
+}
+window.addEventListener('blur', pauseIfAway);
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) pauseIfAway();
+});
+const upright = matchMedia('(orientation: portrait)');
+upright.addEventListener('change', () => {
+  if (touchScreen && upright.matches) pauseIfAway();
 });
 
 function readInput() {
+  if (stick.active) return stick.vector;
   const x = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0);
   const y = (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0) - (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0);
   return { x, y };
@@ -298,6 +315,8 @@ function startCoop(connect) {
 let hintsShown = false;
 function startGame() {
   unlockAudio();
+  // Phone browsers that allow it hide their address bar and buttons for the dive.
+  if (touchScreen && !document.fullscreenElement) document.documentElement.requestFullscreen?.().catch(() => {});
   game.reset();
   state = 'playing';
   hud.hideOverlay();

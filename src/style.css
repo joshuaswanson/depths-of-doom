@@ -17,13 +17,16 @@ html, body {
   color: #fff;
   user-select: none;
   -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
-#app { position: fixed; inset: 0; }
+/* Fingers steer the sub and press buttons; the page itself never scrolls or zooms. */
+#app { position: fixed; inset: 0; touch-action: none; }
 #game { display: block; width: 100%; height: 100%; }
 #hud { position: absolute; inset: 0; pointer-events: none; }
 #hud > * { transition: opacity 0.4s; }
-#hud:not(.playing) > :not(.overlay):not(.ach-pops) { opacity: 0; }
+#hud:not(.playing) > :not(.overlay):not(.ach-pops):not(.rotate-note) { opacity: 0; }
 
 .hud-topleft {
   position: absolute;
@@ -262,6 +265,87 @@ html, body {
   text-shadow: 0 0.2vw 0 #0d1d33;
 }
 .hint-swim { text-align: center; }
+.hint-stick {
+  position: relative;
+  width: 7vw;
+  height: 7vw;
+  margin: 0 auto;
+  border: 0.25vw solid rgba(255, 255, 255, 0.8);
+  border-radius: 50%;
+  background: rgba(13, 29, 51, 0.35);
+}
+.hint-stick i {
+  position: absolute;
+  inset: 30%;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 0 0.2vw #0d1d33;
+  animation: hint-drag 2.4s ease-in-out infinite;
+}
+@keyframes hint-drag {
+  0%, 100% { transform: translate(0, 0); }
+  25% { transform: translate(90%, -40%); }
+  50% { transform: translate(0, 0); }
+  75% { transform: translate(-90%, 40%); }
+}
+
+.stick {
+  position: absolute;
+  z-index: 3;
+  width: 24vmin;
+  height: 24vmin;
+  margin: -12vmin 0 0 -12vmin;
+  border: 0.6vmin solid rgba(255, 255, 255, 0.7);
+  border-radius: 50%;
+  background: rgba(13, 29, 51, 0.4);
+  box-shadow: 0 0 0 0.3vmin rgba(13, 29, 51, 0.5);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.stick.show { opacity: 1; }
+.stick i {
+  position: absolute;
+  inset: 30%;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.75);
+  box-shadow: 0 0.5vmin 1.5vmin rgba(0, 0, 0, 0.35);
+}
+
+.rotate-note {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5vh;
+  padding: 0 10vw;
+  font-size: clamp(18px, 6vw, 30px);
+  font-weight: 600;
+  text-align: center;
+  text-wrap: balance;
+  color: #cdeeff;
+  background: radial-gradient(ellipse at center, #0b3a5c, #04121f);
+  pointer-events: auto;
+}
+.rotate-phone {
+  width: 18vw;
+  height: 30vw;
+  border: 1.6vw solid #cdeeff;
+  border-radius: 3vw;
+  animation: rotate-phone 2.4s ease-in-out infinite;
+}
+@keyframes rotate-phone {
+  0%, 20% { transform: rotate(0); }
+  50%, 80% { transform: rotate(-90deg); }
+  100% { transform: rotate(0); }
+}
+@media (orientation: portrait) and (pointer: coarse) {
+  .rotate-note { display: flex; }
+}
+
 .hint-more { display: grid; gap: 0.8vh; }
 .hint-keys { display: flex; align-items: center; gap: 0.9vw; }
 .hint-or { font-size: 1.1vw; color: #cfe6f7; }
@@ -368,7 +452,7 @@ html, body {
   box-shadow: inset 0 0.1vw 0 rgba(255, 255, 255, 0.5);
 }
 .slot .price img { width: 1.1vw; min-width: 11px; }
-.slot:hover { transform: translateY(-0.4vh); }
+@media (hover: hover) { .slot:hover { transform: translateY(-0.4vh); } }
 
 .slot.affordable .port {
   background: radial-gradient(circle at 40% 35%, #3f9bd6, #0e3d63 70%);
@@ -406,7 +490,7 @@ html, body {
   gap: 0.2vw;
   pointer-events: none;
 }
-.slot:hover .tip { display: flex; }
+@media (hover: hover) { .slot:hover .tip { display: flex; } }
 .slot .tip b { font-size: 1.1vw; }
 .slot .tip .blurb { color: #bcd3f0; }
 .slot .tip .cost { color: var(--gold); font-weight: 600; }
@@ -551,18 +635,6 @@ kbd {
   100% { opacity: 0; transform: translateY(-2vh); }
 }
 @keyframes bob { 50% { transform: translateY(-1vh) rotate(-1deg); } }
-
-.blocked { background: radial-gradient(ellipse at center, #0b3a5c, #04121f); }
-.blocked .logo-img { width: min(86vw, 560px); }
-.blocked-note {
-  margin: 4vh auto 0;
-  max-width: 80vw;
-  font-size: clamp(18px, 5vw, 28px);
-  font-weight: 600;
-  line-height: 1.35;
-  color: #cdeeff;
-  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.4);
-}
 
 .coop-panel {
   margin: 3vh auto 0;
@@ -725,6 +797,7 @@ kbd {
   margin-top: 1.4vh;
   width: 100%;
   overflow-y: auto;
+  touch-action: pan-y;
 }
 .ach-group h3 {
   margin: 1.4vh 0 0.8vh;
@@ -834,3 +907,9 @@ kbd {
   100% { opacity: 0; transform: translateY(-1vh); }
 }
 
+/* A phone held sideways is short, so the logo shrinks to leave room for the buttons under it. */
+@media (pointer: coarse) {
+  .logo-img { width: min(52vw, 760px, 75vh); }
+  .badge { margin-top: max(-3.3vw, -4.75vh); }
+  .badge img { width: min(36vw, 540px, 52vh); }
+}

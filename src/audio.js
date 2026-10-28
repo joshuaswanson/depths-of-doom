@@ -26,6 +26,10 @@ export function unlockAudio() {
   if (ctx.state === 'suspended') ctx.resume();
 }
 
+export function isMuted() {
+  return muted;
+}
+
 export function toggleMute() {
   muted = !muted;
   if (master) master.gain.value = muted ? 0 : 0.35;
