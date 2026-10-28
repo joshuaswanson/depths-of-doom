@@ -308,8 +308,9 @@ function iceTexture(name) {
 let textures = null;
 
 // Ice that looks like ice, from photographed snow (Poly Haven, CC0): soft packed snow on whatever faces up,
-// wind-streaked snow on the walls, pale blue in the shaded hollows. Below the waterline it is smooth, wet,
-// translucent ice, pale aqua near the surface and deepening to teal, glowing faintly where light passes through.
+// wind-streaked snow on the walls, pale blue in the shaded hollows. Below the waterline it is clear glacial ice,
+// dimpled all over with the scallops that melting carves into it. The overcast daylight comes down through it, so it
+// glows blue near the surface and thin ice glows from beneath, while the deep keels fade into dark blue.
 // Everything is worked out from the surface's own position and facing, so it needs no UVs and stays put on ice that
 // moves. `bob` makes each piece of a merged field of pack ice rock on the swell on its own; `snow` makes the whole
 // surface packed snow.
@@ -361,7 +362,36 @@ export function iceMaterial({ name = 'ice', bob = false, snow = false } = {}) {
         varying vec3 vAxisX;
         varying vec3 vAxisY;
         varying vec3 vAxisZ;
-        vec3 iceGlow;`)
+        vec3 iceGlow;
+        vec3 scallopHash( vec3 p ) {
+          p = fract( p * vec3( 0.1031, 0.1030, 0.0973 ) );
+          p += dot( p, p.yxz + 33.33 );
+          return fract( ( p.xxy + p.yxx ) * p.zyx );
+        }
+        // Melt scallops: shallow dishes packed edge to edge, each tilting the surface toward its own middle, with
+        // sharp ridges where neighbours meet. Returns the tilt across the surface.
+        // Each dish's middle keeps to the central half of its cell, so the nearest lies among the eight cells
+        // around the point.
+        vec3 scallops( vec3 p, vec3 n ) {
+          vec3 i = floor( p - 0.5 );
+          vec3 f = p - i;
+          float best = 8.0;
+          vec3 toMiddle = vec3( 0.0 );
+          for ( int z = 0; z <= 1; z++ ) {
+            for ( int y = 0; y <= 1; y++ ) {
+              for ( int x = 0; x <= 1; x++ ) {
+                vec3 g = vec3( float( x ), float( y ), float( z ) );
+                vec3 r = g + 0.25 + 0.5 * scallopHash( i + g ) - f;
+                float d = dot( r, r );
+                if ( d < best ) {
+                  best = d;
+                  toMiddle = r;
+                }
+              }
+            }
+          }
+          return toMiddle - n * dot( toMiddle, n );
+        }`)
       .replace('#include <normal_fragment_maps>', /* glsl */ `#include <normal_fragment_maps>
         {
           vec3 n0 = normalize( vIceNormal );
@@ -385,7 +415,12 @@ export function iceMaterial({ name = 'ice', bob = false, snow = false } = {}) {
           vec2 bz = texture2D( uSoftNormal, big.xy ).rg * 2.0 - 1.0;
           vec3 fine = vec3( 0.0, dx.y, dx.x ) * w.x + vec3( dy.x, 0.0, dy.y ) * w.y + vec3( dz.x, dz.y, 0.0 ) * w.z;
           vec3 broad = vec3( 0.0, bx.y, bx.x ) * w.x + vec3( by.x, 0.0, by.y ) * w.y + vec3( bz.x, bz.y, 0.0 ) * w.z;
-          vec3 n = normalize( n0 + fine * mix( 0.04, 1.0, above ) + broad * mix( 1.3, 0.3, above ) );
+          vec3 n = n0 + fine * mix( 0.04, 1.0, above ) + broad * mix( 0.7, 0.3, above );
+          // Scallops a stride or two across, faded out where they would shrink below a few pixels.
+          float scallopSize = 1.5;
+          float scallopFade = ( 1.0 - above ) * ( 1.0 - smoothstep( 0.08, 0.25, length( fwidth( vIcePos ) ) / scallopSize ) );
+          if ( scallopFade > 0.0 ) n += scallops( vIcePos / scallopSize, n0 ) * 0.32 * scallopFade;
+          n = normalize( n );
           normal = normalize( n.x * vAxisX + n.y * vAxisY + n.z * vAxisZ );
           #ifdef DOUBLE_SIDED
             normal *= faceDirection;
@@ -398,27 +433,33 @@ export function iceMaterial({ name = 'ice', bob = false, snow = false } = {}) {
           vec3 snowColor = mix( vec3( 0.66, 0.74, 0.8 ), vec3( 0.86, 0.9, 0.93 ), lum );
           // Kept below full white, so sunlit snow stays clear of the bloom threshold.
           vec3 top = mix( wall, snowColor, snowy ) * 0.7;
-          float deep = clamp( -h / 12.0, 0.0, 1.0 );
-          // Below the water there is no snow, only bare glassy ice: pale turquoise near the surface, deepening down the
+          float deep = clamp( -h / 10.0, 0.0, 1.0 );
+          // Below the water there is no snow, only bare glassy ice: clear blue near the surface, darkening down the
           // keel, with faint streaks of trapped bubbles.
-          vec3 under = mix( vec3( 0.45, 0.86, 0.84 ), vec3( 0.08, 0.42, 0.46 ), sqrt( deep ) );
+          vec3 under = mix( vec3( 0.3, 0.68, 0.8 ), vec3( 0.03, 0.16, 0.25 ), sqrt( deep ) );
           under *= 0.9 + 0.2 * smoothstep( 0.55, 0.9, texture2D( uWindAlbedo, vIcePos.xy * 0.05 ).r );
           // Faces turned up to the light from the surface glow; overhangs and undersides fall into deep shadow.
-          under *= mix( 0.45, 1.15, smoothstep( -0.8, 0.7, n.y ) );
+          under *= mix( 0.45, 1.1, smoothstep( -0.8, 0.7, n.y ) );
           diffuseColor.rgb = mix( under, top, above );
           roughnessFactor = mix( 0.04, mix( 0.55, 0.9, snowy ), above );
           // Light scattering through the ice: strongest at grazing angles and in the clear ice under the water.
           vec3 toEye = normalize( vViewPosition );
           float facing = abs( dot( normal, toEye ) );
           float rim = 1.0 - facing;
-          iceGlow = vec3( 0.04, 0.32, 0.32 ) * ( 0.3 + 0.9 * rim * rim * rim ) * ( 1.0 - deep * 0.7 ) * ( 1.0 - above );
+          iceGlow = vec3( 0.03, 0.24, 0.3 ) * ( 0.3 + 0.9 * rim * rim * rim ) * ( 1.0 - deep * 0.85 ) * ( 1.0 - above );
+          // Daylight soaking down through the ice from above: bright just under the surface and gone a few strides
+          // down. Thin ice lets it all the way through, so the undersides of floes glow.
+          float through = exp( min( h, 0.0 ) / 2.2 ) * ( 1.0 - above );
+          iceGlow += vec3( 0.05, 0.3, 0.4 ) * through * ( 0.6 + 0.4 * rim );
+          iceGlow += vec3( 0.12, 0.4, 0.46 ) * through * through * smoothstep( 0.2, -0.8, n.y );
           // Below the water the bare ice is glass: looked into face on it shows its deep clear blue-green, and toward
           // its edges it mirrors the bright water and the light above, with sharp glints off every smooth hollow.
           vec3 mirror = ( vec4( reflect( -toEye, normal ), 0.0 ) * viewMatrix ).xyz;
           float fresnel = 0.06 + 0.94 * pow( rim, 4.0 );
-          vec3 sky = mix( vec3( 0.02, 0.16, 0.18 ), vec3( 0.55, 0.95, 0.95 ), smoothstep( -0.3, 0.9, mirror.y ) );
-          float glint = pow( max( mirror.y, 0.0 ), 60.0 ) * 1.4;
-          float glassy = ( 1.0 - above ) * ( 1.0 - deep * 0.6 );
+          // The overcast lights the water from everywhere above, so reflections are soft, with no hard glare.
+          vec3 sky = mix( vec3( 0.01, 0.09, 0.12 ), vec3( 0.32, 0.62, 0.68 ), smoothstep( -0.3, 0.9, mirror.y ) );
+          float glint = pow( max( mirror.y, 0.0 ), 24.0 ) * 0.45;
+          float glassy = ( 1.0 - above ) * ( 1.0 - deep * 0.75 );
           iceGlow += ( sky * fresnel + glint ) * glassy;
           diffuseColor.rgb *= mix( 1.0, 0.55 + 0.45 * rim, glassy );
         }`)
