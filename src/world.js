@@ -270,7 +270,7 @@ function modelHeight(name, obj) {
   return modelHeights.get(name);
 }
 // The foam line floats in front of the action; each frame it is placed so it lines up with the true surface behind.
-const WATERLINE_Z = 3.5;
+export const WATERLINE_Z = 3.5;
 // Rough ground radius of each seafloor piece, used to find clear spots for sinking wrecks.
 const FOOTPRINT = {
   reef_large: 2.9, reef_small: 2.6, kelp_tall: 0.8, kelp_short: 0.7, coral_staghorn: 0.85, coral_fan: 1.0,

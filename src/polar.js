@@ -4,7 +4,7 @@ import { unlock } from './achievements.js';
 import { sfx } from './audio.js';
 import { spawn, spawnSkinned } from './assets.js';
 import { SHELF_Y, SURFACE_Y, darkness } from './water.js';
-import { floorY } from './world.js';
+import { WATERLINE_Z, floorY } from './world.js';
 import { BearMind, LAY_FLAT, PenguinMind, rigBear, rigPenguin, steerSwimmer, swimStroke, swimmerBack } from './critters.js';
 import { fbm, iceBlock, iceMaterial, jaggedOutline, polygonReach, sliceAlong } from './ice.js';
 
@@ -613,6 +613,8 @@ const PACK_DRAFT = 0.42;
 const PACK_DEPTH = [-24, 3.4];
 const LANE_HALF = 2.7;
 const CHUNKS = 700;
+// The farthest out a chunk of the given size may float with all of it still behind the water's front edge.
+const chunkFront = (size) => WATERLINE_Z - 0.15 - size * 0.85;
 // The pack over a pole is built and drawn in pieces this wide, so pieces out of view are skipped.
 const PACK_PIECE = 24;
 const HOME_RADIUS = 6.2;
@@ -899,8 +901,9 @@ class PackIce {
         const along = Math.abs(dx) / reach;
         if (along < 1 && Math.abs(dy) < e.hy * Math.sqrt(1 - along * along) + k.size * 0.5) {
           const v = hull.vel;
+          // Pieces behind the sub are pushed farther back; pieces in front of it are pushed along ahead of the bow.
           k.vx += (v.x * 0.9 - k.vx) * 0.5 + Math.sign(dx || 1) * 1.2 * dt * 30;
-          k.vz += (Math.sign(k.z || Math.random() - 0.5) * (1 + Math.abs(v.x) * 0.25) - k.vz) * 0.4;
+          k.vz += ((k.z > 0 ? 0 : -(1 + Math.abs(v.x) * 0.25)) - k.vz) * 0.4;
           k.vy = Math.max(k.vy, Math.max(0, v.y) * 0.6 + (k.y >= SURFACE_Y - 0.1 ? 0.6 : 0));
           k.sx += (Math.random() - 0.5) * 4;
           k.sz += (Math.random() - 0.5) * 4;
@@ -915,7 +918,7 @@ class PackIce {
       k.vz *= drag;
       k.x += k.vx * dt;
       k.y += k.vy * dt;
-      k.z = THREE.MathUtils.clamp(k.z + k.vz * dt, this.depth[0] - 2, this.depth[1] + 3);
+      k.z = THREE.MathUtils.clamp(k.z + k.vz * dt, this.depth[0] - 2, Math.min(this.depth[1] + 3, chunkFront(k.size)));
       // Afloat, a tipped piece rocks back flat.
       if (afloat) {
         k.sx += (-k.rx * 12 - k.sx * 3) * dt;
@@ -950,7 +953,7 @@ class PackIce {
       this.addChunk({
         x: p.x + Math.cos(a) * d, y: SURFACE_Y, z: p.z + Math.sin(a) * d,
         vx: v.x * 0.5 + (Math.random() - 0.5) * 2.5, vy: 1.2 + Math.random() * 2.2 + Math.max(0, v.y) * 0.4,
-        vz: Math.sign(p.z || Math.random() - 0.5) * (0.8 + Math.random() * 2.2),
+        vz: p.z > 0 ? -Math.random() * 0.8 : -(0.8 + Math.random() * 2.2),
         sx: (Math.random() - 0.5) * 8, sz: (Math.random() - 0.5) * 8,
         size: (0.4 + Math.random() * 0.5) * Math.min(1.3, p.rad * 0.85),
       });
