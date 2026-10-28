@@ -5,6 +5,7 @@ import { animationsOf, cloneMaterial, findNode, plainMaterials, spawn, spawnSkin
 import { sfx } from './audio.js';
 import { Polar, nearIce, polarAt } from './polar.js';
 import { ReefFish } from './reeffish.js';
+import { Benthos } from './benthos.js';
 import { CURRENT_MATERIALS, NOISE_GLSL, SHADER_TIME, WHALE_BEND, addTailBeat, addWaterline, addWingFlap } from './surface.js';
 import {
   ABYSS_Y, CAMERA_Z, SHADOW_FAR, SHADOW_NEAR, SHADOW_SPAN, SHELF_Y, SURFACE_Y, TAN_HALF_FOV, WATER_GRADIENT_GLSL,
@@ -216,6 +217,9 @@ function baseDetail(x, z) {
   let h = 0.35 * Math.sin(x * 0.157 + z * 0.21) + 0.25 * Math.sin(x * 0.39 - z * 0.37 + 1.3)
     + 0.12 * Math.sin(x * 0.86 + z * 0.9);
   h *= 1 + depth * 0.03;
+  // Polar mud settles into gentler swells than the sand dunes elsewhere.
+  const i = Math.floor(x);
+  h *= 1 - 0.55 * THREE.MathUtils.lerp(polarAt(i).amount, polarAt(i + 1).amount, x - i);
   if (z > 4) h += (Math.min(z, 16) - 4) * 0.12;
   return h;
 }
@@ -433,7 +437,7 @@ const paintScratch = new THREE.Color();
 const painted = { y: 0, glow: 0 };
 
 // The seabed's height and colour at one point, with the reef glow that brightens the sand there.
-const POLAR_GRAVEL = ['#6f8592', '#8fa3ad', '#c9d7dd'].map((hex) => new THREE.Color(hex));
+const POLAR_MUD = ['#3d3b36', '#4e4a42', '#6c675d'].map((hex) => new THREE.Color(hex));
 
 function paintSeabed(x, z, murk, c) {
   const d = paintScratch;
@@ -456,9 +460,9 @@ function paintSeabed(x, z, murk, c) {
   c.lerp(REEF_LAGOON, glow * ripple * 0.4);
   const cold = polarAt(x).amount;
   if (cold > 0) {
-    // Under the polar ice: grey-blue gravel scattered with pale stones.
-    d.copy(POLAR_GRAVEL[0]).lerp(POLAR_GRAVEL[1], n).lerp(POLAR_GRAVEL[2], Math.max(0, m * 2 - 1) * 0.8);
-    c.lerp(d, cold * 0.85);
+    // Under the polar ice: dark grey-brown mud, paler in patches of coarser grit.
+    d.copy(POLAR_MUD[0]).lerp(POLAR_MUD[1], n).lerp(POLAR_MUD[2], Math.max(0, m * 2 - 1) * 0.6);
+    c.lerp(d, cold * 0.92);
   }
   painted.y = y;
   painted.glow = glow;
@@ -583,6 +587,8 @@ function makeSeabedMaterial(uniforms) {
         float sGrassMask = sShallow * ( 1.0 - vReef ) * ( 1.0 - vPolar );
         float sGrass = sGrassMask > 0.0 ? smoothstep( 0.55, 0.78, dNoise( sp * 0.35 + 5.0 ) ) * sGrassMask : 0.0;
         float sSteep = 1.0 - smoothstep( 0.55, 0.85, inverseTransformDirection( normalize( vNormal ), viewMatrix ).y );
+        // Polar mud lies smooth, without the ripples that currents draw in sand.
+        sRipple *= 1.0 - 0.8 * vPolar;
         diffuseColor.rgb *= 0.85 + sRipple * 0.12 * ( 1.0 - sSteep ) + ( sPatch - 0.5 ) * 0.4 * ( 1.0 - 0.6 * vReef );
         diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.12, 0.28, 0.11 ), sGrass * 0.5 );
         diffuseColor.rgb = mix( diffuseColor.rgb, diffuseColor.rgb * 0.55, sPebble * 0.6 );
@@ -1946,6 +1952,10 @@ export class World {
     scene.add(this.dust);
     this.polar = new Polar(scene);
     this.reefFish = new ReefFish(scene, reefsBetween, (x, z) => seabedAt(x, z));
+    this.benthos = new Benthos(scene, (x, z) => seabedAt(x, z), (x) => {
+      const p = polarAt(x);
+      return p.shelf && p.amount > 0.5 && floorY(x) > SHELF_Y - 3 ? p.kind : null;
+    });
 
     this.props = [];
     for (const layer of LAYERS) this.populate(layer);
@@ -2149,7 +2159,7 @@ export class World {
         prop.obj.traverse((o) => { o.castShadow = false; });
       }
       if (!layer.tint && deep) tint(prop.obj, '#1c2233', 0.45);
-      if (!layer.tint && polar) tint(prop.obj, '#dcebf3', 0.3);
+      if (!layer.tint && polar) tint(prop.obj, '#3e3d3a', 0.7);
       prop.size = rand(layer.scale[0], layer.scale[1]);
       prop.obj.scale.setScalar(prop.size);
       prop.kind = want;
@@ -2299,6 +2309,7 @@ export class World {
     this.spotRange = hull?.spotRange ?? 0;
     this.polar.update(dt, this.time, cx, cy, sub, camera, hull, this.effects);
     this.reefFish.update(dt, this.time, cx, sub);
+    this.benthos.update(cx);
     if (this.updateGulls(dt, cx, cy, hull, camera.position.z) > 0) {
       sfx.gull();
       unlock('gulls');
