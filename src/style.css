@@ -530,7 +530,7 @@ html, body {
 .badge {
   display: table;
   position: relative;
-  margin: calc(min(64vw, 940px) * -0.095) auto 0;
+  margin: calc(min(64vw, 940px) * -0.065) auto 0;
   transition: transform 0.25s ease, filter 0.25s ease;
   filter: drop-shadow(0 0.4vw 0.6vw rgba(0, 0, 0, 0.45));
 }
@@ -900,6 +900,6 @@ kbd {
 /* A phone held sideways is short, so the logo shrinks to leave room for the buttons under it. */
 @media (pointer: coarse) {
   .logo-img { width: min(64vw, 940px, 120vh); }
-  .badge { margin-top: calc(min(64vw, 940px, 120vh) * -0.095); }
+  .badge { margin-top: calc(min(64vw, 940px, 120vh) * -0.065); }
   .badge img { width: min(32vw, 470px, 60vh); }
 }
