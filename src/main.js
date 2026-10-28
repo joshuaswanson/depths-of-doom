@@ -328,7 +328,7 @@ async function boot() {
   resize();
   const cleanup = game.prewarm();
   // Creatures stay hidden until they appear, and hidden objects are skipped by the warm-up; show them for it.
-  const hidden = [...world.jellies, ...world.anglers, world.whale, world.spermWhale, ...world.dolphins.pod, world.marlin,
+  const hidden = [...world.jellies, ...world.anglers, world.whale, world.spermWhale, world.whaleShark, ...world.dolphins.pod, world.marlin,
     ...world.mantas, ...world.polar.warmers, ...world.polar.swimmers, ...world.reefFish.warmers, ...world.benthos.warmers].filter((j) => !j.visible);
   for (const j of hidden) j.visible = true;
   renderer.shadowMap.needsUpdate = true;

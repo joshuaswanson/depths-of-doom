@@ -3,7 +3,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { unlock } from './achievements.js';
 import { animationsOf, cloneMaterial, findNode, plainMaterials, spawn, spawnSkinned, tint } from './assets.js';
 import { sfx } from './audio.js';
-import { Polar, nearIce, polarAt } from './polar.js';
+import { Polar, nearIce, polarAt, trenchAt } from './polar.js';
 import { ReefFish } from './reeffish.js';
 import { Benthos } from './benthos.js';
 import { CURRENT_MATERIALS, NOISE_GLSL, SHADER_TIME, WHALE_BEND, addTailBeat, addWaterline, addWingFlap } from './surface.js';
@@ -1059,6 +1059,14 @@ function makeWhale() {
 const OPEN_SEA = 110;
 const ICE_SHY = 70;
 
+// Each stretch of open ocean between two shelves belongs to one great animal, the humpback or the whale shark, so
+// the two are never seen together. The whale shark has its stretch to itself.
+function residentOf(x) {
+  const t = trenchAt(x);
+  if (t === null) return null;
+  return ((t % 2) + 2) % 2 === 0 ? 'humpback' : 'whale_shark';
+}
+
 function whaleHome(cx) {
   if (deepBelow(cx) < 45) return null;
   let lo = cx;
@@ -1076,7 +1084,7 @@ function updateWhale(whale, dt, t, cx, cy, aspect, canSing) {
     whale.visible = false;
     if (u.wait > 0) return;
     const home = whaleHome(cx);
-    if (!home || nearIce(cx, OPEN_SEA)) {
+    if (!home || nearIce(cx, OPEN_SEA) || residentOf(home.x) !== 'humpback') {
       u.wait = 2;
       return;
     }
@@ -1173,6 +1181,94 @@ function hazeCap(root) {
   return haze;
 }
 
+// In its own stretch of open ocean a whale shark cruises slowly by just under the surface, its great mouth gaping as
+// it feeds. It comes in from beyond the edge of the screen, and at the end of its patch, or before the floor rises
+// toward a shelf, it swings away from the camera and fades off into the blue.
+const SHARK_LENGTH = 21;
+const SHARK_Z = -34;
+const SHARK_SPEED = 2.2;
+const SHARK_TURN_RADIUS = 18;
+const SHARK_GAP = [20, 40];
+const SHARK_FADE = [60, 120];
+const SHARK_HAZE = 0.55;
+
+function makeWhaleShark() {
+  const holder = new THREE.Group();
+  const body = spawnSkinned('whale_shark');
+  body.scale.setScalar(SHARK_LENGTH);
+  // Its bounds come from the skeleton's bind pose, well away from where the swim holds it, so culling would hide it.
+  body.traverse((o) => {
+    if (o.isMesh) o.frustumCulled = false;
+  });
+  holder.add(body);
+  const mixer = new THREE.AnimationMixer(body);
+  const clip = animationsOf('whale_shark').find((c) => c.name === 'swim');
+  const swim = mixer.clipAction(clip);
+  swim.timeScale = 0.55;
+  swim.play();
+  holder.visible = false;
+  holder.userData = { mixer, haze: hazeCap(body), active: false, wait: 10, heading: 0, turn: 0, phase: rand(0, 6) };
+  return holder;
+}
+
+function updateWhaleShark(shark, dt, t, cx, aspect) {
+  const u = shark.userData;
+  if (!u.active) {
+    shark.visible = false;
+    u.wait -= dt;
+    if (u.wait > 0) return;
+    const home = whaleHome(cx);
+    if (!home || nearIce(cx, OPEN_SEA) || residentOf(home.x) !== 'whale_shark') {
+      u.wait = 2;
+      return;
+    }
+    const offscreen = halfWidthAt(SHARK_Z, aspect) + SHARK_LENGTH * 0.6;
+    const sides = (Math.random() < 0.5 ? [-1, 1] : [1, -1]).filter((side) => deepBelow(cx + side * offscreen) > 45);
+    if (!sides.length) {
+      u.wait = 2;
+      return;
+    }
+    const dir = -sides[0];
+    Object.assign(u, { active: true, home, fade: 0, heading: dir > 0 ? 0 : Math.PI, turn: 0, departing: false,
+      baseY: SURFACE_Y - rand(7, 12) });
+    u.mixer.setTime(Math.random() * 10);
+    shark.position.set(cx - dir * offscreen, u.baseY, SHARK_Z);
+  }
+  const p = shark.position;
+  const ahead = p.x + Math.cos(u.heading) * (SHARK_LENGTH + SHARK_TURN_RADIUS);
+  const leaving = (p.x - u.home.x) * Math.cos(u.heading) > 0 && Math.abs(p.x - u.home.x) > u.home.roam;
+  if (!u.departing && (deepBelow(ahead) < 45 || leaving)) {
+    u.departing = true;
+    u.turn = Math.cos(u.heading) > 0 ? -Math.PI / 2 : Math.PI / 2;
+  }
+  if (u.turn !== 0) {
+    const progress = 1 - Math.abs(u.turn) / (Math.PI / 2);
+    const ease = 0.35 + 0.65 * Math.sin(Math.PI * progress);
+    const rate = (SHARK_SPEED / SHARK_TURN_RADIUS) * ease * dt * Math.sign(u.turn);
+    const step = Math.abs(rate) > Math.abs(u.turn) ? u.turn : rate;
+    u.heading += step;
+    u.turn -= step;
+    if (Math.abs(u.turn) < 1e-4) u.turn = 0;
+  }
+  p.x += Math.cos(u.heading) * SHARK_SPEED * dt;
+  p.z = Math.min(SHARK_Z, p.z + Math.sin(u.heading) * SHARK_SPEED * dt);
+  p.y = u.baseY + Math.sin(t * 0.2 + u.phase) * 0.8;
+  const bank = u.turn === 0 ? 0 : -Math.sign(u.turn) * 0.12;
+  shark.rotation.set(THREE.MathUtils.lerp(shark.rotation.x, bank, 1 - Math.exp(-dt * 0.5)), -u.heading,
+    Math.cos(t * 0.2 + u.phase) * 0.04);
+  u.mixer.update(dt);
+  // Fade in as it arrives, and out into the haze as it swims off into the distance.
+  u.fade = Math.min(1, u.fade + dt / 3);
+  const distant = THREE.MathUtils.smoothstep(SHARK_Z - p.z, SHARK_FADE[0] - 34, SHARK_FADE[1] - 34);
+  u.haze.value = THREE.MathUtils.lerp(1, SHARK_HAZE, u.fade * (1 - distant));
+  shark.visible = u.haze.value < 0.995;
+  if (u.haze.value < 0.8 && Math.abs(p.x - cx) < halfWidthAt(p.z, aspect)) unlock('whale_shark');
+  if (Math.abs(p.x - cx) > 260 || distant > 0.99) {
+    u.active = false;
+    u.wait = rand(SHARK_GAP[0], SHARK_GAP[1]);
+  }
+}
+
 // Down in the darker water of a trench a sperm whale sometimes passes by. Either it rises up out of the darkness
 // below the sub, levels off and dives back down, or it glides in at the sub's depth and dives past into the dark.
 // It always swims in toward the middle of the trench, and fades away as it dives or nears the walls and floor.
@@ -1224,7 +1320,7 @@ function updateSpermWhale(whale, dt, cx, cy, humpback, aspect) {
     u.wait -= dt;
     if (u.wait > 0 || cy > -40 || cy < -175) return;
     const home = whaleHome(cx);
-    if (!home || nearIce(cx, OPEN_SEA)) {
+    if (!home || nearIce(cx, OPEN_SEA) || residentOf(home.x) === 'whale_shark') {
       u.wait = 3;
       return;
     }
@@ -1330,7 +1426,7 @@ function updateDolphins(world, dt, t, cx, cy, halfW, sub) {
   if (!dolphins.active) {
     for (const d of dolphins.pod) d.visible = false;
     dolphins.wait -= dt;
-    if (dolphins.wait > 0 || !near || nearIce(cx, OPEN_SEA)) return;
+    if (dolphins.wait > 0 || !near || nearIce(cx, OPEN_SEA) || residentOf(cx) === 'whale_shark') return;
     dolphins.active = true;
     dolphins.dir = Math.random() < 0.5 ? -1 : 1;
     dolphins.turned = false;
@@ -1471,7 +1567,7 @@ function updateMarlin(fish, dt, t, cx, cy, halfW, sub) {
   if (!u.active) {
     fish.visible = false;
     u.wait -= dt;
-    if (u.wait > 0 || !open || deepBelow(cx) < 60 || nearIce(cx, OPEN_SEA)) return;
+    if (u.wait > 0 || !open || deepBelow(cx) < 60 || nearIce(cx, OPEN_SEA) || residentOf(cx) === 'whale_shark') return;
     const side = Math.random() < 0.5 ? -1 : 1;
     const x = cx + side * (halfW + MARLIN_LENGTH);
     if (deepBelow(x) < 50) {
@@ -1975,6 +2071,8 @@ export class World {
     scene.add(this.whale);
     this.spermWhale = makeSpermWhale();
     scene.add(this.spermWhale);
+    this.whaleShark = makeWhaleShark();
+    scene.add(this.whaleShark);
     this.dolphins = makeDolphins(scene);
     this.marlin = makeMarlin(scene);
     this.mantas = makeMantas(scene);
@@ -2319,6 +2417,7 @@ export class World {
     sfx.whaleHeard(submerged);
     updateWhale(this.whale, dt, this.time, cx, cy, this.aspect, (this.calm ?? true) && submerged);
     updateSpermWhale(this.spermWhale, dt, cx, cy, this.whale, this.aspect);
+    updateWhaleShark(this.whaleShark, dt, this.time, cx, this.aspect);
     updateDolphins(this, dt, this.time, cx, cy, halfWidthAt(-10, this.aspect), sub);
     updateMarlin(this.marlin, dt, this.time, cx, cy, halfWidthAt(-18, this.aspect), sub);
     updateMantas(this, dt, this.time, cx, cy, this.aspect);

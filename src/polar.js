@@ -83,6 +83,14 @@ function shelfNear(x) {
   return s;
 }
 
+// Which stretch of open water between two shelves x lies over, numbered by the shelf on its left; null over a shelf.
+export function trenchAt(x) {
+  const s = shelfNear(x);
+  if (x > s.end) return s.index;
+  if (x < s.start) return s.index - 1;
+  return null;
+}
+
 // How cold the water is at x, from 0 in the open sea to 1 over the middle of a polar shelf, and which pole's cold it
 // is; `shelf` is the polar shelf when that is the nearest shelf to x.
 const polarCache = new Map();
