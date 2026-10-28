@@ -671,6 +671,7 @@ kbd {
   cursor: pointer;
 }
 .coop-btn:hover { filter: brightness(1.15); }
+.sound-btn { margin-top: 3vh; }
 .coop-btn:active { transform: translateY(2px); box-shadow: 0 0.1vw 0 #0d2a42; }
 .coop-code {
   width: 6.5vw;
