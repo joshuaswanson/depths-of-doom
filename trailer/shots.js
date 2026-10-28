@@ -25,7 +25,7 @@
       <div id="tr-tag" style="margin-top:2.5vh;font-size:2.6vw;font-weight:700;color:#cdeeff;
         text-shadow:0 3px 0 rgba(0,0,0,.45);letter-spacing:.04em">PLAY FREE IN YOUR BROWSER</div>
       <div id="tr-url" style="margin-top:1.2vh;font-size:1.7vw;font-weight:600;color:#ffd23a;
-        text-shadow:0 2px 0 rgba(0,0,0,.5)">joshuaswanson.github.io/depths-of-doom</div>
+        text-shadow:0 2px 0 rgba(0,0,0,.5)">joshuaswanson.github.io/submania</div>
     </div>`;
   document.body.append(overlay);
   const fade = document.getElementById('tr-fade');

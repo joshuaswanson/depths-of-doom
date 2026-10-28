@@ -7,7 +7,7 @@ import { Player } from './player.js';
 // several times a second. Every player flies their own sub on their own machine and sends its state to the host,
 // which passes it on. Damage to enemies is reported to the host; each player's machine decides the hits on its own
 // sub. PeerJS's public server only introduces the browsers; after that they talk to each other directly.
-const PREFIX = 'depths-of-doom-';
+const PREFIX = 'submania-';
 const SNAPSHOT_RATE = 15;
 const STATE_RATE = 20;
 const MAX_PLAYERS = 4;

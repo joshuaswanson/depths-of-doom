@@ -3,7 +3,7 @@ import { UPGRADES, upgradeCost } from './upgrades.js';
 import { touchScreen } from './touch.js';
 
 const ICON = (name) => `${import.meta.env.BASE_URL}icons/${name}.webp`;
-const LOGO = `<div class="logo-wrap"><img class="logo-img" src="${import.meta.env.BASE_URL}logo.webp" alt="Depths of Doom">
+const LOGO = `<div class="logo-wrap"><img class="logo-img" src="${import.meta.env.BASE_URL}logo.webp" alt="Submania">
   <a class="badge" href="https://joshuaswanson.github.io" target="_blank" rel="noopener">
     <img src="${import.meta.env.BASE_URL}badge.webp" alt="by Joshua Swanson"></a></div>`;
 const TROPHY = `<svg viewBox="0 0 24 24" class="trophy" aria-hidden="true"><path fill="currentColor" d="M7 3h10v2h3v3a4

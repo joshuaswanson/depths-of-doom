@@ -1,6 +1,6 @@
 // Builds the trailer soundtrack from trailer/timeline.json and muxes it with the captured frames.
 //
-//   node trailer/soundtrack.mjs [--frames /tmp/trailer/frames] [--out art/trailer/depths-of-doom-trailer.mp4]
+//   node trailer/soundtrack.mjs [--frames /tmp/trailer/frames] [--out art/trailer/submania-trailer.mp4]
 //
 // Narration comes from the Kokoro voice model (trailer/narrate.py); sound effects are rendered offline from the game's own src/audio.js.
 import { execFileSync } from 'node:child_process';
@@ -13,7 +13,7 @@ const args = Object.fromEntries(process.argv.slice(2).join(' ').split('--').filt
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const work = '/tmp/trailer';
 const frames = args.frames ?? path.join(work, 'frames');
-const out = path.resolve(root, args.out ?? 'art/trailer/depths-of-doom-trailer.mp4');
+const out = path.resolve(root, args.out ?? 'art/trailer/submania-trailer.mp4');
 const timeline = JSON.parse(fs.readFileSync(path.join(root, 'trailer/timeline.json'), 'utf8'));
 const run = (cmd, list) => execFileSync(cmd, list, { stdio: ['ignore', 'ignore', 'inherit'] });
 

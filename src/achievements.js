@@ -31,7 +31,7 @@ export const ACHIEVEMENTS = [
   { id: 'icebreaker', group: 'Exploring', name: 'Icebreaker', desc: 'Smash through 40 plates of pack ice.' },
 ];
 
-const KEY = 'depths-of-doom-achievements';
+const KEY = 'submania-achievements';
 // Coins added to the dive for each achievement earned.
 export const ACHIEVEMENT_REWARD = 10;
 const state = load();
