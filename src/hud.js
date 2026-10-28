@@ -290,7 +290,12 @@ export class Hud {
       <small>Achievement unlocked</small><b>${def.name}</b><span>${def.desc}</span></span>
       <span class="ach-reward"><img src="${ICON('coin')}" alt="">+${reward}</span>`);
     this.achievementPops.append(pop);
-    setTimeout(() => pop.remove(), 4600);
+    // As it fades, the card pulls the ones stacked under it up into its place, so they glide there.
+    setTimeout(() => {
+      const room = pop.offsetHeight + parseFloat(getComputedStyle(this.achievementPops).rowGap);
+      pop.animate([{ marginTop: '0px' }, { marginTop: `${-room}px` }], { duration: 450, easing: 'ease-in-out', fill: 'forwards' })
+        .finished.then(() => pop.remove());
+    }, 4150);
   }
 
   showToast(text) {
