@@ -1208,7 +1208,7 @@ function makeWhaleShark() {
   return holder;
 }
 
-function updateWhaleShark(shark, dt, t, cx, aspect) {
+function updateWhaleShark(shark, dt, t, cx, cy, aspect) {
   const u = shark.userData;
   if (!u.active) {
     shark.visible = false;
@@ -1259,7 +1259,8 @@ function updateWhaleShark(shark, dt, t, cx, aspect) {
   const distant = THREE.MathUtils.smoothstep(SHARK_Z - p.z, SHARK_FADE[0] - 34, SHARK_FADE[1] - 34);
   u.haze.value = THREE.MathUtils.lerp(1, SHARK_HAZE, u.fade * (1 - distant));
   shark.visible = u.haze.value < 0.995;
-  if (u.haze.value < 0.8 && Math.abs(p.x - cx) < halfWidthAt(p.z, aspect)) unlock('whale_shark');
+  const onScreen = Math.abs(p.x - cx) < halfWidthAt(p.z, aspect) && Math.abs(p.y - cy) < (CAMERA_Z - p.z) * TAN_HALF_FOV;
+  if (u.haze.value < 0.8 && onScreen) unlock('whale_shark');
   if (Math.abs(p.x - cx) > 260 || distant > 0.99) {
     u.active = false;
     u.wait = rand(SHARK_GAP[0], SHARK_GAP[1]);
@@ -2420,7 +2421,7 @@ export class World {
     sfx.whaleHeard(submerged);
     updateWhale(this.whale, dt, this.time, cx, cy, this.aspect, (this.calm ?? true) && submerged);
     updateSpermWhale(this.spermWhale, dt, cx, cy, this.whale, this.aspect);
-    updateWhaleShark(this.whaleShark, dt, this.time, cx, this.aspect);
+    updateWhaleShark(this.whaleShark, dt, this.time, cx, cy, this.aspect);
     updateDolphins(this, dt, this.time, cx, cy, halfWidthAt(-10, this.aspect), sub);
     updateMarlin(this.marlin, dt, this.time, cx, cy, halfWidthAt(-18, this.aspect), sub);
     updateMantas(this, dt, this.time, cx, cy, this.aspect);
