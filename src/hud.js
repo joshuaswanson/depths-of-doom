@@ -275,19 +275,16 @@ export class Hud {
     return Boolean(this.achievementList);
   }
 
-  // Every achievement by name, grouped, earned ones lit in gold. Pointing at or tapping one shows how to earn it.
+  // Every achievement by name, earned ones lit in gold. Pointing at or tapping one shows how to earn it.
   showAchievements() {
     this.hideAchievements();
-    const groups = [...new Set(ACHIEVEMENTS.map((a) => a.group))].map((group) => {
-      const tiles = ACHIEVEMENTS.filter((a) => a.group === group).map((a) => `<button class="ach-tile${
-        isUnlocked(a.id) ? ' got' : ''}" data-id="${a.id}">${isUnlocked(a.id) ? TROPHY : LOCK}${a.name}</button>`).join('');
-      return `<div class="ach-group"><h3>${group}</h3><div class="ach-tiles">${tiles}</div></div>`;
-    }).join('');
+    const buttons = ACHIEVEMENTS.map((a) => `<button class="ach-tile${isUnlocked(a.id) ? ' got' : ''}" data-id="${a.id}">${
+      isUnlocked(a.id) ? TROPHY : LOCK}${a.name}</button>`).join('');
     const share = (100 * unlockedCount()) / ACHIEVEMENTS.length;
     this.achievementList = el('div', 'ach-list', `<div class="ach-box">
       <div class="ach-head">${TROPHY}Achievements <b>${unlockedCount()}/${ACHIEVEMENTS.length}</b></div>
       <div class="ach-bar"><i style="width: ${share}%"></i></div>
-      <div class="ach-groups">${groups}</div>
+      <div class="ach-tiles">${buttons}</div>
       <div class="ach-detail"><span class="ach-hint">Point at or tap an achievement to see how to earn it.</span></div>
       <button class="coop-btn ach-close">Back</button></div>`);
     const detail = this.achievementList.querySelector('.ach-detail');

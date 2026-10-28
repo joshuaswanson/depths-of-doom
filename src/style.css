@@ -794,22 +794,11 @@ kbd {
   overflow: hidden;
 }
 .ach-bar i { display: block; height: 100%; background: linear-gradient(90deg, var(--gold-deep), var(--gold)); }
-.ach-groups {
-  margin-top: 1.4vh;
+.ach-tiles {
+  margin-top: 2.4vh;
   width: 100%;
   overflow-y: auto;
   touch-action: pan-y;
-}
-.ach-group h3 {
-  margin: 1.4vh 0 0.8vh;
-  font-size: 0.95vw;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: #8fb4cf;
-  text-align: left;
-}
-.ach-tiles {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
   gap: 0.8vh 0.7vw;
