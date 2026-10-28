@@ -853,13 +853,10 @@ function updateAngler(a, dt, t, cx, sub, world) {
   u.wasNear = near;
   u.untilFlash -= dt;
   if (u.flash > 0) u.flash += dt;
-  else if (u.untilFlash <= 0) {
-    const owner = world.anglerLight.userData.owner;
-    if (!owner || near) {
-      if (owner && owner !== a) owner.userData.flash = 0;
-      u.flash = 0.001;
-      world.anglerLight.userData.owner = a;
-    }
+  else if (u.untilFlash <= 0 && !world.anglerLight.userData.owner) {
+    // The fish share one light, so a lure lit while another is shining waits for it to fade.
+    u.flash = 0.001;
+    world.anglerLight.userData.owner = a;
   }
   if (u.flash >= FLASH_TIME) {
     u.flash = 0;
