@@ -987,6 +987,10 @@ class Floe {
     });
     this.local = new THREE.Vector3();
     this.pose = new THREE.Quaternion();
+    this.qErr = new THREE.Quaternion();
+    this.qInv = new THREE.Quaternion();
+    this.qTurn = new THREE.Quaternion();
+    this.turnAxis = new THREE.Vector3();
     this.place();
   }
 
@@ -1010,7 +1014,7 @@ class Floe {
     this.mesh.updateMatrixWorld(true);
   }
 
-  update(dt, t, hull, effects) {
+  update(dt, t, hull, effects, camera) {
     this.cooldown -= dt;
     const before = this.approach;
     this.approach = hull ? hull.vel.length() : 0;
@@ -1062,7 +1066,7 @@ class Floe {
       this.vx = -Math.abs(this.vx) * 0.25;
     }
     this.place();
-    for (const p of this.penguins) this.penguin(p, dt, t, effects);
+    for (const p of this.penguins) this.penguin(p, dt, t, effects, camera);
   }
 
   // A big knock throws them all off at once.
@@ -1076,7 +1080,7 @@ class Floe {
     }
   }
 
-  penguin(p, dt, t, effects) {
+  penguin(p, dt, t, effects, camera) {
     const obj = p.obj;
     if (p.state === 'stand') {
       p.mind.update(dt, t, p.rig);
@@ -1106,9 +1110,10 @@ class Floe {
         const dir = Math.sign(p.vel.x || 1);
         // Each comes to its senses after its own moment, then rights itself and goes its own way at its own pace,
         // flippers out of step with the rest.
-        Object.assign(p, { yaw: dir > 0 ? 0 : Math.PI, pitch: -0.2 - Math.random() * 0.4, roll: 0, speed: 0.3,
+        Object.assign(p, { yaw: dir > 0 ? 0 : Math.PI, pitch: -0.2 - Math.random() * 0.4, roll: 0, speed: 0,
           stroke: Math.random() * 6.3, cruise: 4 + Math.random() * 3, retarget: 0,
-          dazed: 0.25 + Math.random() * 1.1, righting: 0, rightRate: 1.2 + Math.random() * 1.6 });
+          dazed: 0.3 + Math.random() * 1.1, calm: 2.5 + Math.random() * 2.5,
+          turn: new THREE.Vector3(p.spinVel.x, p.spinVel.y, p.spinVel.z) });
         const at = { x: obj.position.x, y: SURFACE_Y, z: obj.position.z };
         effects?.splash(at, 0.9 + Math.min(1, -p.vel.y * 0.08));
         for (let i = 0; i < 10; i++) {
@@ -1127,23 +1132,35 @@ class Floe {
       p.vel.multiplyScalar(Math.exp(-dt * 2.8));
       p.vel.y += 1.2 * dt;
       obj.position.addScaledVector(p.vel, dt);
-      p.spinVel.multiplyScalar(Math.exp(-dt * 2.5));
       if (Math.random() < dt * 6) {
         effects?.bubble(obj.position, { spread: 0.15, size: [0.04, 0.1], vel: { x: 0, y: 0.6 }, life: [0.5, 1.1] });
       }
-      if (p.swimTime < p.dazed) {
-        obj.rotation.x += p.spinVel.x * dt;
-        obj.rotation.y += p.spinVel.y * dt;
-        obj.rotation.z += p.spinVel.z * dt;
-        p.rig.uDrop.value = -0.2 + Math.sin(t * 9 + p.stroke) * 0.25;
-        return;
-      }
-      // Rolling round to swim belly down, slowly at first and faster as it finds its way, flippers starting to beat.
-      p.righting = Math.min(1, p.righting + dt * p.rightRate);
+      // The tumble carries on, slowed by the water, while a pull toward swimming belly down grows from nothing as it
+      // gathers its wits, so it rolls round in one smooth motion over a couple of seconds.
+      const wits = THREE.MathUtils.smoothstep(p.swimTime, p.dazed * 0.4, p.dazed + 1.4);
+      const pull = p.calm * wits;
       swimPose(p, this.pose);
-      obj.quaternion.slerp(this.pose, 1 - Math.exp(-dt * (1.5 + p.righting * 6)));
-      swimStroke(p.rig, p, dt, p.righting * 0.4);
-      if (p.righting >= 1 && obj.quaternion.angleTo(this.pose) < 0.08) p.state = 'swim';
+      const err = this.qErr.copy(this.pose).multiply(this.qInv.copy(obj.quaternion).invert());
+      if (err.w < 0) err.set(-err.x, -err.y, -err.z, -err.w);
+      const angle = 2 * Math.acos(Math.min(1, err.w));
+      const sin = Math.sqrt(Math.max(1e-8, 1 - err.w * err.w));
+      this.turnAxis.set(err.x / sin, err.y / sin, err.z / sin);
+      p.turn.addScaledVector(this.turnAxis, angle * pull * dt);
+      p.turn.multiplyScalar(Math.exp(-dt * (0.9 + 2 * Math.sqrt(pull))));
+      const step = p.turn.length() * dt;
+      if (step > 1e-6) obj.quaternion.premultiply(this.qTurn.setFromAxisAngle(this.turnAxis.copy(p.turn).normalize(), step));
+      obj.quaternion.normalize();
+      // Flippers flail at first, then settle into slow strokes, and it starts to make way.
+      const effort = THREE.MathUtils.smoothstep(p.swimTime, p.dazed, p.dazed + 2);
+      swimStroke(p.rig, p, dt, effort * 0.35);
+      p.rig.uDrop.value += (1 - effort) * Math.sin(t * 9 + p.stroke) * 0.25;
+      p.rig.uFlap.value *= 0.3 + 0.7 * effort;
+      p.speed = effort * 1.2;
+      obj.position.addScaledVector(swimmerBack(p), -p.speed * dt);
+      if (wits >= 1 && angle < 0.2 && p.turn.length() < 0.4) {
+        p.state = 'swim';
+        p.settle = 1;
+      }
       return;
     }
     if (p.state === 'swim') {
@@ -1156,9 +1173,19 @@ class Floe {
           SURFACE_Y - 2.5 - Math.random() * 8, SWIM_Z[0] + Math.random() * (SWIM_Z[1] - SWIM_Z[0]));
         p.retarget = 1.5 + Math.random() * 2.5;
       }
+      // What is left of the plunge's drift dies away as it swims.
+      p.vel.multiplyScalar(Math.exp(-dt * 2.8));
+      obj.position.addScaledVector(p.vel, dt);
+      const was = p.settle > 0 ? this.qInv.copy(obj.quaternion) : null;
       steerSwimmer(obj, p, p.target, dt, p.cruise);
+      // Fresh from righting itself, it eases the last of the way into its swimming pose.
+      if (was) {
+        p.settle = Math.max(0, p.settle - dt);
+        obj.quaternion.slerpQuaternions(was, obj.quaternion, 1 - Math.exp(-dt * 3 / Math.max(0.15, p.settle)));
+      }
       if (swimStroke(p.rig, p, dt, p.speed / 7)) jet(effects, obj.position, swimmerBack(p));
-      if (p.swimTime > 9 + p.phase) {
+      // Gone for good once it has swum out of sight.
+      if (p.swimTime > 9 + p.phase && camera && outOfView(obj.position, camera)) {
         p.state = 'gone';
         obj.visible = false;
       }
@@ -1166,12 +1193,13 @@ class Floe {
   }
 }
 
-// A swimmer's pose for its heading and pitch, level and belly down.
+// A swimmer's pose for its heading and pitch, belly down, rocking slightly with its strokes as `steerSwimmer` does.
 const qPose = new THREE.Quaternion();
 function swimPose(s, out) {
   out.setFromAxisAngle(new THREE.Vector3(0, 1, 0), s.yaw);
-  qPose.setFromAxisAngle(new THREE.Vector3(0, 0, 1), s.pitch);
-  return out.multiply(qPose).multiply(LAY_FLAT);
+  out.multiply(qPose.setFromAxisAngle(new THREE.Vector3(0, 0, 1), s.pitch));
+  out.multiply(qPose.setFromAxisAngle(new THREE.Vector3(1, 0, 0), s.roll + Math.sin(s.stroke ?? 0) * 0.08));
+  return out.multiply(LAY_FLAT);
 }
 
 // A little jet of bubbles thrown back off a swimming penguin's tail as its flippers sweep down.
@@ -1328,9 +1356,9 @@ export class Polar {
       this.drift(ice, dt, hull);
       this.animate(ice, dt, t, cx, camera);
       for (const pack of ice.built.fields) pack.update(dt, t, hull, effects);
-      for (const floe of ice.built.floes) floe.update(dt, t, hull, effects);
+      for (const floe of ice.built.floes) floe.update(dt, t, hull, effects, camera);
     }
-    this.updateSwimmers(dt, t, cx, cy, sub, effects);
+    this.updateSwimmers(dt, t, cx, cy, sub, effects, camera);
     this.updateSnow(dt, cx, cy);
     this.updateCrystals(dt, t, cx, cy);
     if (sub && p.amount > 0.9) {
@@ -1373,34 +1401,47 @@ export class Polar {
     }
   }
 
-  updateSwimmers(dt, t, cx, cy, sub, effects) {
+  updateSwimmers(dt, t, cx, cy, sub, effects, camera) {
     const p = polarAt(cx);
     const active = p.kind === 'south' && p.amount > 0.5;
     for (const s of this.swimmers) {
       const u = s.userData;
       if (!active) {
-        s.visible = false;
-        u.target = null;
-        continue;
-      }
-      if (!s.visible) {
+        // Out of penguin waters, any still in sight swim off out of view before they go.
+        if (!s.visible) continue;
+        if (outOfView(s.position, camera)) {
+          s.visible = false;
+          u.target = null;
+          u.leaving = false;
+          continue;
+        }
+        if (!u.leaving) {
+          u.leaving = true;
+          const away = Math.sign(s.position.x - cx) || 1;
+          u.target = new THREE.Vector3(s.position.x + away * 80, s.position.y, s.position.z);
+        }
+      } else if (!s.visible) {
+        // Each arrives from beyond the edge of the view.
+        const side = Math.random() < 0.5 ? -1 : 1;
         s.visible = true;
-        s.position.set(cx + (Math.random() - 0.5) * 50, SURFACE_Y - 4 - Math.random() * 10,
+        u.leaving = false;
+        s.position.set(cx + side * (50 + Math.random() * 8), SURFACE_Y - 4 - Math.random() * 10,
           SWIM_Z[0] + Math.random() * (SWIM_Z[1] - SWIM_Z[0]));
-        u.yaw = Math.random() < 0.5 ? 0 : Math.PI;
+        u.yaw = side > 0 ? Math.PI : 0;
+        u.target = null;
       }
       u.retarget -= dt;
       // Off to a new spot in the water behind the lane every few seconds, or sooner once it gets there.
-      if (!u.target || u.retarget <= 0) {
+      if (!u.leaving && (!u.target || u.retarget <= 0)) {
         u.target = new THREE.Vector3(cx + (Math.random() - 0.5) * 60, SURFACE_Y - 3 - Math.random() * 16,
           SWIM_Z[0] + Math.random() * (SWIM_Z[1] - SWIM_Z[0]));
         u.retarget = 4 + Math.random() * 4;
       }
       const effort = THREE.MathUtils.clamp(u.speed / 6.5, 0, 1);
-      if (steerSwimmer(s, u, u.target, dt, 6.5) < 3) u.retarget = 0;
+      if (steerSwimmer(s, u, u.target, dt, 6.5) < 3 && !u.leaving) u.retarget = 0;
       s.position.y = THREE.MathUtils.clamp(s.position.y, floorY(s.position.x) + 2,
         Math.min(SURFACE_Y - 1, iceCeiling(s.position.x) - 1));
-      if (Math.abs(s.position.x - cx) > 60) s.position.x = cx - Math.sign(s.position.x - cx) * 55;
+      if (!u.leaving && Math.abs(s.position.x - cx) > 60) s.position.x = cx - Math.sign(s.position.x - cx) * 55;
       if (swimStroke(u.rig, u, dt, effort) && effort > 0.3) jet(effects, s.position, swimmerBack(u));
       if (sub && s.position.distanceTo(new THREE.Vector3(sub.x, sub.y, s.position.z)) < 5) unlock('penguin_swim');
     }
@@ -1450,4 +1491,10 @@ export class Polar {
 function onScreen(pos, camera) {
   const v = pos.clone().project(camera);
   return Math.abs(v.x) < 0.95 && Math.abs(v.y) < 0.95 && v.z < 1;
+}
+
+// Clear of the view by a margin, so nothing of an animal there can be seen when it is taken away.
+function outOfView(pos, camera) {
+  const v = pos.clone().project(camera);
+  return Math.abs(v.x) > 1.25 || Math.abs(v.y) > 1.25 || v.z > 1;
 }

@@ -10,7 +10,7 @@ import { fbm, noise3 } from './ice.js';
 // writhe and the anemones' tentacles sway.
 const CELL = 6;
 // How far either side of the camera the seabed is stocked.
-const REACH = 45;
+const REACH = 70;
 const Z_RANGE = [-24, 6];
 // Boulders keep out of the sub's lane, where it skims the seabed.
 const ROCK_Z = [-45, -3];
