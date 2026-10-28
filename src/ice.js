@@ -309,7 +309,7 @@ let textures = null;
 
 // Ice that looks like ice, from photographed snow (Poly Haven, CC0): soft packed snow on whatever faces up,
 // wind-streaked snow on the walls, pale blue in the shaded hollows. Below the waterline it is clear glacial ice,
-// dimpled all over with the scallops that melting carves into it. The overcast daylight comes down through it, so it
+// dimpled all over by melting. The overcast daylight comes down through it, so it
 // glows blue near the surface and thin ice glows from beneath, while the deep keels fade into dark blue.
 // Everything is worked out from the surface's own position and facing, so it needs no UVs and stays put on ice that
 // moves. `bob` makes each piece of a merged field of pack ice rock on the swell on its own; `snow` makes the whole
@@ -362,36 +362,7 @@ export function iceMaterial({ name = 'ice', bob = false, snow = false } = {}) {
         varying vec3 vAxisX;
         varying vec3 vAxisY;
         varying vec3 vAxisZ;
-        vec3 iceGlow;
-        vec3 scallopHash( vec3 p ) {
-          p = fract( p * vec3( 0.1031, 0.1030, 0.0973 ) );
-          p += dot( p, p.yxz + 33.33 );
-          return fract( ( p.xxy + p.yxx ) * p.zyx );
-        }
-        // Melt scallops: shallow dishes packed edge to edge, each tilting the surface toward its own middle, with
-        // sharp ridges where neighbours meet. Returns the tilt across the surface.
-        // Each dish's middle keeps to the central half of its cell, so the nearest lies among the eight cells
-        // around the point.
-        vec3 scallops( vec3 p, vec3 n ) {
-          vec3 i = floor( p - 0.5 );
-          vec3 f = p - i;
-          float best = 8.0;
-          vec3 toMiddle = vec3( 0.0 );
-          for ( int z = 0; z <= 1; z++ ) {
-            for ( int y = 0; y <= 1; y++ ) {
-              for ( int x = 0; x <= 1; x++ ) {
-                vec3 g = vec3( float( x ), float( y ), float( z ) );
-                vec3 r = g + 0.25 + 0.5 * scallopHash( i + g ) - f;
-                float d = dot( r, r );
-                if ( d < best ) {
-                  best = d;
-                  toMiddle = r;
-                }
-              }
-            }
-          }
-          return toMiddle - n * dot( toMiddle, n );
-        }`)
+        vec3 iceGlow;`)
       .replace('#include <normal_fragment_maps>', /* glsl */ `#include <normal_fragment_maps>
         {
           vec3 n0 = normalize( vIceNormal );
@@ -416,10 +387,18 @@ export function iceMaterial({ name = 'ice', bob = false, snow = false } = {}) {
           vec3 fine = vec3( 0.0, dx.y, dx.x ) * w.x + vec3( dy.x, 0.0, dy.y ) * w.y + vec3( dz.x, dz.y, 0.0 ) * w.z;
           vec3 broad = vec3( 0.0, bx.y, bx.x ) * w.x + vec3( by.x, 0.0, by.y ) * w.y + vec3( bz.x, bz.y, 0.0 ) * w.z;
           vec3 n = n0 + fine * mix( 0.04, 1.0, above ) + broad * mix( 0.7, 0.3, above );
-          // Scallops a stride or two across, faded out where they would shrink below a few pixels.
-          float scallopSize = 1.5;
-          float scallopFade = ( 1.0 - above ) * ( 1.0 - smoothstep( 0.08, 0.25, length( fwidth( vIcePos ) ) / scallopSize ) );
-          if ( scallopFade > 0.0 ) n += scallops( vIcePos / scallopSize, n0 ) * 0.32 * scallopFade;
+          // Melting dimples it with soft hollows of every size, drawn out a little up and down as the meltwater runs.
+          // The sampling is turned off the grid of the broad hollows, so the two never line up.
+          if ( above < 1.0 ) {
+            vec3 m = vec3( vIcePos.x * 0.8 + vIcePos.z * 0.6, vIcePos.y * 1.6, vIcePos.z * 0.8 - vIcePos.x * 0.6 ) * 0.22;
+            m += 0.35 * vec3( broad.y, broad.x + broad.z, broad.y );
+            vec2 mx = texture2D( uSoftNormal, m.zy ).rg * 2.0 - 1.0;
+            vec2 my = texture2D( uSoftNormal, m.xz * 0.6 ).rg * 2.0 - 1.0;
+            vec2 mz = texture2D( uSoftNormal, m.xy ).rg * 2.0 - 1.0;
+            vec3 dimples = vec3( 0.0, mx.y, mx.x ) * w.x + vec3( my.x, 0.0, my.y ) * w.y + vec3( mz.x, mz.y, 0.0 ) * w.z;
+            float fade = 1.0 - smoothstep( 0.1, 0.35, length( fwidth( m ) ) );
+            n += dimples * 0.45 * fade * ( 1.0 - above );
+          }
           n = normalize( n );
           normal = normalize( n.x * vAxisX + n.y * vAxisY + n.z * vAxisZ );
           #ifdef DOUBLE_SIDED
