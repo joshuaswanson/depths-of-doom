@@ -4,13 +4,16 @@ import { spawn } from './assets.js';
 import { SHADER_TIME } from './surface.js';
 import { fbm, noise3 } from './ice.js';
 
-// Life on the polar seabed: brittle stars sprawled across the mud in crowds, sea urchins, sea stars, anemones and,
-// in the south, great glass sponges and lumpy yellow sponges. Each kind is one instanced mesh; the brittle stars'
-// arms writhe and the anemones' tentacles sway.
+// The polar seabed: angular slabs of dark slate and broken rubble on the mud, some boulders crusted with sea squirts,
+// finger sponges and many-armed sun stars, and among them brittle stars in crowds, sea urchins, sea stars, anemones
+// and, in the south, great glass sponges and lumpy yellow sponges. Each kind is one instanced mesh; the stars' arms
+// writhe and the anemones' tentacles sway.
 const CELL = 6;
 // How far either side of the camera the seabed is stocked.
 const REACH = 45;
 const Z_RANGE = [-24, 6];
+// Boulders keep out of the sub's lane, where it skims the seabed.
+const ROCK_Z = [-45, -3];
 
 const hash = (n, k) => {
   const s = Math.sin(n * 127.1 + k * 311.7) * 43758.5453;
@@ -107,16 +110,16 @@ const mix3 = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
 
 // A brittle star: a small five-sided disc with five long, thin, banded arms snaking out over the mud. Each arm vertex
 // carries how far out along the arm it is, which arm, and the arm's sideways direction, so the arms can writhe.
-function brittleStar(seed, colors) {
+function brittleStar(seed, colors, { arms = 5, length: reachOut = 0.62, thick = 0.024, disc: discR = 0.1 } = {}) {
   const parts = [];
-  const disc = new THREE.SphereGeometry(0.1, 22, 10);
+  const disc = new THREE.SphereGeometry(discR, 22, 10);
   disc.deleteAttribute('uv');
   const dp = disc.attributes.position;
   for (let i = 0; i < dp.count; i++) {
     const x = dp.getX(i);
     const z = dp.getZ(i);
     const a = Math.atan2(z, x);
-    const lobe = 1 + 0.12 * Math.cos(a * 5);
+    const lobe = 1 + 0.12 * Math.cos(a * arms);
     dp.setXYZ(i, x * lobe, Math.max(dp.getY(i), -0.02) * 0.4 + 0.035, z * lobe);
   }
   const discGeo = mergeVertices(disc);
@@ -125,31 +128,150 @@ function brittleStar(seed, colors) {
   const dc = new Float32Array(discGeo.attributes.position.count * 3);
   for (let i = 0; i < discGeo.attributes.position.count; i++) {
     const p = discGeo.attributes.position;
-    const rays = 0.5 + 0.5 * Math.cos(Math.atan2(p.getZ(i), p.getX(i)) * 5);
+    const rays = 0.5 + 0.5 * Math.cos(Math.atan2(p.getZ(i), p.getX(i)) * arms);
     dc.set(mix3(colors.dark, colors.pale, rays * 0.6), i * 3);
   }
   discGeo.setAttribute('color', new THREE.BufferAttribute(dc, 3));
   discGeo.setAttribute('aTag', new THREE.BufferAttribute(new Float32Array(discGeo.attributes.position.count * 4), 4));
   parts.push(discGeo);
-  for (let k = 0; k < 5; k++) {
-    const base = (k / 5) * Math.PI * 2 + (hash(seed, k) - 0.5) * 0.2;
-    const length = 0.62 + hash(seed, k + 10) * 0.2;
+  for (let k = 0; k < arms; k++) {
+    const base = (k / arms) * Math.PI * 2 + (hash(seed, k) - 0.5) * 0.2;
+    const length = reachOut + hash(seed, k + 10) * 0.2;
     const curl = (hash(seed, k + 20) - 0.5) * 2.2;
     const wave = hash(seed, k + 30) * 6.3;
     const path = [];
     for (let i = 0; i <= 18; i++) {
       const t = i / 18;
       const a = base + curl * t * t + 0.25 * Math.sin(t * 7 + wave) * t;
-      const r = 0.07 + length * t;
+      const r = discR * 0.7 + length * t;
       path.push(new THREE.Vector3(Math.cos(a) * r, 0.03 + 0.05 * Math.sin(Math.min(1, t * 2.2) * Math.PI) * (1 - t * 0.5), Math.sin(a) * r));
     }
     const sideX = -Math.sin(base);
     const sideZ = Math.cos(base);
-    parts.push(tube(path, (t) => 0.024 * (1 - t) ** 0.8 + 0.004, 5,
+    parts.push(tube(path, (t) => thick * (1 - t) ** 0.8 + 0.004, 5,
       (t) => mix3(colors.dark, colors.pale, (0.5 + 0.5 * Math.sin(t * 70)) ** 3 * 0.8),
       (t) => [t, k, sideX, sideZ]));
   }
   return mergeGeometries(parts);
+}
+
+// A slab of slate broken off along flat fracture planes, its edges worn round, faintly layered, dark grey-green with
+// a thin film of growth on whatever faces up. Returns the geometry and the height of its top over a grid, for
+// setting things on it.
+function slate(seed, detail) {
+  const geo = new THREE.IcosahedronGeometry(1, detail);
+  geo.deleteAttribute('uv');
+  geo.deleteAttribute('normal');
+  const merged = mergeVertices(geo);
+  const pos = merged.attributes.position;
+  const sx = 1.1 + hash(seed, 1) * 0.6;
+  const sy = 0.45 + hash(seed, 2) * 0.35;
+  const sz = 0.75 + hash(seed, 3) * 0.4;
+  const planes = Array.from({ length: 12 }, (_, k) => {
+    const a = hash(seed, 10 + k) * Math.PI * 2;
+    const up = (hash(seed, 20 + k) - 0.3) * 1.4;
+    const n = new THREE.Vector3(Math.cos(a), up, Math.sin(a)).normalize();
+    return { n, d: 0.45 + hash(seed, 30 + k) * 0.3 };
+  });
+  const bed = new THREE.Vector3(hash(seed, 40) - 0.5, 3, hash(seed, 41) - 0.5).normalize();
+  const v = new THREE.Vector3();
+  for (let i = 0; i < pos.count; i++) {
+    v.fromBufferAttribute(pos, i);
+    for (const { n, d } of planes) {
+      const over = v.dot(n) - d;
+      if (over > 0) v.addScaledVector(n, -over);
+    }
+    v.multiplyScalar(1 + fbm(v.x * 2 + seed, v.y * 2, v.z * 2) * 0.04 + noise3(v.x * 14, v.y * 14 + seed, v.z * 14) * 0.012);
+    v.addScaledVector(bed, Math.sin(v.dot(bed) * 26) * 0.01);
+    v.set(v.x * sx, Math.max(v.y * sy, -0.25 * sy), v.z * sz);
+    pos.setXYZ(i, v.x, v.y + 0.25 * sy, v.z);
+  }
+  merged.computeVertexNormals();
+  const nor = merged.attributes.normal;
+  paint(merged, (x, y, z) => {
+    const tone = 0.7 + 0.6 * (0.5 + noise3(x * 3 + seed, y * 3, z * 3));
+    return [0.055 * tone, 0.075 * tone, 0.08 * tone];
+  });
+  const col = merged.attributes.color;
+  for (let i = 0; i < pos.count; i++) {
+    const film = THREE.MathUtils.smoothstep(nor.getY(i), 0.4, 0.9) * (0.5 + noise3(pos.getX(i) * 4, seed, pos.getZ(i) * 4));
+    col.setXYZ(i, ...mix3([col.getX(i), col.getY(i), col.getZ(i)], [0.08, 0.14, 0.1], THREE.MathUtils.clamp(film, 0, 0.7)));
+  }
+  merged.computeBoundingBox();
+  const box = merged.boundingBox;
+  const mesh = new THREE.Mesh(merged, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }));
+  const ray = new THREE.Raycaster();
+  const N = 9;
+  const tops = [];
+  for (let j = 0; j < N; j++) {
+    for (let i = 0; i < N; i++) {
+      const x = THREE.MathUtils.lerp(box.min.x, box.max.x, (i + 0.5) / N) * 0.85;
+      const z = THREE.MathUtils.lerp(box.min.z, box.max.z, (j + 0.5) / N) * 0.85;
+      ray.set(new THREE.Vector3(x, box.max.y + 1, z), new THREE.Vector3(0, -1, 0));
+      const hit = ray.intersectObject(mesh)[0];
+      if (hit && hit.face.normal.y > 0.55) tops.push([x, hit.point.y, z]);
+    }
+  }
+  return { geometry: merged, tops };
+}
+
+// A clump of sea squirts: soft olive-green barrels standing together, each with two short siphons gaping at its top.
+function seaSquirts(seed) {
+  const parts = [];
+  const count = 7 + Math.floor(hash(seed, 1) * 6);
+  for (let i = 0; i < count; i++) {
+    const a = hash(seed, 10 + i) * Math.PI * 2;
+    const d = Math.sqrt(hash(seed, 20 + i)) * 0.28;
+    const h = 0.22 + hash(seed, 30 + i) * 0.16;
+    const w = 0.07 + hash(seed, 40 + i) * 0.03;
+    const shade = 0.8 + hash(seed, 50 + i) * 0.4;
+    const body = lathe([[0.001, 0], [w * 0.7, 0], [w * 1.15, h * 0.35], [w * 1.05, h * 0.75], [w * 0.7, h * 0.95],
+      [w * 0.35, h], [0.001, h * 0.98]], 20, (x, y, z) => {
+      const stripe = 0.85 + 0.15 * Math.sin(Math.atan2(z, x) * 7 + y * 20);
+      return mix3([0.2, 0.32, 0.14], [0.5, 0.62, 0.32], y / h).map((c) => c * shade * stripe);
+    });
+    const tilt = new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler((hash(seed, 60 + i) - 0.5) * 0.4, 0,
+      (hash(seed, 70 + i) - 0.5) * 0.4));
+    body.applyMatrix4(tilt);
+    for (const side of [-1, 1]) {
+      const start = new THREE.Vector3(side * w * 0.35, h * 0.97, 0).applyMatrix4(tilt);
+      const dir = new THREE.Vector3(side * 0.5, 1, 0).transformDirection(tilt);
+      const path = [0, 1, 2, 3].map((k) => start.clone().addScaledVector(dir, k * 0.022));
+      parts.push(tube(path, (t) => w * (0.32 - t * 0.06), 8, () => [0.62 * shade, 0.66 * shade, 0.36 * shade],
+        () => [0, 0, 0, 0]).translate(Math.cos(a) * d, 0, Math.sin(a) * d));
+    }
+    parts.push(body.translate(Math.cos(a) * d, 0, Math.sin(a) * d));
+  }
+  return mergeGeometries(parts);
+}
+
+// A finger sponge: a knobbly mound bunched into rounded lobes, like a cauliflower, pocked with tiny pores.
+function fingerSponge(seed, color) {
+  const geo = new THREE.SphereGeometry(0.3, 48, 32);
+  geo.deleteAttribute('uv');
+  const merged = mergeVertices(geo);
+  merged.deleteAttribute('normal');
+  const lobes = Array.from({ length: 11 }, (_, k) => {
+    const a = hash(seed, k) * Math.PI * 2;
+    const up = 0.15 + hash(seed, k + 20) * 0.85;
+    return { c: new THREE.Vector3(Math.cos(a) * Math.sqrt(1 - up * up), up, Math.sin(a) * Math.sqrt(1 - up * up)),
+      size: 0.25 + hash(seed, k + 40) * 0.35 };
+  });
+  const pos = merged.attributes.position;
+  const d = new THREE.Vector3();
+  for (let i = 0; i < pos.count; i++) {
+    d.fromBufferAttribute(pos, i).normalize();
+    let r = 0.8;
+    for (const { c, size } of lobes) r += size * Math.exp(-(1 - d.dot(c)) * 9);
+    r += fbm(d.x * 4 + seed, d.y * 4, d.z * 4) * 0.12;
+    pos.setXYZ(i, d.x * r * 0.3, Math.max(-0.02, d.y * r * 0.3 * 1.15) + 0.02, d.z * r * 0.3);
+  }
+  merged.computeVertexNormals();
+  paint(merged, (x, y, z) => {
+    const pore = noise3(x * 60, y * 60 + seed, z * 60) > 0.38 ? 0.7 : 1;
+    return color.map((c) => c * pore * (0.82 + 0.3 * (0.5 + noise3(x * 8, y * 8, z * 8 + seed))));
+  });
+  return displace(merged, (x, y, z) => noise3(x * 30 + seed, y * 30, z * 30) * 0.006);
 }
 
 // A sea urchin: a flattened round test bristling with spines, which thin out toward its underside.
@@ -360,6 +482,21 @@ export class Benthos {
       tip: [0.95, 0.85, 0.8] }, 5), anemoneMat, 60, { shadow: true, upright: true });
     add('anemoneWhite', anemone({ column: [0.78, 0.74, 0.68], disc: [0.85, 0.8, 0.74], tentacle: [0.9, 0.86, 0.82],
       tip: [0.97, 0.95, 0.92] }, 9), anemoneMat, 60, { shadow: true, upright: true });
+    const stone = vertexMaterial(0.85);
+    this.tops = new Map();
+    for (let i = 0; i < 4; i++) {
+      const rock = slate(100 + i, 4);
+      add(`boulder${i}`, rock.geometry, stone, 50, { shadow: true, upright: true });
+      this.tops.set(`boulder${i}`, rock.tops);
+    }
+    for (let i = 0; i < 3; i++) add(`rubble${i}`, slate(200 + i, 2).geometry, stone, 160, { upright: true });
+    const soft = vertexMaterial(0.7);
+    add('squirtsA', seaSquirts(1), soft, 24, { upright: true });
+    add('squirtsB', seaSquirts(2), soft, 24, { upright: true });
+    add('fingerWhite', fingerSponge(3, [0.88, 0.86, 0.74]), sponge, 40, { upright: true });
+    add('fingerYellow', fingerSponge(4, [0.9, 0.8, 0.42]), sponge, 40, { upright: true });
+    add('sunstar', brittleStar(5, { dark: [0.75, 0.32, 0.08], pale: [0.95, 0.62, 0.25] },
+      { arms: 13, length: 0.42, thick: 0.034, disc: 0.17 }), brittle, 60);
     for (const { geo, material } of modelGeometry('starfish')) {
       material.color.multiply(new THREE.Color(1, 0.42, 0.32));
       add('star', geo, material, 50);
@@ -404,19 +541,20 @@ export class Benthos {
     const south = sea === 'south';
     let k = 0;
     const r = () => hash(c, k++);
-    const put = (name, size, sink = 0) => {
-      const x = x0 + r() * CELL;
-      const z = Z_RANGE[0] + r() * (Z_RANGE[1] - Z_RANGE[0]);
+    // `at` sets a place and height on something other than the mud.
+    const put = (name, size, sink = 0, zRange = Z_RANGE, at = null) => {
+      const x = at ? at.x : x0 + r() * CELL;
+      const z = at ? at.z : zRange[0] + r() * (zRange[1] - zRange[0]);
       const kinds = this.byName.get(name);
       const yaw = r() * Math.PI * 2;
       const s = size[0] + r() * (size[1] - size[0]);
+      const y = at ? at.y : this.ground(x, z);
       for (const kind of kinds) {
         const n = used.get(kind);
         if (n >= kind.capacity) continue;
         used.set(kind, n + 1);
-        const y = this.ground(x, z);
         this.quat.setFromAxisAngle(this.up, yaw);
-        if (!kind.upright) {
+        if (!kind.upright && !at) {
           // Things lying flat follow the slope of the mud under them.
           const e = 0.3;
           this.normal.set(this.ground(x - e, z) - this.ground(x + e, z), 2 * e, this.ground(x, z - e) - this.ground(x, z + e))
@@ -426,7 +564,29 @@ export class Benthos {
         this.matrix.compose(this.pos.set(x, y - sink * s, z), this.quat, this.scale.setScalar(s));
         kind.mesh.setMatrixAt(n, this.matrix);
       }
+      return { x, y: y - sink * s, z, yaw, s };
     };
+    // A boulder with life growing over its top: squirts, sponges and sun stars set on its upper faces.
+    const outcrop = () => {
+      const name = `boulder${Math.floor(r() * 4)}`;
+      const rock = put(name, [1.6, 2.6], 0.12, [-30, -6]);
+      const tops = this.tops.get(name);
+      if (!tops.length) return;
+      const cos = Math.cos(rock.yaw);
+      const sin = Math.sin(rock.yaw);
+      const spot = () => {
+        const [lx, ly, lz] = tops[Math.floor(r() * tops.length)];
+        return { x: rock.x + (lx * cos + lz * sin) * rock.s, y: rock.y + ly * rock.s, z: rock.z + (-lx * sin + lz * cos) * rock.s };
+      };
+      put(r() < 0.5 ? 'squirtsA' : 'squirtsB', [1.2, 1.8], 0.02, Z_RANGE, spot());
+      for (let i = 0; i < 1 + Math.floor(r() * 2); i++) put(r() < 0.5 ? 'fingerWhite' : 'fingerYellow', [0.7, 1.2], 0.03, Z_RANGE, spot());
+      for (let i = 0; i < 1 + Math.floor(r() * 3); i++) put('sunstar', [0.8, 1.2], 0, Z_RANGE, spot());
+      if (r() < 0.4) put(r() < 0.5 ? 'anemoneRed' : 'anemoneWhite', [1, 1.5], 0.02, Z_RANGE, spot());
+    };
+    for (let i = 0; i < 1 + Math.floor(r() * 3); i++) put(`boulder${Math.floor(r() * 4)}`, [0.5, 2], 0.1, ROCK_Z);
+    for (let i = 0; i < 8 + Math.floor(r() * 8); i++) put(`rubble${Math.floor(r() * 3)}`, [0.1, 0.35], 0.15);
+    if (r() < 0.45) outcrop();
+    if (r() < 0.25) put('sunstar', [0.8, 1.2]);
     const crowd = (south ? 4 : 6) + Math.floor(r() * 5);
     for (let i = 0; i < crowd; i++) put(r() < 0.5 ? 'brittleA' : 'brittleB', [0.9, 1.4]);
     for (let i = 0; i < 1 + Math.floor(r() * 3); i++) put(south ? 'urchinSouth' : 'urchinNorth', [1.1, 1.7], 0.02);

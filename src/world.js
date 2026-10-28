@@ -437,7 +437,7 @@ const paintScratch = new THREE.Color();
 const painted = { y: 0, glow: 0 };
 
 // The seabed's height and colour at one point, with the reef glow that brightens the sand there.
-const POLAR_MUD = ['#3d3b36', '#4e4a42', '#6c675d'].map((hex) => new THREE.Color(hex));
+const POLAR_MUD = ['#2f3532', '#3c443f', '#56604f'].map((hex) => new THREE.Color(hex));
 
 function paintSeabed(x, z, murk, c) {
   const d = paintScratch;
@@ -460,7 +460,7 @@ function paintSeabed(x, z, murk, c) {
   c.lerp(REEF_LAGOON, glow * ripple * 0.4);
   const cold = polarAt(x).amount;
   if (cold > 0) {
-    // Under the polar ice: dark grey-brown mud, paler in patches of coarser grit.
+    // Under the polar ice: dark slate-grey mud, greener in patches of growth.
     d.copy(POLAR_MUD[0]).lerp(POLAR_MUD[1], n).lerp(POLAR_MUD[2], Math.max(0, m * 2 - 1) * 0.6);
     c.lerp(d, cold * 0.92);
   }
@@ -1811,10 +1811,7 @@ function layoutCluster(m, blockers) {
         1.0 + r() * 0.7);
     }
   } else if (m.polar) {
-    // Under the ice the shelf is bare gravel strewn with boulders.
-    for (let i = 0, n = 1 + Math.floor(r() * 3); i < n; i++) {
-      nestle(r() < 0.5 ? 'rock_a' : 'rock_b', m.x + (r() - 0.5) * 16, MOUND_Z + (r() - 0.5) * 10, 0.7 + r() * 0.8);
-    }
+    // The polar seabed has its own slate boulders and life.
   } else if (m.murk > 0.5) {
     // Out in the murk: dense kelp forests, thickest nearest the cliffs.
     const stalks = 14 + Math.floor(r() * 6 + m.murk * 10);
@@ -2177,6 +2174,8 @@ export class World {
     prop.obj.scale.setScalar(Math.min(prop.size, Math.max(room, 0.3)));
     prop.obj.position.set(x, ground - 0.25, z);
     prop.obj.visible = !SHELF_ONLY.test(prop.obj.userData.model) || onFlatShelf(x);
+    // Out to the middle distance the polar seabed has its own slate boulders.
+    if (prop.kind === 'polar' && !layer.tint && layer.z[0] > -60) prop.obj.visible = false;
     prop.obj.rotation.set(0, rand(-0.5, 0.5), 0);
     if (prop.obj.userData.model === 'anchor') settleAnchor(prop.obj);
     freeze(prop.obj);
