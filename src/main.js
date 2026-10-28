@@ -87,6 +87,9 @@ const under = new THREE.DirectionalLight('#3fb8c8', 0.6);
 under.position.set(0, -10, 6);
 scene.add(under);
 const SUNLIGHT = [[hemi, 1.25], [sun, 2.1], [overhead, 0.6], [rim, 2.2], [under, 0.6]];
+// How much of each light the polar blizzard takes away. The overcast scatters daylight evenly, so the direct sun goes
+// almost entirely and the light from the sky as a whole goes least.
+const OVERCAST = new Map([[hemi, 0.25], [sun, 0.85], [overhead, 0.55], [rim, 0.5], [under, 0.35]]);
 
 // Under the polar ice the light comes through turquoise: pale from the ice overhead, blue-green from the water around.
 const ICY_SKY = new THREE.Color('#d6f2f6');
@@ -94,13 +97,12 @@ const ICY_GROUND = new THREE.Color('#0b4a4c');
 const ICY_RIM = new THREE.Color('#78e6e0');
 const ICY_UNDER = new THREE.Color('#2cb4b2');
 function lightForDepth(dark, cold) {
-  // The blizzard's overcast keeps the sun off the polar water.
-  for (const [light, base] of SUNLIGHT) light.intensity = base * (1 - dark * 0.975) * (1 - 0.3 * cold);
+  for (const [light, base] of SUNLIGHT) light.intensity = base * (1 - dark * 0.975) * (1 - OVERCAST.get(light) * cold);
   hemi.color.set('#9fe2ff').lerp(ICY_SKY, cold);
   hemi.groundColor.set('#163f4a').lerp(ICY_GROUND, cold);
   under.color.set('#3fb8c8').lerp(ICY_UNDER, cold);
   rim.color.set('#7fdcff').lerp(ICY_RIM, cold).lerp(new THREE.Color('#7a5cff'), dark);
-  scene.environmentIntensity = 0.7 * (1 - dark * 0.97);
+  scene.environmentIntensity = 0.7 * (1 - dark * 0.97) * (1 - 0.4 * cold);
   overhead.shadow.intensity = 1 - THREE.MathUtils.smoothstep(dark, 0, 0.5);
 }
 
