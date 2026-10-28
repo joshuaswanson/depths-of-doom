@@ -712,32 +712,73 @@ kbd {
   color: #ffe9a8;
 }
 .ach-head b { color: var(--gold); }
-.ach-grid {
-  margin: 2vh 0;
+.ach-bar {
+  margin-top: 1.2vh;
+  width: 40%;
+  height: 0.8vh;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.ach-bar i { display: block; height: 100%; background: linear-gradient(90deg, var(--gold-deep), var(--gold)); }
+.ach-groups {
+  margin-top: 1.4vh;
   width: 100%;
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 1vh 1vw;
   overflow-y: auto;
 }
-.ach-card {
+.ach-group h3 {
+  margin: 1.4vh 0 0.8vh;
+  font-size: 0.95vw;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #8fb4cf;
+  text-align: left;
+}
+.ach-tiles {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 0.8vh 0.7vw;
+}
+.ach-tile {
   display: flex;
   align-items: center;
-  gap: 0.8vw;
-  padding: 1vh 0.9vw;
+  gap: 0.5vw;
+  padding: 0.9vh 0.8vw;
+  font-family: inherit;
+  font-size: 1vw;
+  font-weight: 600;
   text-align: left;
+  color: #7f97ae;
   background: rgba(255, 255, 255, 0.04);
   border: 0.12vw solid rgba(120, 200, 255, 0.15);
-  border-radius: 0.8vw;
-  color: #6f8aa3;
+  border-radius: 0.7vw;
+  cursor: pointer;
 }
-.ach-card .ach-icon { font-size: 1.6vw; color: #4d6580; }
-.ach-card.got { background: rgba(255, 200, 58, 0.08); border-color: rgba(255, 200, 58, 0.45); color: #bcd3f0; }
-.ach-card.got .ach-icon { color: var(--gold); }
+.ach-tile .trophy { color: #4d6580; }
+.ach-tile.got { color: #ffe9a8; background: rgba(255, 200, 58, 0.08); border-color: rgba(255, 200, 58, 0.45); }
+.ach-tile.got .trophy { color: var(--gold); }
+.ach-tile.picked { border-color: #cdeeff; background: rgba(120, 200, 255, 0.12); }
+.ach-tile.got.picked { border-color: var(--gold); background: rgba(255, 200, 58, 0.18); }
+.ach-detail {
+  margin: 2vh 0 1.6vh;
+  width: 100%;
+  min-height: 6.5vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.8vw;
+  padding: 0 1vw;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 0.8vw;
+}
+.ach-hint { font-size: 0.95vw; color: #6f8aa3; }
+.ach-detail .ach-icon { font-size: 1.8vw; color: #4d6580; }
+.ach-detail .ach-icon.got { color: var(--gold); }
+.ach-detail .ach-text { text-align: left; }
+.ach-detail .ach-text b { font-size: 1.2vw; color: #ffe9a8; }
+.ach-detail .ach-text span { font-size: 1vw; color: #cdeeff; }
 .ach-text { display: flex; flex-direction: column; line-height: 1.25; }
-.ach-card .ach-text b { font-size: 1.1vw; color: #93a9bf; }
-.ach-card.got .ach-text b { color: #ffe9a8; }
-.ach-card .ach-text span { font-size: 0.85vw; }
 
 .ach-pops {
   position: absolute;

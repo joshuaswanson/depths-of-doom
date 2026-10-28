@@ -261,17 +261,34 @@ export class Hud {
     return Boolean(this.achievementList);
   }
 
-  // Every achievement, earned ones lit in gold, the rest locked with how to earn them.
+  // Every achievement by name, grouped, earned ones lit in gold. Pointing at or tapping one shows how to earn it.
   showAchievements() {
     this.hideAchievements();
-    const cards = ACHIEVEMENTS.map((a) => {
-      const got = isUnlocked(a.id);
-      return `<div class="ach-card${got ? ' got' : ''}"><span class="ach-icon">${got ? TROPHY : LOCK}</span>
-        <span class="ach-text"><b>${a.name}</b><span>${a.desc}</span></span></div>`;
+    const groups = [...new Set(ACHIEVEMENTS.map((a) => a.group))].map((group) => {
+      const tiles = ACHIEVEMENTS.filter((a) => a.group === group).map((a) => `<button class="ach-tile${
+        isUnlocked(a.id) ? ' got' : ''}" data-id="${a.id}">${isUnlocked(a.id) ? TROPHY : LOCK}${a.name}</button>`).join('');
+      return `<div class="ach-group"><h3>${group}</h3><div class="ach-tiles">${tiles}</div></div>`;
     }).join('');
+    const share = (100 * unlockedCount()) / ACHIEVEMENTS.length;
     this.achievementList = el('div', 'ach-list', `<div class="ach-box">
       <div class="ach-head">${TROPHY}Achievements <b>${unlockedCount()}/${ACHIEVEMENTS.length}</b></div>
-      <div class="ach-grid">${cards}</div><button class="coop-btn ach-close">Back</button></div>`);
+      <div class="ach-bar"><i style="width: ${share}%"></i></div>
+      <div class="ach-groups">${groups}</div>
+      <div class="ach-detail"><span class="ach-hint">Point at or tap an achievement to see how to earn it.</span></div>
+      <button class="coop-btn ach-close">Back</button></div>`);
+    const detail = this.achievementList.querySelector('.ach-detail');
+    const tiles = this.achievementList.querySelectorAll('.ach-tile');
+    const select = (tile) => {
+      const a = ACHIEVEMENTS.find((x) => x.id === tile.dataset.id);
+      const got = isUnlocked(a.id);
+      for (const t of tiles) t.classList.toggle('picked', t === tile);
+      detail.innerHTML = `<span class="ach-icon${got ? ' got' : ''}">${got ? TROPHY : LOCK}</span>
+        <span class="ach-text"><b>${a.name}</b><span>${a.desc}</span></span>`;
+    };
+    for (const tile of tiles) {
+      tile.addEventListener('pointerenter', () => select(tile));
+      tile.addEventListener('click', () => select(tile));
+    }
     this.achievementList.querySelector('.ach-close').addEventListener('click', () => this.hideAchievements());
     this.achievementList.addEventListener('pointerdown', (e) => {
       if (e.target === this.achievementList) this.hideAchievements();
