@@ -517,8 +517,8 @@ function shapeTile(tile, target, budget = Infinity) {
     const { y, glow } = paintSeabed(x, pos.getZ(i), murk, c);
     pos.setY(i, y);
     glowAttr[i] = glow;
-    // Polar shelves are bare all the way to their cliffs: no grass, no sunlit ripples.
-    polarAttr[i] = polarAt(x).shelf ? 1 : 0;
+    // Grass and sunlit ripples thin out as the polar cold sets in.
+    polarAttr[i] = polarAt(x).amount;
     col.setXYZ(i, c.r, c.g, c.b);
   }
   job.next = end;

@@ -13,10 +13,10 @@ import { fbm, iceBlock, iceMaterial, jaggedOutline, polygonReach, sliceAlong } f
 // comes first.
 const SCAN_STEP = 4;
 const POLE_MIN_WIDTH = 140;
-// A polar shelf starts out as ordinary sea at its cliffs. The cold sets in over the first stretch of shelf, and the
-// ice starts once it has.
-const POLAR_EDGE = [4, 30];
-const ICE_INSET = 26;
+// The cold creeps in gradually: it starts far out over the trench before a polar shelf and has set in fully some way
+// onto the shelf, measured from the shelf's edge. The shelf's first stretch is open water, and the ice starts after.
+const POLAR_EDGE = [-90, 50];
+const ICE_INSET = 44;
 
 const onShelf = (x) => floorY(x) > SHELF_Y - 3;
 
@@ -83,18 +83,25 @@ function shelfNear(x) {
   return s;
 }
 
-// The polar shelf nearest x, if the nearest shelf is polar, and how cold the water is there: 0 over the trench and
-// along the shelf's edges, 1 under the ice.
+// How cold the water is at x, from 0 in the open sea to 1 over the middle of a polar shelf, and which pole's cold it
+// is; `shelf` is the polar shelf when that is the nearest shelf to x.
 const polarCache = new Map();
 export function polarAt(x) {
   const key = Math.round(x);
   let p = polarCache.get(key);
   if (p) return p;
   const s = shelfNear(x);
-  const kind = biomeOf(s.index);
-  p = kind === 'reef'
-    ? { amount: 0, kind: null, shelf: null }
-    : { amount: THREE.MathUtils.smoothstep(Math.min(x - s.start, s.end - x), POLAR_EDGE[0], POLAR_EDGE[1]), kind, shelf: s };
+  let into = -Infinity;
+  let pole = null;
+  for (const c of [shelf(s.index - 1), s, shelf(s.index + 1)]) {
+    const d = Math.min(x - c.start, c.end - x);
+    if (biomeOf(c.index) !== 'reef' && d > into) {
+      into = d;
+      pole = c;
+    }
+  }
+  const amount = pole ? THREE.MathUtils.smoothstep(into, POLAR_EDGE[0], POLAR_EDGE[1]) : 0;
+  p = { amount, kind: amount > 0 ? biomeOf(pole.index) : null, shelf: pole === s ? s : null };
   polarCache.set(key, p);
   if (polarCache.size > 8000) polarCache.delete(polarCache.keys().next().value);
   return p;
