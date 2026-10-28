@@ -27,6 +27,8 @@ WALK_STRIDE = 0.22
 # Each paw's place in the cycle when it sets down: a four-beat walk, left hind, left fore, right hind, right fore.
 PHASE = {"LH": 0.0, "LF": 0.24, "RH": 0.5, "RF": 0.74}
 DUTY = 0.65
+# A heavy bear's body rises and falls far less than a dog's over each stride.
+BOB = 0.35
 # One walk cycle of a dog from motion capture (scripts/dog_walk.py). The bear walks more slowly, so its paws keep
 # their own timing, but each swings forward along the dog's path, lifting as the dog's do, and the body bobs, rolls
 # and sways as the dog's does.
@@ -299,11 +301,11 @@ def walk_pose(phase, frame):
     chest = body["Spine1"]
     head = body["Head"]
     # The dog's turns, measured as roll, pitch (nose up) and yaw (to its right), tempered for a heavier animal.
-    turn("hips", ROLL(-hips[0] * 0.6) @ PITCH(-hips[1] * 0.5) @ YAW(-hips[2] * 0.25))
-    turn("chest", ROLL(-chest[0] * 0.5) @ PITCH(-chest[1] * 0.5) @ YAW(-chest[2] * 0.5))
+    turn("hips", ROLL(-hips[0] * 0.35) @ PITCH(-hips[1] * 0.25) @ YAW(-hips[2] * 0.25))
+    turn("chest", ROLL(-chest[0] * 0.3) @ PITCH(-chest[1] * 0.25) @ YAW(-chest[2] * 0.5))
     turn("neck", YAW(-head[2] * 0.3) @ PITCH(-head[1] * 0.3))
     turn("head", ROLL(-head[0] * 0.5) @ PITCH(-head[1] * 0.4) @ YAW(-head[2] * 0.4))
-    height = (legs["LH"]["top"].z - GROUND) * bob
+    height = (legs["LH"]["top"].z - GROUND) * bob * BOB
     for b in ("hips", "chest"):
         shift(b, (0, 0, height))
 
