@@ -37,7 +37,9 @@ const MAX_PIXEL_RATIO = Math.min(window.devicePixelRatio, 1.5);
 // Phone graphics chips are far slower, so there the picture may soften below 1:1 to keep the frame rate up.
 const MIN_PIXEL_RATIO = Math.min(touchScreen ? 0.6 : 1, MAX_PIXEL_RATIO);
 let pixelRatio = MAX_PIXEL_RATIO;
-renderer.setPixelRatio(pixelRatio);
+// The canvas keeps its full size. Changing quality resizes only the post-processing buffers, and the last pass
+// stretches them over the canvas, because resizing the canvas itself blanks it for a frame in iPhone Safari.
+renderer.setPixelRatio(MAX_PIXEL_RATIO);
 renderer.toneMapping = THREE.NeutralToneMapping;
 renderer.toneMappingExposure = 1.0;
 // Checking each shader for errors on its first draw stalls until the driver finishes linking it.
@@ -223,15 +225,19 @@ let world;
 let effects;
 let player;
 
+function sizeBuffers() {
+  composer.setPixelRatio(pixelRatio);
+  composer.setSize(window.innerWidth, window.innerHeight);
+  effects?.setViewport(window.innerHeight * pixelRatio, CAMERA_FOV);
+}
+
 function resize() {
   const w = window.innerWidth;
   const h = window.innerHeight;
   renderer.setSize(w, h, false);
-  composer.setPixelRatio(renderer.getPixelRatio());
-  composer.setSize(w, h);
+  sizeBuffers();
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
-  effects?.setViewport(h * renderer.getPixelRatio(), CAMERA_FOV);
   world?.setAspect(camera.aspect);
   game?.setAspect(camera.aspect);
 }
@@ -242,8 +248,7 @@ const fpsWindow = { time: 0, frames: 0, good: 0, bad: 0, locked: false, need: 2,
 
 function setPixelRatio(r) {
   pixelRatio = Math.round(r * 100) / 100;
-  renderer.setPixelRatio(pixelRatio);
-  resize();
+  sizeBuffers();
 }
 
 function lowerQuality() {
