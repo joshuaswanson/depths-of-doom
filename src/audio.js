@@ -175,6 +175,7 @@ const TRACKS = {
   deep: { file: 'below_the_pressure.m4a', tail: 6.5 },
   battle: { file: 'cannonball_at_the_surface.m4a', tail: 2.5 },
   battleDeep: { file: 'shadows_in_the_trench.m4a', tail: 1.5 },
+  battlePolar: { file: 'frozen_torpedo_run.m4a', tail: 1.2 },
 };
 const music = {};
 

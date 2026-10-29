@@ -413,15 +413,18 @@ async function boot() {
 const timer = new THREE.Timer();
 let titleT = 0;
 
-// Sunlit music near the surface gives way to the deep track below; fights swap in the battle tracks.
+// Sunlit music near the surface gives way to the deep track below; fights swap in the battle tracks, with their own
+// under the polar ice.
 function musicMix() {
   if (state === 'title') return {};
   const deep = THREE.MathUtils.smoothstep(world.dark, 0.15, 0.45);
+  const cold = world.polar.cold;
   const fight = game.inCombat ? 1 : 0;
   const duck = state === 'paused' ? 0.35 : 1;
   return {
     surface: (1 - deep) * (1 - fight) * duck, deep: deep * (1 - fight) * duck,
-    battle: (1 - deep) * fight * duck, battleDeep: deep * fight * duck,
+    battle: (1 - deep) * (1 - cold) * fight * duck, battlePolar: (1 - deep) * cold * fight * duck,
+    battleDeep: deep * fight * duck,
   };
 }
 
