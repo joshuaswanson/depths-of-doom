@@ -25,6 +25,10 @@ const LINK = `<svg viewBox="0 0 24 24" class="trophy" aria-hidden="true"><path f
   0-1.4l3.5-3.5a1 1 0 1 1 1.4 1.4L12 13.4a1 1 0 0 1-1.4 0zM8.5 19.8a4.2 4.2 0 0 1-3-7.2l2.1-2.1a1 1 0 1 1 1.4 1.4L6.9
   14a2.2 2.2 0 0 0 3.1 3.1l2.1-2.1a1 1 0 1 1 1.4 1.4l-2.1 2.1a4.2 4.2 0 0 1-2.9 1.3zm7.9-6.3a1 1 0 0 1-.7-1.7l2.1-2.1A2.2
   2.2 0 0 0 14.7 6.6l-2.1 2.1a1 1 0 1 1-1.4-1.4l2.1-2.1a4.2 4.2 0 0 1 5.9 5.9l-2.1 2.1a1 1 0 0 1-.7.3z"/></svg>`;
+const BUG = `<svg viewBox="0 0 24 24" class="trophy" aria-hidden="true"><path fill="currentColor" d="M9 4.5 7.6 3.1l1.4-1.4
+  1.8 1.8a5 5 0 0 1 2.4 0l1.8-1.8 1.4 1.4L15 4.5A5 5 0 0 1 17 8H7a5 5 0 0 1 2-3.5zM6 10h12v4a6 6 0 0 1-5 5.9V12h-2v7.9A6
+  6 0 0 1 6 14v-4zM2 11h3v2H2v-2zm17 0h3v2h-3v-2zM3 6.4l1.4-1.4L7 7.6 5.6 9 3 6.4zm15.4 2.6L17 7.6 19.6 5 21 6.4 18.4
+  9zM5.6 15 7 16.4 4.4 19 3 17.6 5.6 15zm12.8 0 2.6 2.6-1.4 1.4-2.6-2.6 1.4-1.4z"/></svg>`;
 const GEAR = `<svg viewBox="0 0 24 24" class="trophy" aria-hidden="true"><path fill="currentColor" d="M10.3 2h3.4l.5 2.6
   1.6.7 2.2-1.5 2.4 2.4-1.5 2.2.7 1.6 2.6.5v3.4l-2.6.5-.7 1.6 1.5 2.2-2.4 2.4-2.2-1.5-1.6.7-.5 2.6h-3.4l-.5-2.6-1.6-.7
   -2.2 1.5-2.4-2.4 1.5-2.2-.7-1.6L2 13.7v-3.4l2.6-.5.7-1.6-1.5-2.2 2.4-2.4 2.2 1.5 1.6-.7.5-2.6zM12 8.5a3.5 3.5 0 1 0
@@ -271,7 +275,7 @@ export class Hud {
     this.overlay.className = 'overlay';
   }
 
-  // Music and sound effect volumes, the language, and a tip jar.
+  // Music and sound effect volumes, the language, a place to report bugs, and a tip jar.
   showSettings() {
     const slider = (kind) => `<label class="setting"><span>${t(kind)}</span>
       <input type="range" class="volume" data-kind="${kind}" min="0" max="100" value="${Math.round(this.volume(kind) * 100)}"></label>`;
@@ -281,7 +285,10 @@ export class Hud {
       <div class="ach-head">${GEAR}${t('settings')}</div>
       ${slider('music')}${slider('effects')}
       <div class="setting"><span>${t('language')}</span><div class="lang-pick">${languages}</div></div>
-      <a class="coffee-btn" href="https://buymeacoffee.com/swanson" target="_blank" rel="noopener">${COFFEE}${t('coffee')}</a>
+      <div class="settings-links">
+        <a class="bug-btn" href="https://github.com/joshuaswanson/submania/issues/new" target="_blank" rel="noopener">${BUG}${t('bug')}</a>
+        <a class="coffee-btn" href="https://buymeacoffee.com/swanson" target="_blank" rel="noopener">${COFFEE}${t('coffee')}</a>
+      </div>
       <button class="coop-btn ach-close">${t('back')}</button></div>`);
     for (const input of popup.querySelectorAll('.volume')) {
       const show = () => input.style.setProperty('--fill', `${input.value}%`);

@@ -852,7 +852,24 @@ kbd {
 }
 @media (hover: hover) { .lang-btn:hover { filter: brightness(1.2); } }
 .lang-btn.on { color: #3b2a14; background: linear-gradient(#ffe866, #ffcf1f); border-color: #6b4a1c; cursor: default; }
-.settings-box .coffee-btn { margin-top: 3.4vh; }
+.settings-links { margin-top: 3.4vh; display: flex; gap: 0.8vw; justify-content: center; }
+.settings-links .coffee-btn { margin-top: 0; }
+.bug-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5vw;
+  padding: 0.7vh 1.4vw;
+  font-size: max(1.1vw, 12px);
+  font-weight: 700;
+  color: #e9f6ff;
+  text-decoration: none;
+  background: linear-gradient(#2f7fb8, #1b4f7a);
+  border: 0.18vw solid #0d2a42;
+  border-radius: 999px;
+  box-shadow: 0 0.3vw 0 #0d2a42;
+}
+@media (hover: hover) { .bug-btn:hover { filter: brightness(1.15); } }
+.bug-btn:active { transform: translateY(2px); box-shadow: 0 0.1vw 0 #0d2a42; }
 .settings-box .ach-close { margin-top: 2.4vh; }
 .side-btn {
   display: inline-flex;
