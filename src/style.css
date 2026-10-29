@@ -636,20 +636,6 @@ kbd {
 }
 @keyframes bob { 50% { transform: translateY(-1vh) rotate(-1deg); } }
 
-.coop-panel {
-  margin: 3vh auto 0;
-  padding: 1.6vh 1.8vw 1.2vh;
-  width: fit-content;
-  background: rgba(4, 18, 31, 0.45);
-  border: 0.15vw solid rgba(120, 200, 255, 0.25);
-  border-radius: 1.2vw;
-}
-.coop-title {
-  font-size: 1.35vw;
-  font-weight: 700;
-  color: #cdeeff;
-  letter-spacing: 0.04em;
-}
 .coop {
   margin-top: 1.2vh;
   display: flex;
@@ -736,6 +722,11 @@ kbd {
 .room-player.me { box-shadow: 0 0 0 0.15vw #fff; }
 
 .trophy { width: 1.2em; height: 1.2em; flex: none; }
+.title-links { margin-top: 2.2vh; display: flex; justify-content: center; gap: 1vw; }
+.title-links .ach-btn { margin: 0; }
+.ach-box.friends-box { width: auto; padding: 3vh 3vw 2.4vh; }
+.friends-box .coop { margin-top: 3vh; }
+.friends-box .coop-status { margin: 1.6vh 0 2.4vh; }
 .ach-btn {
   margin: 2.2vh auto 0;
   display: inline-flex;

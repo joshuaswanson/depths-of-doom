@@ -186,8 +186,8 @@ window.addEventListener('keydown', (e) => {
   keys.add(e.code);
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
   if (e.repeat) return;
-  if (hud.achievementsOpen) {
-    if (e.code === 'Escape') hud.hideAchievements();
+  if (hud.popupOpen) {
+    if (e.code === 'Escape') hud.closePopup();
     return;
   }
   if ((e.code === 'KeyP' || e.code === 'Escape') && !net) {

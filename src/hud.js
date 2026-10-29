@@ -13,18 +13,12 @@ const LOCK = `<svg viewBox="0 0 24 24" class="trophy" aria-hidden="true"><path f
   2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h1V7a5 5 0 0 1 5-5zm0 2a3 3 0 0 0-3 3v3h6V7a3 3 0 0 0-3-3z"/></svg>`;
 const achievementsButton = () => `<button class="ach-btn">${TROPHY}Achievements
   <b>${unlockedCount()}/${ACHIEVEMENTS.length}</b></button>`;
+const FRIENDS = `<svg viewBox="0 0 24 24" class="trophy" aria-hidden="true"><path fill="currentColor" d="M9 11a4 4 0 1 0 0-8
+  4 4 0 0 0 0 8zm7.5 0a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM1 20c0-3.3 3.6-6 8-6s8 2.7 8 6v1H1v-1zm17.5 1v-1c0-2-1-3.8
+  -2.6-5.1 3.6.2 6.1 2.4 6.1 5.1v1h-3.5z"/></svg>`;
 const titleControls = () => `<button class="big-btn">Dive!</button>
-  <div class="coop-panel">
-    <div class="coop-title">Dive with friends</div>
-    <div class="coop">
-      <button class="coop-btn host">Host a game</button>
-      <span class="coop-or">or</span>
-      <input class="coop-code" maxlength="4" placeholder="CODE" spellcheck="false" autocomplete="off">
-      <button class="coop-btn join">Join</button>
-    </div>
-    <div class="coop-status">Up to 4 subs. Share the code or the invite link.</div>
-  </div>
-  <div class="ach-slot">${achievementsButton()}</div>`;
+  <div class="title-links"><button class="ach-btn friends-btn">${FRIENDS}Dive with friends</button>
+  <div class="ach-slot">${achievementsButton()}</div></div>`;
 // Movement keys laid out as they sit on a keyboard: one key above, three below.
 const keyCluster = (up, left, down, right) => `<div class="key-grid"><kbd class="k-up">${up}</kbd>
   <kbd class="k-left">${left}</kbd><kbd class="k-down">${down}</kbd><kbd class="k-right">${right}</kbd></div>`;
@@ -137,22 +131,16 @@ export class Hud {
   }
 
   showTitle() {
-    this.hideAchievements();
+    this.closePopup();
     this.overlay.className = 'overlay show';
     const below = this.overlay.querySelector('.below');
     if (below) below.innerHTML = titleControls();
     else this.overlay.innerHTML = `<div class="panel">${LOGO}<div class="below">${titleControls()}</div></div>`;
     this.overlay.querySelector('.big-btn').addEventListener('click', () => this.onStart());
     this.addAchievementsButton(this.overlay.querySelector('.ach-slot'));
-    const code = this.overlay.querySelector('.coop-code');
-    code.addEventListener('keydown', (e) => {
-      e.stopPropagation();
-      if (e.code === 'Enter' && code.value.trim().length === 4) this.onJoin(code.value);
-    });
-    this.overlay.querySelector('.coop-btn.host').addEventListener('click', () => this.onHost());
-    this.overlay.querySelector('.coop-btn.join').addEventListener('click', () => {
-      if (code.value.trim().length === 4) this.onJoin(code.value);
-      else this.coopStatus('Type the 4-letter code from the host.');
+    this.overlay.querySelector('.friends-btn').addEventListener('click', (e) => {
+      e.currentTarget.blur();
+      this.showFriends();
     });
   }
 
@@ -168,7 +156,8 @@ export class Hud {
   }
 
   coopStatus(text) {
-    const box = this.overlay.querySelector('.coop-status');
+    if (!this.popup?.querySelector('.coop-status') && this.overlay.querySelector('.friends-btn')) this.showFriends();
+    const box = this.popup?.querySelector('.coop-status');
     if (!box) return;
     box.textContent = text;
     box.classList.add('alert');
@@ -192,7 +181,7 @@ export class Hud {
   }
 
   showGameOver(stats) {
-    this.hideAchievements();
+    this.closePopup();
     this.overlay.className = 'overlay show';
     this.overlay.innerHTML = `<div class="panel">
       <div class="logo small">Glub glub...</div>
@@ -221,7 +210,7 @@ export class Hud {
   }
 
   hideOverlay() {
-    this.hideAchievements();
+    this.closePopup();
     this.overlay.className = 'overlay';
   }
 
@@ -271,24 +260,41 @@ export class Hud {
     });
   }
 
-  get achievementsOpen() {
-    return Boolean(this.achievementList);
+  get popupOpen() {
+    return Boolean(this.popup);
+  }
+
+  // One window at a time opens over the title or game-over screen: the achievements or the co-op controls.
+  // Clicking the dimmed backdrop or Back closes it.
+  openPopup(html) {
+    this.closePopup();
+    this.popup = el('div', 'ach-list', html);
+    this.popup.querySelector('.ach-close').addEventListener('click', () => this.closePopup());
+    this.popup.addEventListener('pointerdown', (e) => {
+      if (e.target === this.popup) this.closePopup();
+    });
+    this.overlay.append(this.popup);
+    return this.popup;
+  }
+
+  closePopup() {
+    this.popup?.remove();
+    this.popup = null;
   }
 
   // Every achievement by name, earned ones lit in gold. Pointing at or tapping one shows how to earn it.
   showAchievements() {
-    this.hideAchievements();
     const buttons = ACHIEVEMENTS.map((a) => `<button class="ach-tile${isUnlocked(a.id) ? ' got' : ''}" data-id="${a.id}">${
       isUnlocked(a.id) ? TROPHY : LOCK}${a.name}</button>`).join('');
     const share = (100 * unlockedCount()) / ACHIEVEMENTS.length;
-    this.achievementList = el('div', 'ach-list', `<div class="ach-box">
+    const popup = this.openPopup(`<div class="ach-box">
       <div class="ach-head">${TROPHY}Achievements <b>${unlockedCount()}/${ACHIEVEMENTS.length}</b></div>
       <div class="ach-bar"><i style="width: ${share}%"></i></div>
       <div class="ach-tiles">${buttons}</div>
       <div class="ach-detail"><span class="ach-hint">Point at or tap an achievement to see how to earn it.</span></div>
       <button class="coop-btn ach-close">Back</button></div>`);
-    const detail = this.achievementList.querySelector('.ach-detail');
-    const tiles = this.achievementList.querySelectorAll('.ach-tile');
+    const detail = popup.querySelector('.ach-detail');
+    const tiles = popup.querySelectorAll('.ach-tile');
     const select = (tile) => {
       const a = ACHIEVEMENTS.find((x) => x.id === tile.dataset.id);
       const got = isUnlocked(a.id);
@@ -300,16 +306,30 @@ export class Hud {
       tile.addEventListener('pointerenter', () => select(tile));
       tile.addEventListener('click', () => select(tile));
     }
-    this.achievementList.querySelector('.ach-close').addEventListener('click', () => this.hideAchievements());
-    this.achievementList.addEventListener('pointerdown', (e) => {
-      if (e.target === this.achievementList) this.hideAchievements();
-    });
-    this.overlay.append(this.achievementList);
   }
 
-  hideAchievements() {
-    this.achievementList?.remove();
-    this.achievementList = null;
+  // Hosting or joining a shared dive, behind its own button so the title screen stays clear.
+  showFriends() {
+    const popup = this.openPopup(`<div class="ach-box friends-box">
+      <div class="ach-head">${FRIENDS}Dive with friends</div>
+      <div class="coop">
+        <button class="coop-btn host">Host a game</button>
+        <span class="coop-or">or</span>
+        <input class="coop-code" maxlength="4" placeholder="CODE" spellcheck="false" autocomplete="off">
+        <button class="coop-btn join">Join</button>
+      </div>
+      <div class="coop-status">Up to 4 subs. Share the code or the invite link.</div>
+      <button class="coop-btn ach-close">Back</button></div>`);
+    const code = popup.querySelector('.coop-code');
+    code.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.code === 'Enter' && code.value.trim().length === 4) this.onJoin(code.value);
+    });
+    popup.querySelector('.coop-btn.host').addEventListener('click', () => this.onHost());
+    popup.querySelector('.coop-btn.join').addEventListener('click', () => {
+      if (code.value.trim().length === 4) this.onJoin(code.value);
+      else this.coopStatus('Type the 4-letter code from the host.');
+    });
   }
 
   // A gold card that drops in under the pause button, with the coins it paid.
