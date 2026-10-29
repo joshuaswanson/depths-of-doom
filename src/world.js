@@ -2443,7 +2443,7 @@ export class World {
     this.spotRange = hull?.spotRange ?? 0;
     this.polar.update(dt, this.time, cx, cy, sub, camera, hull, this.effects);
     this.reefFish.update(dt, this.time, cx, sub);
-    this.benthos.update(cx);
+    this.benthos.update(cx, this.aspect);
     if (this.updateGulls(dt, cx, cy, hull, camera.position.z) > 0) {
       sfx.gull();
       unlock('gulls');

@@ -3,6 +3,7 @@ import { mergeGeometries, mergeVertices } from 'three/examples/jsm/utils/BufferG
 import { spawn } from './assets.js';
 import { SHADER_TIME } from './surface.js';
 import { fbm, noise3 } from './ice.js';
+import { CAMERA_Z, TAN_HALF_FOV } from './water.js';
 
 // The polar seabed: angular slabs of dark slate and broken rubble on the mud, some boulders crusted with sea squirts,
 // finger sponges and many-armed sun stars, and among them brittle stars in crowds, sea urchins, sea stars, anemones
@@ -519,12 +520,16 @@ export class Benthos {
     this.scale = new THREE.Vector3();
   }
 
-  update(cx) {
+  // Only what stands within sight of the camera is drawn, with a cell's width to spare, so nothing appears at the
+  // edge of the screen before the seabed is restocked a cell further on.
+  update(cx, aspect) {
     const first = Math.floor((cx - REACH) / CELL);
     const last = Math.ceil((cx + REACH) / CELL);
-    const key = `${first},${last}`;
+    const key = `${first},${last},${aspect.toFixed(2)}`;
     if (key === this.window) return;
     this.window = key;
+    this.sightX = (first + last) * CELL / 2;
+    this.aspect = aspect;
     const used = new Map(this.kinds.map((k) => [k, 0]));
     for (let c = first; c <= last; c++) this.stock(c, used);
     for (const k of this.kinds) {
@@ -549,7 +554,8 @@ export class Benthos {
       const yaw = r() * Math.PI * 2;
       const s = size[0] + r() * (size[1] - size[0]);
       const y = at ? at.y : this.ground(x, z);
-      for (const kind of kinds) {
+      const inSight = Math.abs(x - this.sightX) < (CAMERA_Z - z) * TAN_HALF_FOV * this.aspect + CELL * 1.5 + 3 * s;
+      for (const kind of inSight ? kinds : []) {
         const n = used.get(kind);
         if (n >= kind.capacity) continue;
         used.set(kind, n + 1);
