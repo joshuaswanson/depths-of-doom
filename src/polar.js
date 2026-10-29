@@ -254,13 +254,13 @@ function* layoutIce(s, ice) {
     b.rockSpeed = 0;
     yield;
   }
-  // Polar bears roam the bigger northern bergs, and one prowls the big floe in the pack ice where the igloo stands;
-  // penguins crowd the southern bergs in groups.
+  // Polar bears stand about on the bigger northern bergs, and one on the big floe in the pack ice where the igloo
+  // stands; penguins crowd the southern bergs in groups.
   const animals = [];
   const roomy = bergs.filter((b) => b.width > 10 && b.z > BACK_Z[0] + 10);
   if (kind === 'north') {
     animals.push({ type: 'igloo', berg: home, dx: IGLOO_SPOT.dx, dz: IGLOO_SPOT.dz });
-    // The bear paces along the front of the floe, clear of the igloo's tunnel.
+    // The bear stands at the front of the floe, clear of the igloo's tunnel.
     animals.push({ type: 'bear', berg: home, dx: 1.5, dz: 3.7 });
     for (const b of roomy) {
       if (r() > 0.5) continue;
@@ -570,7 +570,7 @@ function* buildIce(ice, scene) {
     obj.userData = u;
     if (a.type === 'bear') {
       obj.rotation.order = 'YZX';
-      u.mind = new BearMind(u, ANIMAL_SIZE.bear);
+      u.mind = new BearMind(u);
     } else if (a.type === 'penguin') {
       obj.rotation.order = 'YXZ';
       u.mind = new PenguinMind(u, a.range, (dx, dz) => a.berg.walkable(dx, dz, 0.35));
@@ -1400,7 +1400,7 @@ export class Polar {
     if (hull) hull.iceBump = null;
   }
 
-  // Bears plod about their bergs and penguins go about their business, while near enough to be seen.
+  // Bears look about their bergs and penguins go about their business, while near enough to be seen.
   animate(ice, dt, t, cx, camera) {
     if (!ice?.built) return;
     for (const obj of ice.built.animals) {
