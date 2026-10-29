@@ -1771,7 +1771,7 @@ function jellyMaterial(base, color, uniforms, wave, ribbon = false) {
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>\nvarying vec3 vJellyPos;\n${NOISE_GLSL}`)
       .replace('#include <opaque_fragment>', /* glsl */ `
-      float jellyRim = pow( 1.0 - abs( dot( normal, normalize( vViewPosition ) ) ), 2.0 );
+      float jellyRim = pow( saturate( 1.0 - abs( dot( normal, normalize( vViewPosition ) ) ) ), 2.0 );
       diffuseColor.a = clamp( diffuseColor.a * 0.6 + jellyRim * 0.7, 0.0, 1.0 );
       outgoingLight += emissive * jellyRim * 1.5;
       ${ribbon ? `

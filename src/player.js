@@ -177,7 +177,7 @@ function makeShieldBubble() {
       }
       void main() {
         vec3 n = normalize( vPos );
-        float rim = pow( 1.0 - abs( dot( vNormal, vView ) ), 2.2 );
+        float rim = pow( max( 1.0 - abs( dot( vNormal, vView ) ), 0.0 ), 2.2 );
         // The atan seam sits on the far side of the bubble, away from the camera.
         vec2 sp = vec2( atan( n.x, n.z ) * 3.2, n.y * 5.0 );
         vec4 cell = hexCell( sp );
@@ -187,10 +187,12 @@ function makeShieldBubble() {
         float shimmer = 0.5 + 0.5 * sin( uTime * 2.2 + cellRand * 6.2831 + n.y * 3.0 );
 
         float d = acos( clamp( dot( n, uHitDir ), -1.0, 1.0 ) );
-        float ring = exp( -pow( ( d - uHitAge * 5.0 ) * 5.0, 2.0 ) ) * exp( -uHitAge * 2.2 );
+        float ringGap = ( d - uHitAge * 5.0 ) * 5.0;
+        float ring = exp( -ringGap * ringGap ) * exp( -uHitAge * 2.2 );
         float spot = exp( -d * d * 6.0 ) * exp( -uHitAge * 6.0 );
         float level = mix( -1.15, 1.15, uCharge );
-        float sweep = uCharge >= 0.0 ? exp( -pow( ( n.y - level ) * 7.0, 2.0 ) ) : 0.0;
+        float sweepGap = ( n.y - level ) * 7.0;
+        float sweep = uCharge >= 0.0 ? exp( -sweepGap * sweepGap ) : 0.0;
 
         float idle = rim * 0.36 + edge * ( 0.03 + 0.05 * shimmer ) * ( 0.4 + rim ) + 0.006;
         float a = idle * uStrength;

@@ -507,7 +507,7 @@ export class Game {
         varying vec3 vView;
         varying float vAlong;
         void main() {
-          float rim = pow( 1.0 - abs( dot( vNormal, vView ) ), 2.5 );
+          float rim = pow( max( 1.0 - abs( dot( vNormal, vView ) ), 0.0 ), 2.5 );
           float tail = smoothstep( -0.56, -0.1, vAlong );
           gl_FragColor = vec4( vec3( 0.75, 0.95, 1.0 ) * ( rim * 0.55 + 0.05 ) * tail, 1.0 );
         }`,

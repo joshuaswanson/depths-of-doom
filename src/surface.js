@@ -240,7 +240,8 @@ export function addWaterline(material, { ripple = 1, topOnly = false } = {}) {
         // Two layers of rippling light drifting different ways, quick enough to shimmer on a hull lying still.
         vec3 cp = vec3( wp.x * 2.2 + uTime * 0.7, wp.y * 2.2 - uTime * 1.2, wp.z * 2.2 );
         vec3 cq = vec3( wp.x * 4.2 - uTime * 1.1, wp.y * 4.2 - uTime * 0.8, wp.z * 4.2 + uTime * 0.9 ) + 5.0;
-        float ripple = pow( 1.0 - abs( wNoise( cp ) * 2.0 - 1.0 ), 7.0 ) + pow( 1.0 - abs( wNoise( cq ) * 2.0 - 1.0 ), 9.0 ) * 0.6;
+        float ripple = pow( max( 1.0 - abs( wNoise( cp ) * 2.0 - 1.0 ), 0.0 ), 7.0 )
+          + pow( max( 1.0 - abs( wNoise( cq ) * 2.0 - 1.0 ), 0.0 ), 9.0 ) * 0.6;
         // Sunlight ripples all the way down to the shelves, and fades out over the trenches below them.
         float shallow = smoothstep( uSurface - 62.0, uSurface - 30.0, wp.y );
         float lit = ${topOnly ? 'smoothstep( -0.1, 0.55, inverseTransformDirection( normal, viewMatrix ).y )' : '1.0'};
@@ -346,7 +347,7 @@ export function addTailBeat(material, { rate = 6, amount = 0.06, controls = null
         float beatAlong = smoothstep( 0.5, -0.5, beatX );
         float beatWave = sin( beatA + beatX * 2.4 );
         transformed.${sideways ? 'z' : 'y'} += beatWave * uBeat * ${(amount * size).toFixed(4)} * mix( ${front.toFixed(2)}, 1.0, pow( beatAlong, 1.4 ) );
-        transformed.${sideways ? 'z' : 'y'} -= uArch * ${(0.23 * size).toFixed(4)} * pow( beatX * 2.0, 2.0 );`);
+        transformed.${sideways ? 'z' : 'y'} -= uArch * ${(0.23 * size).toFixed(4)} * 4.0 * beatX * beatX;`);
   };
   material.customProgramCacheKey = () => `${key}-tail-${along}-${front}-${sideways}`;
   material.needsUpdate = true;

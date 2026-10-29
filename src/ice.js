@@ -432,7 +432,7 @@ export function iceMaterial({ name = 'ice', bob = false, snow = false } = {}) {
           roughnessFactor = mix( 0.04, mix( 0.55, 0.9, snowy ), above );
           // Light scattering through the ice: strongest at grazing angles and in the clear ice under the water.
           vec3 toEye = normalize( vViewPosition );
-          float facing = abs( dot( normal, toEye ) );
+          float facing = min( abs( dot( normal, toEye ) ), 1.0 );
           float rim = 1.0 - facing;
           iceGlow = vec3( 0.03, 0.24, 0.3 ) * ( 0.3 + 0.9 * rim * rim * rim ) * ( 1.0 - deep * 0.85 ) * ( 1.0 - above );
           // Daylight soaking down through the ice from above: bright just under the surface and gone a few strides
