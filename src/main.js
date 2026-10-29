@@ -138,7 +138,8 @@ const bloomSetSize = bloom.setSize.bind(bloom);
 bloom.setSize = (w, h) => bloomSetSize(Math.max(1, w / 2), Math.max(1, h / 2));
 // Each pixel of the bright pass covers a 4x4 block of the screen. Thresholding each 2x2 quarter of the block, and not
 // only its middle, keeps a small bright speck gliding between pixels from switching the glow, spread across the whole
-// screen, on and off.
+// screen, on and off. The blur spreads a single NaN or infinite pixel over the whole frame and blacks it out, so those
+// add no glow.
 bloom.materialHighPassFilter.fragmentShader = /* glsl */ `
   uniform sampler2D tDiffuse;
   uniform vec3 defaultColor;
@@ -148,6 +149,7 @@ bloom.materialHighPassFilter.fragmentShader = /* glsl */ `
   varying vec2 vUv;
   vec4 bright( vec2 uv ) {
     vec4 texel = texture2D( tDiffuse, uv );
+    if ( any( isnan( texel ) ) || any( isinf( texel ) ) ) return vec4( defaultColor, defaultOpacity );
     float v = smoothstep( luminosityThreshold, luminosityThreshold + smoothWidth, luminance( texel.rgb ) );
     return mix( vec4( defaultColor, defaultOpacity ), texel, v );
   }

@@ -82,15 +82,14 @@ export function installWaterFog() {
   ${WATER_GRADIENT_GLSL}
 #endif
 `;
-  // A pixel this deep in the haze ends up as pure water colour whatever is drawn there, so it skips its shading. The
-  // check runs at the start of every opaque fogged material, where three.js places the clipping chunk.
+  // A pixel this deep in the haze ends up as pure water colour whatever is drawn there, so it skips its direct lights
+  // (see installLightSkips). It still runs the rest of the shader: leaving early would hand garbage to its neighbours'
+  // screen-space derivatives (normal perturbation, texture mip choice), which turns into NaN pixels that the bloom
+  // then spreads over the whole frame.
   chunks.clipping_planes_fragment = /* glsl */ `${chunks.clipping_planes_fragment}
 #if defined( USE_FOG ) && defined( OPAQUE ) && !defined( FOG_EXP2 ) && !defined( FOG_CAP )
-  if ( smoothstep( fogNear, fogFar, vFogDepth ) > 0.998 ) {
-    gl_FragColor = vec4( seaColor( clamp( vFogScreenY / ${TAN_HALF_FOV.toFixed(5)} * 0.5 + 0.5, 0.0, 1.0 ), fogColor.r,
-      fogColor.g, fogColor.b ), 1.0 );
-    return;
-  }
+  #define HAZE_SKIP
+  bool hazeHidden = smoothstep( fogNear, fogFar, vFogDepth ) > 0.998;
 #endif
 `;
   chunks.fog_fragment = /* glsl */ `
@@ -114,7 +113,7 @@ export function installWaterFog() {
 
 // Every lit pixel runs the full lighting maths once per light. A light that is switched off, a pixel outside a
 // spotlight's cone or beyond a lamp's reach, and a surface facing away from a light all add exactly zero, so those
-// pixels skip the maths and the shadow lookup for that light.
+// pixels skip the maths and the shadow lookup for that light, as do pixels lost in the haze.
 export function installLightSkips() {
   const call = 'RE_Direct( directLight, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );';
   const facing = /* glsl */ `
@@ -124,6 +123,9 @@ export function installLightSkips() {
 			|| dot( geometryClearcoatNormal, directLight.direction ) > 0.0
 			#endif
 			);
+		#endif
+		#ifdef HAZE_SKIP
+		directLight.visible = directLight.visible && ! hazeHidden;
 		#endif`;
   const chunk = THREE.ShaderChunk.lights_fragment_begin;
   const patched = chunk
