@@ -1147,7 +1147,7 @@ class Floe {
         // flippers out of step with the rest.
         // It looks about to get its bearings at its own pace, and strokes at its own rhythm once it swims.
         Object.assign(p, { yaw: dir > 0 ? 0 : Math.PI, pitch: -0.2 - Math.random() * 0.4, roll: 0, speed: 0,
-          stroke: Math.random() * 6.3, cruise: 4.5 + Math.random() * 3, retarget: 0,
+          stroke: Math.random() * 6.3, cruise: 8 + Math.random() * 3.5, retarget: 0,
           dazed: 0.1 + Math.random() * 0.8, gather: 0.5 + Math.random() * 0.9, calm: 4 + Math.random() * 4,
           rate: 0.8 + Math.random() * 0.45, look: 5 + Math.random() * 5, lookPhase: Math.random() * 6.3,
           turn: new THREE.Vector3(p.spinVel.x, p.spinVel.y, p.spinVel.z) });
@@ -1193,7 +1193,7 @@ class Floe {
       p.rig.uDrop.value += (1 - effort) * Math.sin(t * 9 + p.stroke) * 0.25;
       p.rig.uFlap.value *= 0.3 + 0.7 * effort;
       p.rig.uHeadYaw.value = (1 - wits * 0.7) * Math.sin(t * p.look + p.lookPhase) * 0.7;
-      p.speed = effort * 2;
+      p.speed = effort * 3.5;
       obj.position.addScaledVector(swimmerBack(p), -p.speed * dt);
       if (wits >= 1 && angle < 0.35 && p.turn.length() < 0.6) {
         p.state = 'swim';
@@ -1221,7 +1221,7 @@ class Floe {
         p.settle = Math.max(0, p.settle - dt);
         obj.quaternion.slerpQuaternions(was, obj.quaternion, 1 - Math.exp(-dt * 3 / Math.max(0.15, p.settle)));
       }
-      if (swimStroke(p.rig, p, dt * p.rate, p.speed / 7)) jet(effects, obj.position, swimmerBack(p));
+      if (swimStroke(p.rig, p, dt * p.rate, Math.min(1.3, p.speed / 7))) jet(effects, obj.position, swimmerBack(p));
       // Gone for good once it has swum out of sight.
       if (p.swimTime > 9 + p.phase && camera && outOfView(obj.position, camera)) {
         p.state = 'gone';
