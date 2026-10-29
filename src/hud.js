@@ -21,6 +21,10 @@ const COFFEE = `<svg viewBox="0 0 24 24" class="trophy" aria-hidden="true"><path
   1-5 5H9a5 5 0 0 1-5-5V8zm13 1h1.5a2.5 2.5 0 0 1 0 5H17v-2h1.5a.5.5 0 0 0 0-1H17V9zM7 2c.6.8.6 1.7 0 2.5S6.4 6.2 7 7H5.6
   c-.6-.8-.6-1.7 0-2.5S6.2 2.8 5.6 2H7zm4 0c.6.8.6 1.7 0 2.5s-.6 1.7 0 2.5H9.6c-.6-.8-.6-1.7 0-2.5s.6-1.7 0-2.5H11zM3
   20h16v2H3z"/></svg>`;
+const LINK = `<svg viewBox="0 0 24 24" class="trophy" aria-hidden="true"><path fill="currentColor" d="M10.6 13.4a1 1 0 0 1
+  0-1.4l3.5-3.5a1 1 0 1 1 1.4 1.4L12 13.4a1 1 0 0 1-1.4 0zM8.5 19.8a4.2 4.2 0 0 1-3-7.2l2.1-2.1a1 1 0 1 1 1.4 1.4L6.9
+  14a2.2 2.2 0 0 0 3.1 3.1l2.1-2.1a1 1 0 1 1 1.4 1.4l-2.1 2.1a4.2 4.2 0 0 1-2.9 1.3zm7.9-6.3a1 1 0 0 1-.7-1.7l2.1-2.1A2.2
+  2.2 0 0 0 14.7 6.6l-2.1 2.1a1 1 0 1 1-1.4-1.4l2.1-2.1a4.2 4.2 0 0 1 5.9 5.9l-2.1 2.1a1 1 0 0 1-.7.3z"/></svg>`;
 const GEAR = `<svg viewBox="0 0 24 24" class="trophy" aria-hidden="true"><path fill="currentColor" d="M10.3 2h3.4l.5 2.6
   1.6.7 2.2-1.5 2.4 2.4-1.5 2.2.7 1.6 2.6.5v3.4l-2.6.5-.7 1.6 1.5 2.2-2.4 2.4-2.2-1.5-1.6.7-.5 2.6h-3.4l-.5-2.6-1.6-.7
   -2.2 1.5-2.4-2.4 1.5-2.2-.7-1.6L2 13.7v-3.4l2.6-.5.7-1.6-1.5-2.2 2.4-2.4 2.2 1.5 1.6-.7.5-2.6zM12 8.5a3.5 3.5 0 1 0
@@ -218,8 +222,8 @@ export class Hud {
   // The co-op badge: the room code, a button to copy an invite link, and a dot for each sub in the game.
   showRoom(code, slot) {
     this.roomCode = code;
-    this.room.innerHTML = `<div class="room-head">${t('room')} <b>${code}</b><button class="room-copy">${t('copyInvite')}</button></div>
-      <div class="room-players"></div>`;
+    this.room.innerHTML = `<div class="room-label">${t('room')}</div><div class="room-id">${code}</div>
+      <button class="room-copy">${LINK}${t('copyInvite')}</button><div class="room-players"></div>`;
     this.room.classList.add('show');
     this.room.querySelector('.room-copy').addEventListener('click', (e) => {
       const link = `${location.origin}${location.pathname}?join=${code}`;

@@ -701,36 +701,58 @@ kbd {
 .coop-status.alert { color: #ffd23a; }
 .room-code {
   position: absolute;
-  top: 1.4vh;
-  right: calc(1.4vw + 11.5vw + env(safe-area-inset-right));
-  padding: 0.8vh 1vw;
-  font-size: 1vw;
-  font-weight: 600;
+  top: 1.6vh;
+  right: calc(2.4vw + max(10.5vw, 110px) + env(safe-area-inset-right));
+  padding: max(1.6vh, 10px) max(1.4vw, 12px) max(1.4vh, 9px);
+  text-align: center;
   color: #cdeeff;
-  background: rgba(4, 18, 31, 0.6);
-  border-radius: 0.9vw;
+  background: rgba(13, 29, 51, 0.82);
+  border: 0.15vw solid rgba(255, 200, 58, 0.45);
+  border-radius: 1.2vw;
+  box-shadow: 0 0.6vw 1.6vw rgba(0, 0, 0, 0.35);
   pointer-events: auto;
   display: none;
 }
-.room-code.show { display: block; }
-.room-head { display: flex; align-items: center; gap: 0.7vw; }
-.room-head b { color: #ffd23a; letter-spacing: 0.14em; }
+.room-code.show { display: flex; flex-direction: column; align-items: center; }
+.room-label {
+  font-size: max(0.8vw, 10px);
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: #8fb4cf;
+}
+.room-id {
+  margin-top: 0.3vh;
+  padding-left: 0.3em;
+  font-size: max(2.2vw, 22px);
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: 0.3em;
+  color: #ffd23a;
+  text-shadow: 0 0.15vw 0 #6b2a05;
+}
 .room-copy {
-  padding: 0.3vh 0.7vw;
+  margin-top: max(1.2vh, 8px);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45vw;
+  padding: max(0.6vh, 4px) max(1vw, 10px);
   font-family: inherit;
-  font-size: 0.85vw;
+  font-size: max(0.9vw, 11px);
   font-weight: 700;
   color: #e9f6ff;
-  background: #1b4f7a;
-  border: 0.12vw solid #2f7fb8;
+  background: linear-gradient(#2f7fb8, #1b4f7a);
+  border: 0.15vw solid #0d2a42;
   border-radius: 999px;
+  box-shadow: 0 0.2vw 0 #0d2a42;
   cursor: pointer;
 }
-.room-copy:hover { filter: brightness(1.2); }
-.room-players { margin-top: 0.6vh; display: flex; gap: 0.5vw; flex-wrap: wrap; }
+@media (hover: hover) { .room-copy:hover { filter: brightness(1.15); } }
+.room-copy:active { transform: translateY(1px); box-shadow: 0 0.05vw 0 #0d2a42; }
+.room-players { margin-top: max(1.2vh, 8px); display: flex; gap: 0.5vw; flex-wrap: wrap; justify-content: center; }
 .room-player {
-  padding: 0.15vh 0.55vw;
-  font-size: 0.85vw;
+  padding: max(0.3vh, 2px) max(0.7vw, 7px);
+  font-size: max(0.85vw, 10px);
   font-weight: 700;
   color: #06121c;
   background: var(--c);
