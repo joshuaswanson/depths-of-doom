@@ -1042,8 +1042,32 @@ kbd {
   100% { opacity: 0; transform: translateY(-1vh); }
 }
 
-/* A phone held sideways is short, so the logo shrinks to leave room for the buttons under it. */
+/* A phone held sideways is short, so the logo shrinks to leave room for the buttons under it, and everything read or
+   tapped mid-dive grows to stay legible and easy to hit. */
 @media (pointer: coarse) {
+  .hints.corner .hint {
+    top: auto;
+    bottom: 31vh;
+    left: calc(3vw + env(safe-area-inset-left));
+    transform: none;
+    font-size: 2.2vw;
+  }
+  .pause-btn { gap: 0.8vw; padding: 1.2vh 3vw 1.4vh; font-size: 2.6vw; border-width: 0.35vw; }
+  .pause-btn .bars { gap: 0.45vw; }
+  .pause-btn .bars i { width: 0.6vw; height: 2vw; border-radius: 0.2vw; }
+  .panel .big-btn { margin-top: 3vh; padding: 1.8vh 5vw; font-size: 3.4vw; }
+  .panel .settings-btn { padding: 1.6vh 2.8vw; font-size: 2.5vw; }
+  .toast { bottom: 31vh; font-size: 3.8vw; -webkit-text-stroke-width: 0.25vw; text-shadow: 0 0.4vw 0 #0d1d33; }
+  .banner { font-size: 8vw; }
+  .banner small { font-size: 3.6vw; }
+  .ach-pops { top: 13vh; gap: 1.6vh; }
+  .ach-pop { gap: 1.6vw; padding: 1.8vh 2.4vw; border-width: 0.35vw; }
+  .ach-pop .ach-icon { width: 5vw; height: 5vw; font-size: 2.8vw; }
+  .ach-pop small { font-size: 1.5vw; }
+  .ach-pop b { font-size: 2.6vw; }
+  .ach-pop .ach-text span { font-size: 1.8vw; }
+  .ach-reward { gap: 0.5vw; margin-left: 0.8vw; font-size: 2.4vw; }
+  .ach-reward img { width: 2.8vw; }
   .logo-img { width: min(64vw, 940px, 120vh); }
   .badge { margin-top: calc(min(64vw, 940px, 120vh) * -0.075); }
   .badge img { width: min(32vw, 470px, 60vh); }

@@ -320,7 +320,8 @@ export class Hud {
   showControlHints() {
     this.hints?.remove();
     const k = this.keys;
-    this.hints = el('div', 'hints', touchScreen ? `<div class="hint"><div class="hint-swim">
+    // On a touch screen the stick hint waits in the lower left corner, under the thumb that steers.
+    this.hints = el('div', touchScreen ? 'hints corner' : 'hints', touchScreen ? `<div class="hint"><div class="hint-swim">
         <div class="hint-stick"><i></i></div><div class="hint-label">${t('dragToSwim')}</div></div></div>` : `<div class="hint">
         <div class="hint-swim"><div class="hint-keys">${keyCluster(k.KeyW, k.KeyA, k.KeyS, k.KeyD)}
         <span class="hint-or">${t('or')}</span>
