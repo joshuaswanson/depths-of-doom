@@ -20,7 +20,7 @@ export const ACHIEVEMENTS = [
   { id: 'angler', name: 'Lure-d In', desc: 'Swim up to an anglerfish as its lure flashes.' },
   { id: 'gulls', name: 'Gull-ible', desc: 'Send the seagulls flying.' },
   { id: 'flying_sub', name: 'Flying Sub', desc: 'Launch clear out of the water.' },
-  { id: 'dolphin_jump', name: 'Porpoise Pals', desc: 'Leap out of the water alongside the dolphins.' },
+  { id: 'dolphin_jump', name: 'Porpoise Pals', desc: 'Leap out of the water in an arc alongside the dolphins, heading the same way they swim.' },
   { id: 'abyss', name: 'Rock Bottom', desc: 'Touch the floor of a deep trench.' },
   { id: 'coop', name: 'Crew Up', desc: 'Dive with a friend.' },
   { id: 'north_pole', name: 'True North', desc: 'Reach the North Pole.' },

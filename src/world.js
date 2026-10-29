@@ -1395,6 +1395,9 @@ const POD_SIZE = 5;
 const DOLPHIN_LENGTH = 5.2;
 const POD_GAP = [25, 45];
 const DOLPHIN_SPEED = 7.2;
+// How fast and how far forward the sub must fly to leap the way the dolphins do.
+const LEAP_PACE = 3;
+const LEAP_REACH = 4;
 // The same pull the sub feels when it breaches; water slows a dolphin quickly once it is back in.
 const LEAP_GRAVITY = 18;
 const SPLASH_LEAD = 1.1;
@@ -2144,13 +2147,29 @@ export class World {
     });
   }
 
+  // Porpoise Pals takes a leap like the dolphins': the whole hull flies clear of the water in a forward arc and comes
+  // back down further along, swimming the same way as the pod the whole time it is beside them.
+  trackLeap(hull) {
+    const c = hull.center;
+    if (!hull.airborne) {
+      const leap = this.leap;
+      this.leap = null;
+      if (leap?.pal && leap.clear && (c.x - leap.from) * leap.dir > LEAP_REACH) unlock('dolphin_jump');
+      return;
+    }
+    const pod = this.dolphins;
+    this.leap ??= { from: c.x, dir: pod.dir, clear: false, pal: true };
+    const leap = this.leap;
+    leap.clear ||= c.y - hull.extents.hy > SURFACE_Y + 0.3;
+    const beside = pod.active && pod.members.some((m) => Math.abs(m.x - c.x) < 14);
+    if (!beside || pod.dir !== leap.dir || hull.vel.x * leap.dir < LEAP_PACE) leap.pal = false;
+  }
+
   // Achievements for what the sub reaches or swims beside.
   checkAchievements(hull) {
     const c = hull.center;
-    if (hull.airborne) {
-      unlock('flying_sub');
-      if (this.dolphins.active && this.dolphins.members.some((m) => Math.abs(m.x - c.x) < 14)) unlock('dolphin_jump');
-    }
+    if (hull.airborne) unlock('flying_sub');
+    this.trackLeap(hull);
     const floor = floorY(c.x);
     if (floor < ANGLER_FLOOR && c.y - hull.extents.hy - seabedAt(c.x) < 1.5) unlock('abyss');
     if (this.vesselPoints?.some((p) => this.inSpotlight(p))) unlock('shipwreck');
