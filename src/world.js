@@ -1177,8 +1177,8 @@ function hazeCap(root) {
   return haze;
 }
 
-// In its own stretch of open ocean a whale shark cruises slowly by just under the surface, its great mouth gaping as
-// it feeds. It comes in from beyond the edge of the screen, and at the end of its patch, or before the floor rises
+// In its own stretch of open ocean a whale shark cruises slowly by a little way under the surface, its great mouth
+// gaping as it feeds. It comes in from beyond the edge of the screen, and at the end of its patch, or before the floor rises
 // toward a shelf, it swings away from the camera and fades off into the blue.
 const SHARK_LENGTH = 21;
 const SHARK_Z = -34;
@@ -1187,6 +1187,8 @@ const SHARK_TURN_RADIUS = 18;
 const SHARK_GAP = [20, 40];
 const SHARK_FADE = [60, 120];
 const SHARK_HAZE = 0.55;
+// Its least share of the water's blue haze, so it always sits softly back in the water.
+const SHARK_HAZE_MIN = '0.4';
 
 function makeWhaleShark() {
   const holder = new THREE.Group();
@@ -1194,7 +1196,11 @@ function makeWhaleShark() {
   body.scale.setScalar(SHARK_LENGTH);
   // Its bounds come from the skeleton's bind pose, well away from where the swim holds it, so culling would hide it.
   body.traverse((o) => {
-    if (o.isMesh) o.frustumCulled = false;
+    if (!o.isMesh) return;
+    o.frustumCulled = false;
+    // Sunlight rippling down through the surface plays across its back.
+    addWaterline(o.material, { ripple: 1.5, topOnly: true });
+    o.material.defines = { ...o.material.defines, FOG_MIN: SHARK_HAZE_MIN };
   });
   holder.add(body);
   const mixer = new THREE.AnimationMixer(body);
@@ -1226,7 +1232,7 @@ function updateWhaleShark(shark, dt, t, cx, cy, aspect) {
     }
     const dir = -sides[0];
     Object.assign(u, { active: true, home, fade: 0, heading: dir > 0 ? 0 : Math.PI, turn: 0, departing: false,
-      baseY: SURFACE_Y - rand(7, 12) });
+      baseY: SURFACE_Y - rand(10, 15) });
     u.mixer.setTime(Math.random() * 10);
     shark.position.set(cx - dir * offscreen, u.baseY, SHARK_Z);
   }
