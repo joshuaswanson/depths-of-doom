@@ -772,7 +772,7 @@ kbd {
 .gear-btn .trophy { width: 62%; height: 62%; filter: drop-shadow(0 0.1vw 0 rgba(6, 40, 72, 0.6)); }
 @media (hover: hover) { .gear-btn:hover { transform: rotate(30deg) scale(1.06); } }
 .gear-btn:active { transform: translateY(2px); }
-.ach-box.settings-box { width: min(48vw, 680px); padding: 3vh 3vw 2.6vh; }
+.ach-box.settings-box { width: min(58vw, 820px); padding: 3vh 3vw 2.6vh; }
 .setting {
   width: 100%;
   margin-top: 2.6vh;
@@ -830,6 +830,13 @@ kbd {
 .lang-btn.on { color: #3b2a14; background: linear-gradient(#ffe866, #ffcf1f); border-color: #6b4a1c; cursor: default; }
 .settings-links { margin-top: 3.4vh; display: flex; gap: 0.8vw; justify-content: center; }
 .settings-links .coffee-btn { margin-top: 0; }
+.settings-box .setting { font-size: max(1.5vw, 15px); }
+.settings-box .lang-btn { padding: 1vh 1.6vw; font-size: max(1.35vw, 15px); border-width: 0.22vw; }
+.settings-box .bug-btn, .settings-box .coffee-btn { gap: 0.7vw; padding: 1.2vh 1.9vw; font-size: max(1.35vw, 15px); }
+.settings-box .ach-close { padding: 1.1vh 2.8vw; font-size: max(1.5vw, 16px); }
+.settings-box .volume { height: max(0.9vw, 10px); }
+.settings-box .volume::-webkit-slider-thumb { width: max(2.3vw, 30px); height: max(2.3vw, 30px); }
+.settings-box .volume::-moz-range-thumb { width: max(2.3vw, 30px); height: max(2.3vw, 30px); }
 .bug-btn {
   display: inline-flex;
   align-items: center;
@@ -1042,6 +1049,14 @@ kbd {
   .ach-pop .ach-text span { font-size: 1.8vw; }
   .ach-reward { gap: 0.5vw; margin-left: 0.8vw; font-size: 2.4vw; }
   .ach-reward img { width: 2.8vw; }
+  .ach-box.settings-box { width: min(76vw, 820px); }
+  .settings-box .ach-head { font-size: 3.2vw; }
+  .settings-box .setting { font-size: 2.4vw; margin-top: 2.2vh; }
+  .settings-box .lang-btn { padding: 1.4vh 2.2vw; font-size: 2.2vw; }
+  .settings-box .bug-btn, .settings-box .coffee-btn { padding: 1.6vh 2.6vw; font-size: 2.2vw; }
+  .settings-box .ach-close { padding: 1.4vh 4vw; font-size: 2.4vw; }
+  .settings-box .volume::-webkit-slider-thumb { width: 4vw; height: 4vw; }
+  .settings-box .volume::-moz-range-thumb { width: 4vw; height: 4vw; }
   .logo-img { width: min(64vw, 940px, 120vh); }
   .badge { margin-top: calc(min(64vw, 940px, 120vh) * -0.075); }
   .badge img { width: min(32vw, 470px, 60vh); }
