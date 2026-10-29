@@ -31,7 +31,7 @@ html, body {
 .hud-topleft {
   position: absolute;
   top: 2.2vh;
-  left: 1.8vw;
+  left: calc(1.8vw + env(safe-area-inset-left));
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -161,7 +161,7 @@ html, body {
 .radar {
   position: absolute;
   top: 1.6vh;
-  right: 1.4vw;
+  right: calc(1.4vw + env(safe-area-inset-right));
   width: 10.5vw;
   min-width: 110px;
   filter: drop-shadow(0 0.4vw 0.8vw rgba(0, 0, 0, 0.55));
@@ -702,7 +702,7 @@ kbd {
 .room-code {
   position: absolute;
   top: 1.4vh;
-  right: calc(1.4vw + 11.5vw);
+  right: calc(1.4vw + 11.5vw + env(safe-area-inset-right));
   padding: 0.8vh 1vw;
   font-size: 1vw;
   font-weight: 600;
