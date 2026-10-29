@@ -1289,6 +1289,8 @@ const SPERM_LIFT = -0.045;
 // Pitch eases toward its goal like a heavy body on a spring: it starts turning gently and settles without overshoot.
 const SPERM_TURN = 0.55;
 const SPERM_DIVE = -0.6;
+// As it noses down into a dive it rolls its back a little toward the camera, so the top of its great head shows.
+const SPERM_DIVE_ROLL = 0.42;
 
 function makeSpermWhale() {
   const holder = new THREE.Group();
@@ -1372,7 +1374,8 @@ function updateSpermWhale(whale, dt, cx, cy, humpback, aspect, world) {
   // The body heaves gently with each stroke.
   const heave = Math.sin(u.t * SPERM_STROKE + 1.2);
   p.y += heave * 0.25 * dt;
-  whale.rotation.set(0, u.dir > 0 ? 0 : Math.PI, u.pitch + heave * 0.03);
+  const roll = SPERM_DIVE_ROLL * THREE.MathUtils.smoothstep(-u.pitch, 0.05, 0.6);
+  whale.rotation.set(roll, u.dir > 0 ? 0 : Math.PI, u.pitch + heave * 0.03);
   // Faint when it first comes up out of the dark, and gone again as it dives, nears a wall or nears the floor.
   const arrive = THREE.MathUtils.smoothstep(u.t, 0, 4);
   const sunk = u.diveFrom === null ? 0 : THREE.MathUtils.smoothstep(u.diveFrom - p.y, 4, 22);
