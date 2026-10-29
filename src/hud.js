@@ -1,4 +1,5 @@
 import { ACHIEVEMENTS, isUnlocked, unlockedCount } from './achievements.js';
+import { LANGUAGES, getLanguage, setLanguage, t } from './i18n.js';
 import { UPGRADES, upgradeCost } from './upgrades.js';
 import { touchScreen } from './touch.js';
 
@@ -11,7 +12,7 @@ const TROPHY = `<svg viewBox="0 0 24 24" class="trophy" aria-hidden="true"><path
   1.7V7zm10 0v2.7A2 2 0 0 0 18 8V7h-1z"/></svg>`;
 const LOCK = `<svg viewBox="0 0 24 24" class="trophy" aria-hidden="true"><path fill="currentColor" d="M12 2a5 5 0 0 1 5 5v3h1a2
   2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h1V7a5 5 0 0 1 5-5zm0 2a3 3 0 0 0-3 3v3h6V7a3 3 0 0 0-3-3z"/></svg>`;
-const achievementsButton = () => `<button class="side-btn ach-btn">${TROPHY}Achievements
+const achievementsButton = () => `<button class="side-btn ach-btn">${TROPHY}${t('achievements')}
   <b>${unlockedCount()}/${ACHIEVEMENTS.length}</b></button>`;
 const FRIENDS = `<svg viewBox="0 0 24 24" class="trophy" aria-hidden="true"><path fill="currentColor" d="M9 11a4 4 0 1 0 0-8
   4 4 0 0 0 0 8zm7.5 0a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM1 20c0-3.3 3.6-6 8-6s8 2.7 8 6v1H1v-1zm17.5 1v-1c0-2-1-3.8
@@ -20,9 +21,13 @@ const COFFEE = `<svg viewBox="0 0 24 24" class="trophy" aria-hidden="true"><path
   1-5 5H9a5 5 0 0 1-5-5V8zm13 1h1.5a2.5 2.5 0 0 1 0 5H17v-2h1.5a.5.5 0 0 0 0-1H17V9zM7 2c.6.8.6 1.7 0 2.5S6.4 6.2 7 7H5.6
   c-.6-.8-.6-1.7 0-2.5S6.2 2.8 5.6 2H7zm4 0c.6.8.6 1.7 0 2.5s-.6 1.7 0 2.5H9.6c-.6-.8-.6-1.7 0-2.5s.6-1.7 0-2.5H11zM3
   20h16v2H3z"/></svg>`;
+const GEAR = `<svg viewBox="0 0 24 24" class="trophy" aria-hidden="true"><path fill="currentColor" d="M10.3 2h3.4l.5 2.6
+  1.6.7 2.2-1.5 2.4 2.4-1.5 2.2.7 1.6 2.6.5v3.4l-2.6.5-.7 1.6 1.5 2.2-2.4 2.4-2.2-1.5-1.6.7-.5 2.6h-3.4l-.5-2.6-1.6-.7
+  -2.2 1.5-2.4-2.4 1.5-2.2-.7-1.6L2 13.7v-3.4l2.6-.5.7-1.6-1.5-2.2 2.4-2.4 2.2 1.5 1.6-.7.5-2.6zM12 8.5a3.5 3.5 0 1 0
+  0 7 3.5 3.5 0 0 0 0-7z"/></svg>`;
 const titleControls = () => `<div class="title-row">
-  <button class="side-btn friends-btn">${FRIENDS}Dive with friends</button>
-  <button class="big-btn">Dive!</button>
+  <button class="side-btn friends-btn">${FRIENDS}${t('diveFriends')}</button>
+  <button class="big-btn">${t('dive')}</button>
   <div class="ach-slot">${achievementsButton()}</div></div>`;
 // Movement keys laid out as they sit on a keyboard: one key above, three below.
 const keyCluster = (up, left, down, right) => `<div class="key-grid"><kbd class="k-up">${up}</kbd>
@@ -42,7 +47,7 @@ function el(tag, cls, html) {
 }
 
 export class Hud {
-  constructor(root, { onBuy, onStart, onResume, onPause, onHost, onJoin, onMute, muted }) {
+  constructor(root, { onBuy, onStart, onResume, onPause, onHost, onJoin, onVolume, volume }) {
     this.root = root;
     this.onBuy = onBuy;
 
@@ -63,8 +68,7 @@ export class Hud {
     this.waveTag = el('div', 'wave-tag');
     topLeft.append(this.waveTag);
 
-    this.pauseBtn = el('button', 'pause-btn', '<span class="bars"><i></i><i></i></span>Pause');
-    this.pauseBtn.setAttribute('aria-label', 'Pause');
+    this.pauseBtn = el('button', 'pause-btn', '<span class="bars"><i></i><i></i></span><span class="label"></span>');
     this.pauseBtn.addEventListener('pointerdown', (e) => {
       e.preventDefault();
       onPause();
@@ -75,7 +79,7 @@ export class Hud {
 
     this.banner = el('div', 'banner');
     this.toast = el('div', 'toast');
-    this.bossBar = el('div', 'boss-bar', '<div class="boss-name">BIG BAD BARNACLE</div><div class="boss-track"><div class="boss-fill"></div></div>');
+    this.bossBar = el('div', 'boss-bar', '<div class="boss-name"></div><div class="boss-track"><div class="boss-fill"></div></div>');
     this.bossFill = this.bossBar.querySelector('.boss-fill');
 
     this.bar = el('div', 'upgrade-bar');
@@ -84,10 +88,10 @@ export class Hud {
       const slot = el('button', 'slot', `
         <span class="bolt tl"></span><span class="bolt tr"></span><span class="bolt bl"></span><span class="bolt br"></span>
         <span class="port"><img src="${ICON(def.icon)}" alt=""></span>
-        <span class="name">${def.name}</span>
+        <span class="name"></span>
         <span class="level"></span>
         <span class="price"><img src="${ICON('coin')}" alt=""><span class="amount"></span></span>
-        <span class="tip"><b>${def.name}</b><span class="blurb">${def.blurb}</span><span class="cost"></span></span>`);
+        <span class="tip"><b></b><span class="blurb"></span><span class="cost"></span></span>`);
       slot.addEventListener('pointerdown', (e) => {
         e.preventDefault();
         onBuy(def.id);
@@ -107,12 +111,46 @@ export class Hud {
     this.onHost = onHost;
     this.onJoin = onJoin;
     this.onResume = onResume;
-    this.onMute = onMute;
-    this.muted = muted;
+    this.onVolume = onVolume;
+    this.volume = volume;
     this.room = el('div', 'room-code');
-    this.rotateNote = el('div', 'rotate-note', `<div class="rotate-phone"></div>Turn your phone sideways to dive`);
+    this.rotateNote = el('div', 'rotate-note', '<div class="rotate-phone"></div><span></span>');
     root.append(this.room, this.rotateNote);
     this.lastPips = '';
+    this.screen = null;
+    // Keyboard hints name the keys as printed on the player's own keyboard, where the browser can tell.
+    this.keys = { KeyW: 'W', KeyA: 'A', KeyS: 'S', KeyD: 'D', KeyP: 'P', KeyM: 'M' };
+    navigator.keyboard?.getLayoutMap?.().then((map) => {
+      for (const code of Object.keys(this.keys)) this.keys[code] = (map.get(code) ?? this.keys[code]).toUpperCase();
+      if (this.hints) this.showControlHints();
+    }).catch(() => {});
+    this.relabel();
+  }
+
+  // Text that stays on screen between redraws, set again whenever the language changes.
+  relabel() {
+    this.pauseBtn.querySelector('.label').textContent = t('pause');
+    this.pauseBtn.setAttribute('aria-label', t('pause'));
+    this.bossBar.querySelector('.boss-name').textContent = t('boss');
+    this.rotateNote.querySelector('span').textContent = t('rotate');
+    for (const s of this.slots) {
+      s.slot.querySelector('.name').textContent = s.def.name;
+      s.slot.querySelector('.tip b').textContent = s.def.name;
+      s.slot.querySelector('.blurb').textContent = s.def.blurb;
+    }
+    this.lastPlayers = null;
+  }
+
+  // Switches the language and redraws whatever is showing, with the settings still open over it.
+  changeLanguage(code) {
+    setLanguage(code);
+    this.relabel();
+    if (this.roomCode) this.showRoom(this.roomCode, this.roomSlot);
+    if (this.hints) this.showControlHints();
+    if (this.screen === 'title') this.showTitle();
+    else if (this.screen === 'pause') this.showPause();
+    else if (this.screen === 'gameover') this.showGameOver(this.lastStats);
+    this.showSettings();
   }
 
   flashHealth() {
@@ -136,11 +174,20 @@ export class Hud {
   }
 
   showTitle() {
+    this.screen = 'title';
     this.closePopup();
     this.overlay.className = 'overlay show';
     const below = this.overlay.querySelector('.below');
     if (below) below.innerHTML = titleControls();
     else this.overlay.innerHTML = `<div class="panel">${LOGO}<div class="below">${titleControls()}</div></div>`;
+    this.overlay.querySelector('.gear-btn')?.remove();
+    const gear = el('button', 'gear-btn', GEAR);
+    gear.setAttribute('aria-label', t('settings'));
+    gear.addEventListener('click', () => {
+      gear.blur();
+      this.showSettings();
+    });
+    this.overlay.append(gear);
     this.overlay.querySelector('.big-btn').addEventListener('click', () => this.onStart());
     this.addAchievementsButton(this.overlay.querySelector('.ach-slot'));
     this.overlay.querySelector('.friends-btn').addEventListener('click', (e) => {
@@ -157,7 +204,7 @@ export class Hud {
     this.lastPlayers = key;
     const colors = ['#ffd23a', '#38c8ff', '#5be37a', '#c77dff'];
     box.innerHTML = slots.map((n) => `<span class="room-player${n === this.roomSlot ? ' me' : ''}" style="--c:${colors[n - 1]}">
-      P${n}${n === this.roomSlot ? ' (you)' : ''}</span>`).join('');
+      P${n}${n === this.roomSlot ? ` (${t('you')})` : ''}</span>`).join('');
   }
 
   coopStatus(text) {
@@ -171,12 +218,12 @@ export class Hud {
   // The co-op badge: the room code, a button to copy an invite link, and a dot for each sub in the game.
   showRoom(code, slot) {
     this.roomCode = code;
-    this.room.innerHTML = `<div class="room-head">Room <b>${code}</b><button class="room-copy">Copy invite link</button></div>
+    this.room.innerHTML = `<div class="room-head">${t('room')} <b>${code}</b><button class="room-copy">${t('copyInvite')}</button></div>
       <div class="room-players"></div>`;
     this.room.classList.add('show');
     this.room.querySelector('.room-copy').addEventListener('click', (e) => {
       const link = `${location.origin}${location.pathname}?join=${code}`;
-      navigator.clipboard?.writeText(link).then(() => this.showToast('Invite link copied!'),
+      navigator.clipboard?.writeText(link).then(() => this.showToast(t('inviteCopied')),
         () => this.showToast(link));
       e.currentTarget.blur();
     });
@@ -186,39 +233,65 @@ export class Hud {
   }
 
   showGameOver(stats) {
+    this.screen = 'gameover';
+    this.lastStats = stats;
     this.closePopup();
     this.overlay.className = 'overlay show';
     this.overlay.innerHTML = `<div class="panel">
-      <div class="logo small">Glub glub...</div>
-      <div class="subtitle">Your magnificent tub sank on wave ${stats.wave}</div>
-      <div class="stats"><div><b>${stats.kills}</b>subs sunk</div><div><b>${stats.coins}</b>coins found</div>
-      <div><b>${stats.parts}</b>things bolted on</div></div>
-      <button class="big-btn">Dive again</button><div class="ach-slot"></div></div>`;
+      <div class="logo small">${t('glub')}</div>
+      <div class="subtitle">${t('sank', { n: stats.wave })}</div>
+      <div class="stats"><div><b>${stats.kills}</b>${t('subsSunk')}</div><div><b>${stats.coins}</b>${t('coinsFound')}</div>
+      <div><b>${stats.parts}</b>${t('boltedOn')}</div></div>
+      <button class="big-btn">${t('diveAgain')}</button><div class="ach-slot"></div></div>`;
     this.overlay.querySelector('.big-btn').addEventListener('click', () => this.onStart());
     this.addAchievementsButton(this.overlay.querySelector('.ach-slot'));
   }
 
   showPause() {
+    this.screen = 'pause';
+    this.closePopup();
     this.overlay.className = 'overlay show';
-    this.overlay.innerHTML = `<div class="panel"><div class="logo small">Paused</div>
-      <button class="big-btn">Resume</button><div><button class="coop-btn sound-btn"></button></div>
-      <a class="coffee-btn" href="https://buymeacoffee.com/swanson" target="_blank" rel="noopener">${COFFEE}Buy me a coffee</a>
-      </div>`;
+    this.overlay.innerHTML = `<div class="panel"><div class="logo small">${t('paused')}</div>
+      <button class="big-btn">${t('resume')}</button>
+      <div><button class="side-btn settings-btn">${GEAR}${t('settings')}</button></div></div>`;
     this.overlay.querySelector('.big-btn').addEventListener('click', () => this.onResume());
-    const sound = this.overlay.querySelector('.sound-btn');
-    const label = () => {
-      sound.textContent = this.muted() ? 'Sound: off' : 'Sound: on';
-    };
-    label();
-    sound.addEventListener('click', () => {
-      this.onMute();
-      label();
+    this.overlay.querySelector('.settings-btn').addEventListener('click', (e) => {
+      e.currentTarget.blur();
+      this.showSettings();
     });
   }
 
   hideOverlay() {
+    this.screen = null;
     this.closePopup();
     this.overlay.className = 'overlay';
+  }
+
+  // Music and sound effect volumes, the language, and a tip jar.
+  showSettings() {
+    const slider = (kind) => `<label class="setting"><span>${t(kind)}</span>
+      <input type="range" class="volume" data-kind="${kind}" min="0" max="100" value="${Math.round(this.volume(kind) * 100)}"></label>`;
+    const languages = LANGUAGES.map(([code, name]) => `<button class="lang-btn${code === getLanguage() ? ' on' : ''}"
+      data-lang="${code}" lang="${code}">${name}</button>`).join('');
+    const popup = this.openPopup(`<div class="ach-box settings-box">
+      <div class="ach-head">${GEAR}${t('settings')}</div>
+      ${slider('music')}${slider('effects')}
+      <div class="setting"><span>${t('language')}</span><div class="lang-pick">${languages}</div></div>
+      <a class="coffee-btn" href="https://buymeacoffee.com/swanson" target="_blank" rel="noopener">${COFFEE}${t('coffee')}</a>
+      <button class="coop-btn ach-close">${t('back')}</button></div>`);
+    for (const input of popup.querySelectorAll('.volume')) {
+      const show = () => input.style.setProperty('--fill', `${input.value}%`);
+      show();
+      input.addEventListener('input', () => {
+        show();
+        this.onVolume(input.dataset.kind, input.value / 100);
+      });
+    }
+    for (const button of popup.querySelectorAll('.lang-btn')) {
+      button.addEventListener('click', () => {
+        if (button.dataset.lang !== getLanguage()) this.changeLanguage(button.dataset.lang);
+      });
+    }
   }
 
   setVisible(v) {
@@ -235,11 +308,14 @@ export class Hud {
   // The controls, shown to the right of the sub at the start of the first dive until it first moves.
   showControlHints() {
     this.hints?.remove();
+    const k = this.keys;
     this.hints = el('div', 'hints', touchScreen ? `<div class="hint"><div class="hint-swim">
-        <div class="hint-stick"><i></i></div><div class="hint-label">drag anywhere to swim</div></div></div>` : `<div class="hint">
-        <div class="hint-swim"><div class="hint-keys">${keyCluster('W', 'A', 'S', 'D')}<span class="hint-or">or</span>
-        ${keyCluster('&uarr;', '&larr;', '&darr;', '&rarr;')}</div><div class="hint-label">swim</div></div>
-        <div class="hint-more"><div><kbd>P</kbd> pause</div><div><kbd>M</kbd> mute</div></div></div>`);
+        <div class="hint-stick"><i></i></div><div class="hint-label">${t('dragToSwim')}</div></div></div>` : `<div class="hint">
+        <div class="hint-swim"><div class="hint-keys">${keyCluster(k.KeyW, k.KeyA, k.KeyS, k.KeyD)}
+        <span class="hint-or">${t('or')}</span>
+        ${keyCluster('&uarr;', '&larr;', '&darr;', '&rarr;')}</div><div class="hint-label">${t('swim')}</div></div>
+        <div class="hint-more"><div><kbd>${k.KeyP}</kbd> ${t('pauseKey')}</div><div><kbd>${k.KeyM}</kbd> ${t('muteKey')}</div></div>
+        </div>`);
     this.root.append(this.hints);
   }
 
@@ -271,7 +347,8 @@ export class Hud {
     return Boolean(this.popup);
   }
 
-  // One window at a time opens over the title or game-over screen: the achievements or the co-op controls.
+  // One window at a time opens over the title, pause or game-over screen: the achievements, the co-op controls or the
+  // settings.
   // Clicking the dimmed backdrop or Back closes it.
   openPopup(html) {
     this.closePopup();
@@ -295,11 +372,11 @@ export class Hud {
       isUnlocked(a.id) ? TROPHY : LOCK}${a.name}</button>`).join('');
     const share = (100 * unlockedCount()) / ACHIEVEMENTS.length;
     const popup = this.openPopup(`<div class="ach-box">
-      <div class="ach-head">${TROPHY}Achievements <b>${unlockedCount()}/${ACHIEVEMENTS.length}</b></div>
+      <div class="ach-head">${TROPHY}${t('achievements')} <b>${unlockedCount()}/${ACHIEVEMENTS.length}</b></div>
       <div class="ach-bar"><i style="width: ${share}%"></i></div>
       <div class="ach-tiles">${buttons}</div>
-      <div class="ach-detail"><span class="ach-hint">Point at or tap an achievement to see how to earn it.</span></div>
-      <button class="coop-btn ach-close">Back</button></div>`);
+      <div class="ach-detail"><span class="ach-hint">${t('achHint')}</span></div>
+      <button class="coop-btn ach-close">${t('back')}</button></div>`);
     const detail = popup.querySelector('.ach-detail');
     const tiles = popup.querySelectorAll('.ach-tile');
     const select = (tile) => {
@@ -318,15 +395,15 @@ export class Hud {
   // Hosting or joining a shared dive, behind its own button so the title screen stays clear.
   showFriends() {
     const popup = this.openPopup(`<div class="ach-box friends-box">
-      <div class="ach-head">${FRIENDS}Dive with friends</div>
+      <div class="ach-head">${FRIENDS}${t('diveFriends')}</div>
       <div class="coop">
-        <button class="coop-btn host">Host a game</button>
-        <span class="coop-or">or</span>
+        <button class="coop-btn host">${t('host')}</button>
+        <span class="coop-or">${t('or')}</span>
         <input class="coop-code" maxlength="4" placeholder="CODE" spellcheck="false" autocomplete="off">
-        <button class="coop-btn join">Join</button>
+        <button class="coop-btn join">${t('join')}</button>
       </div>
-      <div class="coop-status">Up to 4 subs. Share the code or the invite link.</div>
-      <button class="coop-btn ach-close">Back</button></div>`);
+      <div class="coop-status">${t('coopIntro')}</div>
+      <button class="coop-btn ach-close">${t('back')}</button></div>`);
     const code = popup.querySelector('.coop-code');
     code.addEventListener('keydown', (e) => {
       e.stopPropagation();
@@ -335,14 +412,14 @@ export class Hud {
     popup.querySelector('.coop-btn.host').addEventListener('click', () => this.onHost());
     popup.querySelector('.coop-btn.join').addEventListener('click', () => {
       if (code.value.trim().length === 4) this.onJoin(code.value);
-      else this.coopStatus('Type the 4-letter code from the host.');
+      else this.coopStatus(t('typeCode'));
     });
   }
 
   // A gold card that drops in under the pause button, with the coins it paid.
   showAchievement(def, reward) {
     const pop = el('div', 'ach-pop', `<span class="ach-icon">${TROPHY}</span><span class="ach-text">
-      <small>Achievement unlocked</small><b>${def.name}</b><span>${def.desc}</span></span>
+      <small>${t('achUnlocked')}</small><b>${def.name}</b><span>${def.desc}</span></span>
       <span class="ach-reward"><img src="${ICON('coin')}" alt="">+${reward}</span>`);
     this.achievementPops.append(pop);
     // As it fades, the card pulls the ones stacked under it up into its place, so they glide there.
@@ -390,7 +467,7 @@ export class Hud {
       this.lastPips = pips;
     }
     this.coinText.textContent = coins;
-    this.waveTag.textContent = `Wave ${wave}`;
+    this.waveTag.textContent = t('wave', { n: wave });
 
     for (const s of this.slots) {
       const lvl = player.levels[s.def.id];
@@ -398,10 +475,10 @@ export class Hud {
       const cost = upgradeCost(s.def, lvl);
       const room = player.hasRoomFor(s.def.id);
       const slots = s.def.id === 'hull' ? ` · ${player.mountsUsed}/${player.mountCapacity}` : '';
-      s.level.textContent = maxed ? `MAX${slots}` : `Lv. ${lvl}${slots}`;
+      s.level.textContent = maxed ? `${t('max')}${slots}` : `${t('level', { n: lvl })}${slots}`;
       const affordable = !maxed && room && coins >= cost;
-      s.amount.textContent = maxed ? 'MAX' : !room ? 'NO ROOM' : cost;
-      s.cost.textContent = maxed ? 'Fully bolted' : !room ? 'No room. Upgrade the Hull first.' : `Cost: ${cost} coins`;
+      s.amount.textContent = maxed ? t('max') : !room ? t('noRoom') : cost;
+      s.cost.textContent = maxed ? t('fullyBolted') : !room ? t('noRoomTip') : t('cost', { n: cost });
       s.slot.classList.toggle('noroom', !maxed && !room);
       s.slot.classList.toggle('affordable', affordable);
       s.slot.classList.toggle('locked', !affordable && !maxed);

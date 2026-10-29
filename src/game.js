@@ -4,6 +4,7 @@ import { cloneMaterial, findNode, ownMaterials, spawn } from './assets.js';
 import { RIG_SCALE, makeBeam } from './player.js';
 import { WATER, addWaterline } from './surface.js';
 import { sfx } from './audio.js';
+import { t } from './i18n.js';
 import { UPGRADES, upgradeCost } from './upgrades.js';
 import { CAMERA_Z, SHELF_Y, SURFACE_Y, TAN_HALF_FOV } from './water.js';
 import { iceCeiling, iceSpan } from './polar.js';
@@ -705,7 +706,7 @@ export class Game {
     if (!this.player.hasRoomFor(id)) {
       sfx.denied();
       this.hud.flashSlot(id, false);
-      this.hud.showToast('No room on the hull! Upgrade your Hull');
+      this.hud.showToast(t('noRoomHull'));
       return;
     }
     const cost = upgradeCost(def, lvl);
@@ -719,7 +720,7 @@ export class Game {
     this.net?.retintLocal();
     sfx.upgrade();
     this.hud.flashSlot(id, true);
-    this.hud.showToast(`${def.name} Lv. ${lvl + 1}!`);
+    this.hud.showToast(t('upgraded', { name: def.name, n: lvl + 1 }));
     if (lvl + 1 >= def.max) unlock('max_upgrade');
     if (id === 'hull' && this.player.duck.visible) unlock('rubber_duck');
     added.forEach((part, i) => {
@@ -749,8 +750,8 @@ export class Game {
     if (w % 5 === 0) {
       q.push({ type: 'boss', delay: 2.5 });
       for (let i = 0; i < 3 + w / 5; i++) q.push({ type: 'scout', delay: rand(4, 7) });
-      this.hud.showBanner(`Wave ${w}`, 'Something big is coming...');
-      this.net?.event({ t: 'banner', a: `Wave ${w}`, b: 'Something big is coming...' });
+      this.showWaveBanner(w);
+      this.net?.event({ t: 'banner', wave: w });
     } else {
       let budget = 4 + w * 2.6;
       while (budget > 0) {
@@ -768,8 +769,8 @@ export class Game {
           budget -= n;
         }
       }
-      this.hud.showBanner(`Wave ${w}`, w === 1 ? 'Sink those grumpy subs!' : '');
-      this.net?.event({ t: 'banner', a: `Wave ${w}`, b: w === 1 ? 'Sink those grumpy subs!' : '' });
+      this.showWaveBanner(w);
+      this.net?.event({ t: 'banner', wave: w });
     }
     this.queue = q;
     this.spawnTimer = 1.5;
@@ -963,7 +964,7 @@ export class Game {
           sfx.boom(true);
         }, i * 160);
       }
-      this.hud.showBanner('Boss sunk!', 'Grab the loot!');
+      this.hud.showBanner(t('bossSunk'), t('grabLoot'));
     }
     if (e.type === 'mine' && e.anchor) {
       this.brokenChains.push(brokenChain(e.anchor, p));
@@ -1196,7 +1197,7 @@ export class Game {
         this.overTimer = 2.4;
       } else {
         this.respawnTimer = RESPAWN_TIME;
-        this.hud.showToast(`Sunk! Back in ${RESPAWN_TIME} seconds`);
+        this.hud.showToast(t('respawn', { n: RESPAWN_TIME }));
       }
     }
   }
@@ -2236,7 +2237,7 @@ export class Game {
       const bonus = 5 + this.wave * 5;
       this.coins += bonus;
       this.coinsTotal += bonus;
-      this.hud.showToast(`Wave ${this.wave} cleared! +${bonus} coins`);
+      this.hud.showToast(t('waveCleared', { n: this.wave, b: bonus }));
       this.waveCleared(this.wave);
       if (this.role === 'host') this.net.event({ t: 'cleared', wave: this.wave, bonus });
       this.hud.pulseCoins();
@@ -2292,7 +2293,7 @@ export class Game {
     if (y > SHELF_Y) this.hintedDark = false;
     if (this.hintedDark || y > DARK_HINT_Y || !this.player.alive || this.player.levels.spotlight > 0) return;
     this.hintedDark = true;
-    this.hud.showToast('Buy a spotlight for better visibility!');
+    this.hud.showToast(t('buySpotlight'));
   }
 
   // Racing along half out of the water throws spray off the hull.
@@ -2505,6 +2506,12 @@ export class Game {
       big = (big ?? false) || e.type === 'boss';
     }
     if (big !== null) sfx.sonar((big ? 1.4 : 1) * (1 + this.player.levels.sonar * 0.25));
+  }
+
+  // Every fifth wave brings the boss. Guests in a shared game build the banner from the wave number in their own
+  // language.
+  showWaveBanner(w) {
+    this.hud.showBanner(t('wave', { n: w }), w % 5 === 0 ? t('bossComing') : w === 1 ? t('firstWave') : '');
   }
 
   // Combat music starts once an enemy sub comes into view, or in the dark of the deep a few seconds before the wave

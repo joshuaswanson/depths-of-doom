@@ -1,4 +1,6 @@
-export const UPGRADES = [
+import { localized } from './i18n.js';
+
+export const UPGRADES = localized([
   { id: 'hull', name: 'Hull', icon: 'hull', start: 1, max: 6, base: 70, growth: 1.7,
     blurb: 'Bigger hull with more health and more room to mount upgrades. Heavier, so a bit slower.' },
   { id: 'cannon', name: 'Machine Gun', icon: 'cannon', start: 1, max: 6, base: 35, growth: 1.6,
@@ -17,7 +19,7 @@ export const UPGRADES = [
     blurb: 'Adds a propeller to raise your top speed.' },
   { id: 'spotlight', name: 'Spotlight', icon: 'spotlight', start: 0, max: 4, base: 45, growth: 1.7,
     blurb: 'Adds a searchlight to see in the deep. Enemies caught in the beam slow down and fire less.' },
-];
+], 'up', 'blurb');
 
 export function upgradeCost(def, level) {
   return Math.round(def.base * def.growth ** (level - def.start) / 5) * 5;

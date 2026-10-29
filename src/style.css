@@ -657,7 +657,7 @@ kbd {
   cursor: pointer;
 }
 .coop-btn:hover { filter: brightness(1.15); }
-.sound-btn { margin-top: 3vh; }
+.panel .settings-btn { margin-top: 3vh; }
 .coffee-btn {
   margin-top: 2.4vh;
   display: inline-flex;
@@ -754,6 +754,84 @@ kbd {
 .ach-box.friends-box { width: auto; padding: 3vh 3vw 2.4vh; }
 .friends-box .coop { margin-top: 3vh; }
 .friends-box .coop-status { margin: 1.6vh 0 2.4vh; }
+.gear-btn {
+  position: absolute;
+  top: calc(2.4vh + env(safe-area-inset-top));
+  right: calc(1.8vw + env(safe-area-inset-right));
+  width: max(3.8vw, 42px);
+  height: max(3.8vw, 42px);
+  padding: 0;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: linear-gradient(#6fd2ff, #2386d6 55%, #1a6cb4);
+  border: 0.22vw solid #0b3a66;
+  border-radius: 50%;
+  box-shadow: inset 0 0.25vw 0 rgba(255, 255, 255, 0.35), 0 0.3vw 0 #0b3a66, 0 0.6vw 1vw rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+  transition: transform 0.15s;
+}
+.gear-btn .trophy { width: 62%; height: 62%; filter: drop-shadow(0 0.1vw 0 rgba(6, 40, 72, 0.6)); }
+@media (hover: hover) { .gear-btn:hover { transform: rotate(30deg) scale(1.06); } }
+.gear-btn:active { transform: translateY(2px); }
+.ach-box.settings-box { width: min(48vw, 680px); padding: 3vh 3vw 2.6vh; }
+.setting {
+  width: 100%;
+  margin-top: 2.6vh;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2vw;
+  font-size: max(1.3vw, 13px);
+  font-weight: 600;
+  color: #e9f6ff;
+}
+.setting > span { white-space: nowrap; }
+.volume {
+  flex: 1;
+  max-width: 62%;
+  height: max(0.7vw, 8px);
+  margin: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  background: linear-gradient(90deg, var(--gold) var(--fill), rgba(255, 255, 255, 0.12) var(--fill));
+  border-radius: 999px;
+  outline: none;
+  cursor: pointer;
+}
+.volume::-webkit-slider-thumb {
+  width: max(1.8vw, 24px);
+  height: max(1.8vw, 24px);
+  -webkit-appearance: none;
+  background: linear-gradient(#fff3c4, var(--gold));
+  border: 0.18vw solid #6b4a1c;
+  border-radius: 50%;
+  box-shadow: 0 0.2vw 0 #6b4a1c;
+}
+.volume::-moz-range-thumb {
+  width: max(1.8vw, 24px);
+  height: max(1.8vw, 24px);
+  background: linear-gradient(#fff3c4, var(--gold));
+  border: 0.18vw solid #6b4a1c;
+  border-radius: 50%;
+  box-shadow: 0 0.2vw 0 #6b4a1c;
+}
+.lang-pick { display: flex; gap: 0.5vw; }
+.lang-btn {
+  padding: 0.6vh 1.1vw;
+  font-family: inherit;
+  font-size: max(1.1vw, 12px);
+  font-weight: 700;
+  color: #cfe6f6;
+  background: rgba(4, 18, 31, 0.6);
+  border: 0.18vw solid #2f7fb8;
+  border-radius: 999px;
+  cursor: pointer;
+}
+@media (hover: hover) { .lang-btn:hover { filter: brightness(1.2); } }
+.lang-btn.on { color: #3b2a14; background: linear-gradient(#ffe866, #ffcf1f); border-color: #6b4a1c; cursor: default; }
+.settings-box .coffee-btn { margin-top: 3.4vh; }
+.settings-box .ach-close { margin-top: 2.4vh; }
 .side-btn {
   display: inline-flex;
   align-items: center;

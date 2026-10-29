@@ -1,5 +1,7 @@
+import { localized } from './i18n.js';
+
 // Achievements earned across every dive, kept in the browser's local storage.
-export const ACHIEVEMENTS = [
+export const ACHIEVEMENTS = localized([
   { id: 'first_sink', name: 'Fish Food', desc: 'Sink your first enemy sub.' },
   { id: 'sink_100', name: 'Scrap Merchant', desc: 'Sink 100 enemy subs, across all your dives.' },
   { id: 'mine_bump', name: 'Mine Sweeper', desc: 'Bump an enemy sub into a sea mine.' },
@@ -29,7 +31,7 @@ export const ACHIEVEMENTS = [
   { id: 'penguin_swim', name: 'Penguin Pal', desc: 'Swim alongside a diving penguin.' },
   { id: 'penguin_bowl', name: 'Penguin Bowling', desc: 'Ram a floe and knock three penguins into the sea.' },
   { id: 'icebreaker', name: 'Icebreaker', desc: 'Smash through 40 plates of pack ice.' },
-];
+], 'ach', 'desc');
 
 const KEY = 'submania-achievements';
 // Coins added to the dive for each achievement earned.

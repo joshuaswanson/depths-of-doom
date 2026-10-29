@@ -15,10 +15,11 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 import { ACHIEVEMENT_REWARD, onUnlock, setActive, unlock } from './achievements.js';
 import { SHADOW_LAYER, loadModels, warmUp } from './assets.js';
 import { SHADER_TIME, WATER } from './surface.js';
-import { isMuted, setAmbience, setMusic, sfx, toggleMute, unlockAudio } from './audio.js';
+import { getVolume, setAmbience, setMusic, setVolume, sfx, toggleMute, unlockAudio } from './audio.js';
 import { Effects } from './effects.js';
 import { Game } from './game.js';
 import { Hud } from './hud.js';
+import { t } from './i18n.js';
 import { Net } from './net.js';
 import { Player } from './player.js';
 import {
@@ -178,8 +179,8 @@ const hud = new Hud(hudRoot, {
   onPause: () => {
     if (state === 'playing' && !net) pause();
   },
-  onMute: () => toggleMute(),
-  muted: () => isMuted(),
+  onVolume: (kind, level) => setVolume(kind, level),
+  volume: (kind) => getVolume(kind),
 });
 hud.showLoading(0);
 
@@ -196,7 +197,7 @@ window.addEventListener('keydown', (e) => {
     if (state === 'playing') pause();
     else if (state === 'paused') resume();
   }
-  if (e.code === 'KeyM') hud.showToast(toggleMute() ? 'Sound off' : 'Sound on');
+  if (e.code === 'KeyM') hud.showToast(toggleMute() ? t('soundOff') : t('soundOn'));
   if ((e.code === 'Enter' || e.code === 'Space') && (state === 'title' || state === 'gameover')) startGame();
 });
 window.addEventListener('keyup', (e) => keys.delete(e.code));
@@ -394,7 +395,7 @@ async function boot() {
   // An invite link drops straight into the host's game.
   const invite = params.get('join');
   if (invite && /^[a-z]{4}$/i.test(invite)) {
-    hud.coopStatus(`Joining room ${invite.toUpperCase()}...`);
+    hud.coopStatus(t('joiningRoom', { code: invite.toUpperCase() }));
     startCoop((n) => n.join(invite));
   }
   window.__game = game;

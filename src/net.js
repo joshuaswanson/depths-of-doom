@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import Peer from 'peerjs';
 import { sfx } from './audio.js';
+import { t } from './i18n.js';
 import { Player } from './player.js';
 
 // Co-op over WebRTC. One player hosts: their game runs the enemies, waves and loot, and sends everyone a snapshot
@@ -93,21 +94,21 @@ export class Net {
       this.game.localPlayer.netId = 1;
     });
     this.peer.on('connection', (conn) => this.acceptGuest(conn));
-    this.peer.on('error', (err) => this.onStatus(`Connection problem: ${err.type}`, true));
+    this.peer.on('error', (err) => this.onStatus(t('connProblem', { type: err.type }), true));
   }
 
   join(code) {
     this.code = code.trim().toUpperCase();
     this.role = 'guest';
     this.peer = new Peer();
-    this.onStatus('Connecting...');
+    this.onStatus(t('connecting'));
     this.peer.on('open', () => {
       this.conn = this.peer.connect(PREFIX + this.code, { reliable: true });
       this.conn.on('data', (msg) => this.onGuestMessage(msg));
-      this.conn.on('close', () => this.onStatus('The host left the game.'));
+      this.conn.on('close', () => this.onStatus(t('hostLeft')));
     });
     this.peer.on('error', (err) => {
-      this.onStatus(err.type === 'peer-unavailable' ? `No game found with code ${this.code}.` : `Connection problem: ${err.type}`,
+      this.onStatus(err.type === 'peer-unavailable' ? t('noGame', { code: this.code }) : t('connProblem', { type: err.type }),
         true);
     });
   }
@@ -129,14 +130,14 @@ export class Net {
       const others = [1, ...[...this.guests.values()].filter((g) => g !== guest).map((g) => g.slot)];
       conn.send({ t: 'welcome', you: slot, others, wave: this.game.wave });
       this.event({ t: 'join', id: slot });
-      this.game.hud.showToast(`${LABELS[slot - 1]} joined!`);
+      this.game.hud.showToast(t('joined', { p: LABELS[slot - 1] }));
     });
     conn.on('data', (msg) => this.onHostMessage(guest, msg));
     conn.on('close', () => {
       this.guests.delete(conn.peer);
       this.removeRemote(slot);
       this.event({ t: 'leave', id: slot });
-      this.game.hud.showToast(`${LABELS[slot - 1]} left`);
+      this.game.hud.showToast(t('left', { p: LABELS[slot - 1] }));
     });
   }
 
@@ -193,7 +194,7 @@ export class Net {
   onGuestMessage(msg) {
     const game = this.game;
     if (msg.t === 'full') {
-      this.onStatus('That game is full.', true);
+      this.onStatus(t('full'), true);
     } else if (msg.t === 'welcome') {
       this.slot = msg.you;
       // Starting the game resets the local sub, so it comes first and the co-op setup goes on top.
@@ -238,19 +239,19 @@ export class Net {
     } else if (ev.t === 'cleared') {
       game.coins += ev.bonus;
       game.coinsTotal += ev.bonus;
-      game.hud.showToast(`Wave ${ev.wave} cleared! +${ev.bonus} coins`);
+      game.hud.showToast(t('waveCleared', { n: ev.wave, b: ev.bonus }));
       game.waveCleared(ev.wave);
       game.hud.pulseCoins();
       sfx.coin();
     } else if (ev.t === 'banner') {
-      game.hud.showBanner(ev.a, ev.b);
+      game.showWaveBanner(ev.wave);
       sfx.wave();
     } else if (ev.t === 'join') {
       if (ev.id !== this.slot && !this.remote(ev.id)) this.addRemote(ev.id);
-      game.hud.showToast(`${LABELS[ev.id - 1]} joined!`);
+      game.hud.showToast(t('joined', { p: LABELS[ev.id - 1] }));
     } else if (ev.t === 'leave') {
       this.removeRemote(ev.id);
-      game.hud.showToast(`${LABELS[ev.id - 1]} left`);
+      game.hud.showToast(t('left', { p: LABELS[ev.id - 1] }));
     }
   }
 

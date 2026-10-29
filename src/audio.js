@@ -3,6 +3,43 @@ let master = null;
 let muted = false;
 let noiseBuffer = null;
 let sfxBus = null;
+// The music and the sound effects each have their own volume, set in the settings and kept across visits.
+let musicOut = null;
+let effectsOut = null;
+const VOLUME_KEY = 'submania-volume';
+const volumes = loadVolumes();
+
+function loadVolumes() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(VOLUME_KEY));
+    if (saved && typeof saved === 'object') return { music: saved.music ?? 1, effects: saved.effects ?? 1 };
+  } catch {
+    // Storage can be blocked or hold something unreadable; start at full volume.
+  }
+  return { music: 1, effects: 1 };
+}
+
+// Volume sliders feel even when loudness follows the square of their position.
+function applyVolumes() {
+  if (!ctx) return;
+  musicOut.gain.value = volumes.music ** 2;
+  effectsOut.gain.value = volumes.effects ** 2;
+}
+
+export function getVolume(kind) {
+  return volumes[kind];
+}
+
+// `kind` is 'music' or 'effects'; `level` runs from 0 to 1.
+export function setVolume(kind, level) {
+  volumes[kind] = Math.min(1, Math.max(0, level));
+  applyVolumes();
+  try {
+    localStorage.setItem(VOLUME_KEY, JSON.stringify(volumes));
+  } catch {
+    // Without storage, the volumes last for this visit only.
+  }
+}
 
 function ensure() {
   if (ctx) return ctx;
@@ -10,11 +47,16 @@ function ensure() {
   master = ctx.createGain();
   master.gain.value = 0.35;
   master.connect(ctx.destination);
+  musicOut = ctx.createGain();
+  musicOut.connect(master);
+  effectsOut = ctx.createGain();
+  effectsOut.connect(master);
+  applyVolumes();
   // Sound effects pass through a lowpass that closes underwater, so everything below the surface sounds muffled.
   sfxBus = ctx.createBiquadFilter();
   sfxBus.type = 'lowpass';
   sfxBus.frequency.value = 18000;
-  sfxBus.connect(master);
+  sfxBus.connect(effectsOut);
   noiseBuffer = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
   const data = noiseBuffer.getChannelData(0);
   for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
@@ -47,7 +89,7 @@ function tone({ type = 'sine', freq = 440, to = freq, dur = 0.15, vol = 0.3, del
   osc.frequency.exponentialRampToValueAtTime(Math.max(1, to), t + dur);
   gain.gain.setValueAtTime(vol, t);
   gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
-  osc.connect(gain).connect(dry ? master : sfxBus);
+  osc.connect(gain).connect(dry ? effectsOut : sfxBus);
   osc.start(t);
   osc.stop(t + dur + 0.02);
 }
@@ -65,7 +107,7 @@ function noise({ dur = 0.3, vol = 0.4, freq = 800, to = 200, q = 1, delay = 0, d
   const gain = ctx.createGain();
   gain.gain.setValueAtTime(vol, t);
   gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
-  src.connect(filter).connect(gain).connect(dry ? master : sfxBus);
+  src.connect(filter).connect(gain).connect(dry ? effectsOut : sfxBus);
   src.start(t);
   src.stop(t + dur + 0.02);
 }
@@ -89,7 +131,7 @@ function waterBed(type, freq, q) {
   filter.Q.value = q;
   const gain = ctx.createGain();
   gain.gain.value = 0;
-  src.connect(filter).connect(gain).connect(master);
+  src.connect(filter).connect(gain).connect(effectsOut);
   src.start();
   return { filter, gain };
 }
@@ -99,7 +141,7 @@ function hum(freq) {
   osc.frequency.value = freq;
   const gain = ctx.createGain();
   gain.gain.value = 0;
-  osc.connect(gain).connect(master);
+  osc.connect(gain).connect(effectsOut);
   osc.start();
   return { osc, gain };
 }
@@ -184,7 +226,7 @@ function musicTrack(name) {
   if (music[name]) return music[name];
   const bus = ctx.createGain();
   bus.gain.value = 0;
-  bus.connect(master);
+  bus.connect(musicOut);
   const players = [0, 1].map(() => {
     const el = new Audio(`${import.meta.env.BASE_URL}music/${TRACKS[name].file}`);
     el.preload = 'auto';
