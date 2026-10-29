@@ -15,6 +15,9 @@ const REACH = 70;
 const Z_RANGE = [-24, 6];
 // Boulders keep out of the sub's lane, where it skims the seabed.
 const ROCK_Z = [-45, -3];
+const FRONT_Z = [2, 5];
+// Kelp grows back from the lane, clear of the sub's path along the floor.
+const KELP_Z = [-30, -6];
 
 const hash = (n, k) => {
   const s = Math.sin(n * 127.1 + k * 311.7) * 43758.5453;
@@ -196,7 +199,7 @@ function slate(seed, detail) {
   const col = merged.attributes.color;
   for (let i = 0; i < pos.count; i++) {
     const film = THREE.MathUtils.smoothstep(nor.getY(i), 0.4, 0.9) * (0.5 + noise3(pos.getX(i) * 4, seed, pos.getZ(i) * 4));
-    col.setXYZ(i, ...mix3([col.getX(i), col.getY(i), col.getZ(i)], [0.08, 0.14, 0.1], THREE.MathUtils.clamp(film, 0, 0.7)));
+    col.setXYZ(i, ...mix3([col.getX(i), col.getY(i), col.getZ(i)], [0.075, 0.1, 0.085], THREE.MathUtils.clamp(film, 0, 0.5)));
   }
   merged.computeBoundingBox();
   const box = merged.boundingBox;
@@ -433,7 +436,11 @@ function animate(material, kind) {
       .replace('#include <begin_vertex>', /* glsl */ `#include <begin_vertex>
         vec3 where = vec3( instanceMatrix[ 3 ] );
         float phase = where.x * 1.7 + where.z * 2.3;
-        ${kind === 'brittle' ? /* glsl */ `
+        ${kind === 'kelp' ? /* glsl */ `
+        // Fronds bend in the current, still at the root and swaying more with height.
+        float bend = pow( max( position.y, 0.0 ), 1.25 );
+        transformed.x += sin( uTime * 0.9 + phase + position.y * 0.35 ) * 0.07 * bend;
+        transformed.z += cos( uTime * 0.7 + phase * 1.7 + position.y * 0.3 ) * 0.04 * bend;` : kind === 'brittle' ? /* glsl */ `
         // Each arm sweeps slowly from side to side, more toward its tip.
         float sweep = sin( uTime * 0.7 + aTag.y * 1.9 + phase ) * 0.6 + sin( uTime * 1.3 + aTag.y * 2.7 + phase ) * 0.4;
         transformed.xz += aTag.zw * sweep * aTag.x * aTag.x * 0.09;
@@ -470,8 +477,8 @@ export class Benthos {
     add('brittleA', brittleStar(1, { dark: [0.22, 0.19, 0.16], pale: [0.62, 0.55, 0.46] }), brittle, 160);
     add('brittleB', brittleStar(2, { dark: [0.3, 0.2, 0.15], pale: [0.7, 0.58, 0.44] }), brittle, 160);
     const spiny = vertexMaterial(0.55);
-    add('urchinSouth', urchin({ body: [0.16, 0.05, 0.1], spine: [0.32, 0.1, 0.2], tip: [0.62, 0.38, 0.48] }), spiny, 60);
-    add('urchinNorth', urchin({ body: [0.15, 0.18, 0.08], spine: [0.28, 0.36, 0.14], tip: [0.55, 0.6, 0.35] }), spiny, 60);
+    add('urchinSouth', urchin({ body: [0.16, 0.05, 0.1], spine: [0.32, 0.1, 0.2], tip: [0.62, 0.38, 0.48] }), spiny, 120);
+    add('urchinNorth', urchin({ body: [0.15, 0.18, 0.08], spine: [0.28, 0.36, 0.14], tip: [0.55, 0.6, 0.35] }), spiny, 120);
     const sponge = vertexMaterial(0.92);
     add('barrel', glassSponge(1.3, (v) => 0.3 + 0.13 * Math.sin(v * Math.PI) - 0.04 * v, 0.07,
       { outer: [0.68, 0.62, 0.44], inner: [0.26, 0.23, 0.15] }, 3, 0.12), sponge, 40, { shadow: true, upright: true });
@@ -480,27 +487,37 @@ export class Benthos {
     add('lump', lumpSponge({ body: [0.86, 0.66, 0.16] }, 11), sponge, 40, { shadow: true, upright: true });
     const anemoneMat = vertexMaterial(0.6, 'anemone');
     add('anemoneRed', anemone({ column: [0.55, 0.14, 0.1], disc: [0.75, 0.32, 0.22], tentacle: [0.86, 0.55, 0.5],
-      tip: [0.95, 0.85, 0.8] }, 5), anemoneMat, 60, { shadow: true, upright: true });
+      tip: [0.95, 0.85, 0.8] }, 5), anemoneMat, 100, { shadow: true, upright: true });
     add('anemoneWhite', anemone({ column: [0.78, 0.74, 0.68], disc: [0.85, 0.8, 0.74], tentacle: [0.9, 0.86, 0.82],
-      tip: [0.97, 0.95, 0.92] }, 9), anemoneMat, 60, { shadow: true, upright: true });
+      tip: [0.97, 0.95, 0.92] }, 9), anemoneMat, 100, { shadow: true, upright: true });
     const stone = vertexMaterial(0.85);
     this.tops = new Map();
     for (let i = 0; i < 4; i++) {
       const rock = slate(100 + i, 4);
-      add(`boulder${i}`, rock.geometry, stone, 50, { shadow: true, upright: true });
+      add(`boulder${i}`, rock.geometry, stone, 80, { shadow: true, upright: true });
       this.tops.set(`boulder${i}`, rock.tops);
     }
     for (let i = 0; i < 3; i++) add(`rubble${i}`, slate(200 + i, 2).geometry, stone, 160, { upright: true });
     const soft = vertexMaterial(0.7);
     add('squirtsA', seaSquirts(1), soft, 24, { upright: true });
     add('squirtsB', seaSquirts(2), soft, 24, { upright: true });
-    add('fingerWhite', fingerSponge(3, [0.88, 0.86, 0.74]), sponge, 40, { upright: true });
-    add('fingerYellow', fingerSponge(4, [0.9, 0.8, 0.42]), sponge, 40, { upright: true });
+    add('fingerWhite', fingerSponge(3, [0.88, 0.86, 0.74]), sponge, 80, { upright: true });
+    add('fingerYellow', fingerSponge(4, [0.9, 0.8, 0.42]), sponge, 80, { upright: true });
     add('sunstar', brittleStar(5, { dark: [0.75, 0.32, 0.08], pale: [0.95, 0.62, 0.25] },
-      { arms: 13, length: 0.42, thick: 0.034, disc: 0.17 }), brittle, 60);
+      { arms: 13, length: 0.42, thick: 0.034, disc: 0.17 }), brittle, 120);
     for (const { geo, material } of modelGeometry('starfish')) {
       material.color.multiply(new THREE.Color(1, 0.42, 0.32));
       add('star', geo, material, 50);
+    }
+    // Golden-brown kelp and bushy pink soft coral, borrowed from the reef and coloured for cold water.
+    for (const { geo, material } of modelGeometry('kelp_short')) {
+      material.color.multiply(new THREE.Color(0.85, 0.62, 0.3));
+      animate(material, 'kelp');
+      add('kelp', geo, material, 60, { upright: true });
+    }
+    for (const { geo, material } of modelGeometry('coral_staghorn')) {
+      material.color.lerp(new THREE.Color(0.96, 0.6, 0.72), 0.7);
+      add('softCoral', geo, material, 40, { upright: true });
     }
     this.kinds = kinds;
     this.byName = new Map();
@@ -589,18 +606,21 @@ export class Benthos {
       for (let i = 0; i < 1 + Math.floor(r() * 3); i++) put('sunstar', [0.8, 1.2], 0, Z_RANGE, spot());
       if (r() < 0.4) put(r() < 0.5 ? 'anemoneRed' : 'anemoneWhite', [1, 1.5], 0.02, Z_RANGE, spot());
     };
-    for (let i = 0; i < 1 + Math.floor(r() * 3); i++) put(`boulder${Math.floor(r() * 4)}`, [0.5, 2], 0.1, ROCK_Z);
+    for (let i = 0; i < 2 + Math.floor(r() * 4); i++) put(`boulder${Math.floor(r() * 4)}`, [0.6, 2.6], 0.1, ROCK_Z);
+    // Now and then a big rock sits right in front, low in the view, as the seabed rises toward the camera.
+    if (r() < 0.14) put(`boulder${Math.floor(r() * 4)}`, [2.2, 3.4], 0.15, FRONT_Z);
     for (let i = 0; i < 8 + Math.floor(r() * 8); i++) put(`rubble${Math.floor(r() * 3)}`, [0.1, 0.35], 0.15);
-    if (r() < 0.45) outcrop();
-    if (r() < 0.25) put('sunstar', [0.8, 1.2]);
+    if (r() < 0.75) outcrop();
+    if (r() < 0.55) put('sunstar', [1, 1.7]);
     const crowd = (south ? 4 : 6) + Math.floor(r() * 5);
     for (let i = 0; i < crowd; i++) put(r() < 0.5 ? 'brittleA' : 'brittleB', [0.9, 1.4]);
-    for (let i = 0; i < 1 + Math.floor(r() * 3); i++) put(south ? 'urchinSouth' : 'urchinNorth', [1.1, 1.7], 0.02);
+    for (let i = 0; i < 2 + Math.floor(r() * 4); i++) put(south ? 'urchinSouth' : 'urchinNorth', [1.1, 1.7], 0.02);
     for (let i = 0; i < Math.floor(r() * 3); i++) put('star', [0.55, 0.85]);
-    if (r() < 0.6) put(r() < 0.5 ? 'anemoneRed' : 'anemoneWhite', [1.2, 2], 0.03);
-    if (south) {
-      if (r() < 0.45) put(r() < 0.5 ? 'barrel' : 'vase', [0.9, 1.7], 0.05);
-      if (r() < 0.3) put('lump', [0.8, 1.4], 0.05);
-    }
+    for (let i = 0; i < 1 + Math.floor(r() * 2); i++) put(r() < 0.5 ? 'anemoneRed' : 'anemoneWhite', [1.2, 2], 0.03);
+    if (r() < 0.6) put(r() < 0.5 ? 'fingerWhite' : 'fingerYellow', [1.1, 1.9], 0.03);
+    if (r() < (south ? 0.55 : 0.3)) put(r() < 0.5 ? 'barrel' : 'vase', [0.9, 1.7], 0.05);
+    if (south && r() < 0.3) put('lump', [0.8, 1.4], 0.05);
+    for (let i = 0; i < Math.floor(r() * 3); i++) put('kelp', [0.7, 1.2], 0.05, KELP_Z);
+    if (r() < 0.4) put('softCoral', [0.7, 1.1], 0.05);
   }
 }

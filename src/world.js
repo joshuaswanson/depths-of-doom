@@ -436,7 +436,7 @@ const paintScratch = new THREE.Color();
 const painted = { y: 0, glow: 0 };
 
 // The seabed's height and colour at one point, with the reef glow that brightens the sand there.
-const POLAR_MUD = ['#2f3532', '#3c443f', '#56604f'].map((hex) => new THREE.Color(hex));
+const POLAR_MUD = ['#8c8f88', '#a1a39a', '#b6b4a5'].map((hex) => new THREE.Color(hex));
 
 function paintSeabed(x, z, murk, c) {
   const d = paintScratch;
@@ -459,7 +459,7 @@ function paintSeabed(x, z, murk, c) {
   c.lerp(REEF_LAGOON, glow * ripple * 0.4);
   const cold = polarAt(x).amount;
   if (cold > 0) {
-    // Under the polar ice: dark slate-grey mud, greener in patches of growth.
+    // Under the polar ice: pale grey silt and sand, lighter in drifts.
     d.copy(POLAR_MUD[0]).lerp(POLAR_MUD[1], n).lerp(POLAR_MUD[2], Math.max(0, m * 2 - 1) * 0.6);
     c.lerp(d, cold * 0.92);
   }
@@ -623,8 +623,8 @@ function makeSeabedMaterial(uniforms) {
         }
         #endif
         // Two drifting layers of caustics at different scales, so the sunlit floor ripples with light.
-        // Under the polar overcast there is no rippling sunlight.
-        float fadeC = smoothstep( -90.0, -4.0, vSeaWorld.z ) * smoothstep( -32.0, -6.0, vSeaWorld.y ) * ( 1.0 - vPolar );
+        // Daylight filtered through the polar ice ripples more softly.
+        float fadeC = smoothstep( -90.0, -4.0, vSeaWorld.z ) * smoothstep( -32.0, -6.0, vSeaWorld.y ) * ( 1.0 - 0.55 * vPolar );
         if ( fadeC > 0.0 ) {
         vec2 cA = vSeaWorld.xz * vec2( 0.42, 0.3 ) + vec2( uTime * 0.05, uTime * 0.03 );
         cA += 0.45 * vec2( sin( cA.y * 1.9 + uTime * 0.6 ), cos( cA.x * 1.6 - uTime * 0.5 ) );
@@ -2291,8 +2291,14 @@ export class World {
         prop.obj.traverse((o) => { o.castShadow = false; });
       }
       if (!layer.tint && deep) tint(prop.obj, '#1c2233', 0.45);
-      if (!layer.tint && polar) tint(prop.obj, '#3e3d3a', 0.7);
+      if (!layer.tint && polar) tint(prop.obj, '#2c4852', 0.8);
       prop.size = rand(layer.scale[0], layer.scale[1]);
+      prop.stretch = 1;
+      // Under the polar ice the rocks far out in the blue grow into great spires, looming out of the haze.
+      if (want === 'polar' && layer.z[0] < -60) {
+        prop.size = rand(7, 13);
+        prop.stretch = rand(1.6, 2.6);
+      }
       prop.obj.scale.setScalar(prop.size);
       prop.kind = want;
       this.scene.add(prop.obj);
@@ -2306,10 +2312,11 @@ export class World {
     }
     // Tall ruins shrink where the shelf rises, so none breaks the surface.
     const room = (SURFACE_Y - PROP_HEADROOM - ground) / modelHeight(prop.obj.userData.model, prop.obj);
-    prop.obj.scale.setScalar(Math.min(prop.size, Math.max(room, 0.3)));
+    const s = Math.min(prop.size, Math.max(room / prop.stretch, 0.3));
+    prop.obj.scale.set(s, s * prop.stretch, s);
     prop.obj.position.set(x, ground - 0.25, z);
     prop.obj.visible = !SHELF_ONLY.test(prop.obj.userData.model) || onFlatShelf(x);
-    // Out to the middle distance the polar seabed has its own slate boulders.
+    // Out to the middle distance the polar seabed has its own slate boulders; only the far spires stand beyond them.
     if (prop.kind === 'polar' && !layer.tint && layer.z[0] > -60) prop.obj.visible = false;
     prop.obj.rotation.set(0, rand(-0.5, 0.5), 0);
     if (prop.obj.userData.model === 'anchor') settleAnchor(prop.obj);
