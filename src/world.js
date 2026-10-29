@@ -2294,20 +2294,8 @@ export class World {
         prop.obj.traverse((o) => { o.castShadow = false; });
       }
       if (!layer.tint && deep) tint(prop.obj, '#1c2233', 0.45);
-      if (!layer.tint && polar) {
-        tint(prop.obj, '#2c4852', 0.85);
-        // Always well into the haze, so the spires stay soft silhouettes in the blue.
-        prop.obj.traverse((o) => {
-          if (o.isMesh) o.material.defines = { ...o.material.defines, FOG_MIN: '0.6' };
-        });
-      }
+      if (!layer.tint && polar) tint(prop.obj, '#3e3d3a', 0.7);
       prop.size = rand(layer.scale[0], layer.scale[1]);
-      prop.stretch = 1;
-      // Under the polar ice the rocks far out in the blue grow into great spires, looming out of the haze.
-      if (want === 'polar' && layer.z[0] < -60) {
-        prop.size = rand(5, 9);
-        prop.stretch = rand(1.6, 2.6);
-      }
       prop.obj.scale.setScalar(prop.size);
       prop.kind = want;
       this.scene.add(prop.obj);
@@ -2321,12 +2309,11 @@ export class World {
     }
     // Tall ruins shrink where the shelf rises, so none breaks the surface.
     const room = (SURFACE_Y - PROP_HEADROOM - ground) / modelHeight(prop.obj.userData.model, prop.obj);
-    const s = Math.min(prop.size, Math.max(room / prop.stretch, 0.3));
-    prop.obj.scale.set(s, s * prop.stretch, s);
+    prop.obj.scale.setScalar(Math.min(prop.size, Math.max(room, 0.3)));
     prop.obj.position.set(x, ground - 0.25, z);
     prop.obj.visible = !SHELF_ONLY.test(prop.obj.userData.model) || onFlatShelf(x);
-    // Out to the middle distance the polar seabed has its own slate boulders; only the far spires stand beyond them.
-    if (prop.kind === 'polar' && !layer.tint && layer.z[0] > -60) prop.obj.visible = false;
+    // The polar seabed has its own slate boulders, and crags in the distance.
+    if (prop.kind === 'polar' && !layer.tint) prop.obj.visible = false;
     prop.obj.rotation.set(0, rand(-0.5, 0.5), 0);
     if (prop.obj.userData.model === 'anchor') settleAnchor(prop.obj);
     freeze(prop.obj);

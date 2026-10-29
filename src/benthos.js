@@ -11,11 +11,12 @@ import { CAMERA_Z, TAN_HALF_FOV } from './water.js';
 // writhe and the anemones' tentacles sway.
 const CELL = 6;
 // How far either side of the camera the seabed is stocked.
-const REACH = 70;
+const REACH = 90;
 const Z_RANGE = [-24, 6];
 // Boulders keep out of the sub's lane, where it skims the seabed.
 const ROCK_Z = [-45, -3];
 const FRONT_Z = [2, 5];
+const CRAG_Z = [-85, -55];
 // Kelp grows back from the lane, clear of the sub's path along the floor.
 const KELP_Z = [-30, -6];
 
@@ -162,6 +163,58 @@ function brittleStar(seed, colors, { arms = 5, length: reachOut = 0.62, thick = 
 // A slab of slate broken off along flat fracture planes, its edges worn round, faintly layered, dark grey-green with
 // a thin film of growth on whatever faces up. Returns the geometry and the height of its top over a grid, for
 // setting things on it.
+// A crag of layered rock for the far distance: a broad, leaning mass of slate split along its bedding into ledges,
+// sheared by fracture faces into an angular, broken shape with a stepped, jagged top. Silt settles on every ledge and
+// upward face. About two units tall and two across at scale one.
+function crag(seed) {
+  const geo = new THREE.IcosahedronGeometry(1, 4);
+  geo.deleteAttribute('uv');
+  geo.deleteAttribute('normal');
+  const merged = mergeVertices(geo);
+  const pos = merged.attributes.position;
+  const lean = (hash(seed, 1) - 0.5) * 0.6;
+  const wide = 0.85 + hash(seed, 2) * 0.35;
+  const deep = 0.65 + hash(seed, 3) * 0.25;
+  const middle = (h) => new THREE.Vector3(lean * h * h, h * 2, 0);
+  // Fracture faces all round, steep ones on the flanks and shallow ones breaking up the top into steps.
+  const planes = Array.from({ length: 18 }, (_, k) => {
+    const a = hash(seed, 10 + k) * Math.PI * 2;
+    const top = k >= 12;
+    const up = top ? 0.8 + hash(seed, 30 + k) * 1.6 : (hash(seed, 30 + k) - 0.4) * 0.8;
+    const n = new THREE.Vector3(Math.cos(a), up, Math.sin(a)).normalize();
+    return { n, d: top ? 0.55 + hash(seed, 50 + k) * 0.45 : 0.45 + hash(seed, 50 + k) * 0.35 };
+  });
+  const v = new THREE.Vector3();
+  const c = new THREE.Vector3();
+  for (let i = 0; i < pos.count; i++) {
+    v.fromBufferAttribute(pos, i);
+    const h = (v.y + 1) / 2;
+    const taper = 1 - 0.45 * h;
+    // Each layer of the bedding weathers back further at its base, leaving ledges up the face.
+    const ledge = 1 - 0.16 * ((h * 6 + noise3(v.x * 2 + seed, 0, v.z * 2) * 0.5) % 1);
+    v.set(v.x * wide * taper * ledge + lean * h * h, h * 2, v.z * deep * taper * ledge);
+    for (const { n, d } of planes) {
+      c.copy(v).sub(middle(Math.min(h, 0.5)));
+      const over = c.dot(n) - d * (n.y > 0.5 ? 1 : taper);
+      if (over > 0) v.addScaledVector(n, -over);
+    }
+    pos.setXYZ(i, v.x, Math.max(v.y, 0) - 0.1, v.z);
+  }
+  merged.computeVertexNormals();
+  const nor = merged.attributes.normal;
+  paint(merged, (x, y, z) => {
+    const tone = 0.85 + 0.5 * (0.5 + noise3(x * 2 + seed, y * 2, z * 2));
+    const band = 1 + 0.3 * Math.max(0, Math.sin(y * 9 + noise3(x, y, z) * 2));
+    return [0.09 * tone * band, 0.11 * tone * band, 0.12 * tone * band];
+  });
+  const col = merged.attributes.color;
+  for (let i = 0; i < pos.count; i++) {
+    const silt = THREE.MathUtils.smoothstep(nor.getY(i), 0.45, 0.85);
+    col.setXYZ(i, ...mix3([col.getX(i), col.getY(i), col.getZ(i)], [0.24, 0.26, 0.25], silt * 0.7));
+  }
+  return merged;
+}
+
 function slate(seed, detail) {
   const geo = new THREE.IcosahedronGeometry(1, detail);
   geo.deleteAttribute('uv');
@@ -498,6 +551,10 @@ export class Benthos {
       this.tops.set(`boulder${i}`, rock.tops);
     }
     for (let i = 0; i < 3; i++) add(`rubble${i}`, slate(200 + i, 2).geometry, stone, 160, { upright: true });
+    // The crags stand far back, always well into the haze, so they read as soft blue shapes behind everything.
+    const far = vertexMaterial(0.9);
+    far.defines = { FOG_MIN: '0.55' };
+    for (let i = 0; i < 3; i++) add(`crag${i}`, crag(300 + i), far, 40, { upright: true });
     const soft = vertexMaterial(0.7);
     add('squirtsA', seaSquirts(1), soft, 24, { upright: true });
     add('squirtsB', seaSquirts(2), soft, 24, { upright: true });
@@ -564,7 +621,7 @@ export class Benthos {
     let k = 0;
     const r = () => hash(c, k++);
     // `at` sets a place and height on something other than the mud.
-    const put = (name, size, sink = 0, zRange = Z_RANGE, at = null) => {
+    const put = (name, size, sink = 0, zRange = Z_RANGE, at = null, tall = 1) => {
       const x = at ? at.x : x0 + r() * CELL;
       const z = at ? at.z : zRange[0] + r() * (zRange[1] - zRange[0]);
       const kinds = this.byName.get(name);
@@ -584,7 +641,7 @@ export class Benthos {
             .normalize();
           this.quat.premultiply(this.tilt.setFromUnitVectors(this.up, this.normal));
         }
-        this.matrix.compose(this.pos.set(x, y - sink * s, z), this.quat, this.scale.setScalar(s));
+        this.matrix.compose(this.pos.set(x, y - sink * s, z), this.quat, this.scale.set(s, s * tall, s));
         kind.mesh.setMatrixAt(n, this.matrix);
       }
       return { x, y: y - sink * s, z, yaw, s };
@@ -621,6 +678,15 @@ export class Benthos {
     if (r() < (south ? 0.55 : 0.3)) put(r() < 0.5 ? 'barrel' : 'vase', [0.9, 1.7], 0.05);
     if (south && r() < 0.3) put('lump', [0.8, 1.4], 0.05);
     for (let i = 0; i < Math.floor(r() * 3); i++) put('kelp', [0.7, 1.2], 0.05, KELP_Z);
+    // Far back in the haze, now and then an outcrop of crags: one tall, with lower ones leaning in around it.
+    if (r() < 0.3) {
+      const peak = put(`crag${Math.floor(r() * 3)}`, [4.5, 8], 0.05, CRAG_Z, null, 0.8 + r() * 0.6);
+      for (let i = 0; i < 1 + Math.floor(r() * 3); i++) {
+        const at = { x: peak.x + (r() - 0.5) * peak.s * 2.2, z: peak.z + (r() - 0.5) * peak.s * 1.4 };
+        at.y = this.ground(at.x, at.z);
+        put(`crag${Math.floor(r() * 3)}`, [peak.s * 0.4, peak.s * 0.75], 0.05, CRAG_Z, at, 0.6 + r() * 0.6);
+      }
+    }
     if (r() < 0.4) put('softCoral', [0.7, 1.1], 0.05);
   }
 }

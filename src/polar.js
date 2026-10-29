@@ -158,14 +158,23 @@ function iceberg(r, width, depth, top, draft, segments, lane) {
     reach: jaggedOutline(r, 5 + Math.floor(r() * 4), tabular ? 0.2 : 0.3),
     width, depth, top: top / (1 + dome), draft, dome, bulge: 0.1 + r() * 0.15, blunt: 2 + r() * 0.5, taper: 0.4 + r() * 0.25,
     lean: (r() - 0.5) * 0.7, rough: 0.7 + r() * 0.5, cuts, segments, lobes: lane ? 0.25 + r() * 0.3 : 0.5 + r() * 0.45,
-    peaks: Array.from({ length: (lane ? 1 : 2) + Math.floor(r() * 2) }, () => ({
-      angle: r() * Math.PI * 2, spread: 0.5 + r() * 0.45, depth: (lane ? 0.12 : 0.22) + r() * (lane ? 0.15 : 0.3),
-    })),
+    peaks: keelPeaks(r, lane),
     deepest: lane ? 1.6 : 2, keelRows: lane ? 16 : 22, smooth: 6,
     rams: Array.from({ length: Math.floor(r() * 3) }, () => ({
       angle: r() * Math.PI * 2, spread: 0.35 + r() * 0.5, size: 0.25 + r() * 0.45, depth: 0.08 + r() * 0.25,
     })),
   });
+}
+
+// A keel's lowest lobe hangs under one end of the berg, with a smaller one under the other end, both placed where
+// they show from the side; now and then a third, smaller still, hangs between.
+function keelPeaks(r, lane) {
+  const end = r() < 0.5 ? 0 : Math.PI;
+  const main = (lane ? 0.15 : 0.3) + r() * (lane ? 0.12 : 0.25);
+  const peak = (angle, depth) => ({ angle, spread: 0.45 + r() * 0.35, depth });
+  const peaks = [peak(end + (r() - 0.5) * 1.1, main), peak(end + Math.PI + (r() - 0.5) * 1.1, main * (0.5 + r() * 0.3))];
+  if (r() < 0.3) peaks.push(peak(end + Math.PI / 2 * (r() < 0.5 ? 1 : -1), main * 0.4));
+  return peaks;
 }
 
 let iceMaterialShared = null;
@@ -699,7 +708,9 @@ function* packLayout(field, depth, blocked, out) {
     // Mostly small pieces with the odd big floe among them, the big ones bunched where the field is thickest.
     const lane = Math.abs(z) < LANE_HALF + 1;
     const big = 0.5 + fbm(x * 0.06, z * 0.06, 4.4);
-    const rad = (lane ? 0.3 + 1.3 * r() ** 2 : 0.3 + 3.4 * r() ** 3 * (0.4 + big)) * (1 + 4 * packFar(z));
+    // Out of the lane, now and then a wide, flat plate.
+    const wide = !lane && r() < 0.12 ? 2.4 + r() * 2.6 : 0;
+    const rad = (wide || (lane ? 0.3 + 1.3 * r() ** 2 : 0.3 + 3.4 * r() ** 3 * (0.4 + big))) * (1 + 4 * packFar(z));
     if (k % 100 === 0) yield;
     const room = (0.6 + r() * 0.25);
     let clash = false;
@@ -810,7 +821,8 @@ class PackIce {
       const corners = s.poly.map(([x, z]) => [((Math.atan2(z - cz, x - cx) % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2),
         Math.hypot(x - cx, z - cz)]).sort((a, b) => a[0] - b[0]);
       const reach = Math.max(...corners.map((c) => c[1]));
-      const thick = 0.6 + r() * 0.7;
+      // The wider the floe, the thinner and flatter it lies.
+      const thick = (0.6 + r() * 0.7) / (1 + Math.max(0, reach - 1.5) * 0.25);
       const far = packFar(cz);
       const block = iceBlock(r, {
         reach: polygonReach(corners), width: 2, depth: 2, top: PACK_TOP * thick, draft: PACK_DRAFT * thick, dome: 0.12,
