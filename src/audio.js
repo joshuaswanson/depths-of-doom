@@ -173,6 +173,7 @@ const MUSIC_FADE = 4;
 const TRACKS = {
   surface: { file: 'sunlight_on_the_reef.m4a', tail: 4.5 },
   deep: { file: 'below_the_pressure.m4a', tail: 6.5 },
+  surfacePolar: { file: 'tiptoe_through_the_trench.m4a', tail: 5.5 },
   battle: { file: 'cannonball_at_the_surface.m4a', tail: 2.5 },
   battleDeep: { file: 'shadows_in_the_trench.m4a', tail: 1.5 },
   battlePolar: { file: 'frozen_torpedo_run.m4a', tail: 1.2 },
