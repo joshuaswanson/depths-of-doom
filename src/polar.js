@@ -133,8 +133,8 @@ function seeded(seed) {
 
 // An iceberg, in one of the shapes calving leaves them: a tabular slab with sheer walls and a flat top, a blocky berg
 // broken off along a few fracture faces, or a wedge whose top slopes up to a sharp ridge or peak. Under the water the
-// sea has melted each into a keel that tapers down in rounded, uneven lobes, hanging deeper on some sides than
-// others like an upside-down mountain. Most of its bulk hides below. Bergs in the sub's lane hang less unevenly, so
+// sea has melted each into a keel that tapers down in broad, rounded lobes to blunt bottoms, hanging deeper on some
+// sides than others like an upside-down mountain. Most of its bulk hides below. Bergs in the sub's lane hang less unevenly, so
 // there is always room to pass beneath.
 function iceberg(r, width, depth, top, draft, segments, lane) {
   const kind = r();
@@ -156,12 +156,12 @@ function iceberg(r, width, depth, top, draft, segments, lane) {
   }
   return iceBlock(r, {
     reach: jaggedOutline(r, 5 + Math.floor(r() * 4), tabular ? 0.2 : 0.3),
-    width, depth, top: top / (1 + dome), draft, dome, bulge: 0.08 + r() * 0.12, blunt: 0.85 + r() * 0.5,
+    width, depth, top: top / (1 + dome), draft, dome, bulge: 0.1 + r() * 0.15, blunt: 2 + r() * 0.5, taper: 0.4 + r() * 0.25,
     lean: (r() - 0.5) * 0.7, rough: 0.7 + r() * 0.5, cuts, segments, lobes: lane ? 0.25 + r() * 0.3 : 0.5 + r() * 0.45,
-    peaks: Array.from({ length: (lane ? 1 : 2) + Math.floor(r() * 3) }, () => ({
-      angle: r() * Math.PI * 2, spread: 0.3 + r() * 0.4, depth: (lane ? 0.15 : 0.3) + r() * (lane ? 0.2 : 0.5),
+    peaks: Array.from({ length: (lane ? 1 : 2) + Math.floor(r() * 2) }, () => ({
+      angle: r() * Math.PI * 2, spread: 0.5 + r() * 0.45, depth: (lane ? 0.12 : 0.22) + r() * (lane ? 0.15 : 0.3),
     })),
-    deepest: lane ? 1.6 : 2, keelRows: lane ? 16 : 22,
+    deepest: lane ? 1.6 : 2, keelRows: lane ? 16 : 22, smooth: 6,
     rams: Array.from({ length: Math.floor(r() * 3) }, () => ({
       angle: r() * Math.PI * 2, spread: 0.35 + r() * 0.5, size: 0.25 + r() * 0.45, depth: 0.08 + r() * 0.25,
     })),

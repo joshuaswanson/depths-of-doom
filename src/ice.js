@@ -105,7 +105,7 @@ export function jaggedOutline(r, corners, irregular) {
 export function iceBlock(r, o) {
   const {
     reach, width, depth, top, draft, dome = 0.1, bulge = 0.15, blunt = 2, rough = 1, topRough = 1, lean = 0, cuts = [],
-    rams = [], lobes = 0, peaks = [], deepest = 1.5, segments = 96,
+    rams = [], lobes = 0, peaks = [], deepest = 1.5, taper = 0, smooth = 0, segments = 96,
     capRows = 10, cliffRows = 6, keelRows = 16,
   } = o;
   const hx = width / 2;
@@ -138,19 +138,21 @@ export function iceBlock(r, o) {
     const y = -draft * t;
     // Waves wear a notch in just below the waterline.
     const notch = 1 - 0.07 * Math.exp(-(((y + Math.min(0.35, draft * 0.15)) / Math.min(0.3, draft * 0.12)) ** 2));
-    const profile = (1 + bulge * Math.sin(Math.PI * Math.min(1, t * 1.3))) * Math.pow(1 - Math.pow(t, blunt), 1 / blunt);
+    // `taper` narrows the keel steadily all the way down, while `blunt` rounds off its bottom.
+    const profile = (1 + bulge * Math.sin(Math.PI * Math.min(1, t * 1.3))) * Math.pow(1 - Math.pow(t, blunt), 1 / blunt)
+      * (1 - taper * t);
     rows.push({ scale: (1 + batter) * profile * notch, y, up: -Math.pow(t, 3), shift: lean * t * t, keel: t });
   }
   const outline = new Float32Array(segments);
   for (let i = 0; i < segments; i++) outline[i] = reach((i / segments) * Math.PI * 2);
   // Under the water the keel hangs deeper on some sides than others, and rams, broad spurs of ice, jut out just below
   // the waterline.
-  const hang = Array.from({ length: 5 }, (_, k) => [k + 1, r() * 6.28, lobes * (r() - 0.3) / Math.sqrt(k + 1)]);
-  // Narrow peaks hang down here and there, each with a ridge running up from its tip to the waterline, so the keel's
-  // underside reads as a mountain range turned upside down.
+  const hang = Array.from({ length: 3 }, (_, k) => [k + 1, r() * 6.28, lobes * (r() - 0.3) / (k + 1)]);
+  // Broad, rounded lobes hang down here and there, each with a ridge running up from its bottom to the waterline, so
+  // the keel's underside reads as a mountain range turned upside down, worn smooth.
   const peakDrop = (a) => peaks.reduce((sum, peak) => {
     const da = Math.atan2(Math.sin(a - peak.angle), Math.cos(a - peak.angle));
-    return sum + peak.depth * Math.exp(-(Math.abs(da / peak.spread) ** 1.5));
+    return sum + peak.depth * Math.exp(-((da / peak.spread) ** 2));
   }, 0);
   const deepen = (a) => THREE.MathUtils.clamp(
     1 + hang.reduce((sum, [f, p, amp]) => sum + Math.sin(a * f + p) * amp, 0) + peakDrop(a), 0.5, deepest);
@@ -167,12 +169,10 @@ export function iceBlock(r, o) {
     const small = fbm(x * 0.45 + ox, y * 0.45 + oy, z * 0.45 + oz, 3);
     if (up >= 1) return (big * top * 0.22 + small * 0.08) * topRough;
     const grooves = y > -1 ? noise3(x * 0.9 + ox, y * 0.06, z * 0.9 + oz) * 0.22 * rough * Math.min(1, top) : 0;
-    // Below the water melt swells the ice into great rounded bulges, and running meltwater carves ridges and ravines
-    // down the keel.
+    // Below the water melt swells the ice into great rounded bulges.
     const below = Math.min(1, Math.max(0, -y - 0.5) / 2);
-    const swell = below ? fbm(x * 0.05 + oz, y * 0.07 + ox, z * 0.05 + oy, 2) * lump * 2.2 * below : 0;
-    const ridge = below ? (0.5 - Math.abs(noise3(x * 0.2 + oy, y * 0.04 + oz, z * 0.2 + ox))) * lump * 1.3 * below : 0;
-    return big * lump + small * 0.22 * rough + grooves + swell + ridge;
+    const swell = below ? fbm(x * 0.05 + oz, y * 0.07 + ox, z * 0.05 + oy, 2) * lump * 2.6 * below : 0;
+    return big * lump + small * 0.22 * rough + grooves + swell;
   };
   const position = [];
   const v = new THREE.Vector3();
@@ -196,6 +196,32 @@ export function iceBlock(r, o) {
     }
   }
   pushVertex(lean * hx, -draft * deepen(0) * 0.5 - draft * 0.5, 0, -1);
+  // The sea wears every point and fold of the keel round: each pass pulls each keel vertex halfway toward the
+  // average of its neighbours around and up and down the keel.
+  const firstKeel = rows.findIndex((row) => row.keel !== undefined);
+  const lastRow = rows.length - 1;
+  const bottomVertex = position.length / 3 - 1;
+  const at = (k, i) => 1 + k * segments + ((i + segments) % segments);
+  for (let pass = 0; pass < smooth; pass++) {
+    const next = position.slice();
+    for (let k = firstKeel; k <= lastRow; k++) {
+      for (let i = 0; i < segments; i++) {
+        const v = at(k, i);
+        const below = k === lastRow ? bottomVertex : at(k + 1, i);
+        for (let c = 0; c < 3; c++) {
+          const mean = (position[at(k, i - 1) * 3 + c] + position[at(k, i + 1) * 3 + c] + position[at(k - 1, i) * 3 + c]
+            + position[below * 3 + c]) / 4;
+          next[v * 3 + c] = position[v * 3 + c] + (mean - position[v * 3 + c]) * 0.5;
+        }
+      }
+    }
+    for (let c = 0; c < 3; c++) {
+      let mean = 0;
+      for (let i = 0; i < segments; i++) mean += position[at(lastRow, i) * 3 + c];
+      next[bottomVertex * 3 + c] = position[bottomVertex * 3 + c] + (mean / segments - position[bottomVertex * 3 + c]) * 0.5;
+    }
+    position.splice(0, position.length, ...next);
+  }
   // Calving leaves flat fracture faces: each cut shears off everything beyond a plane, `keep` of the way out from the
   // middle to the farthest point in that direction.
   const planes = cuts.map(({ dir, keep }) => {

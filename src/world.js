@@ -2294,12 +2294,18 @@ export class World {
         prop.obj.traverse((o) => { o.castShadow = false; });
       }
       if (!layer.tint && deep) tint(prop.obj, '#1c2233', 0.45);
-      if (!layer.tint && polar) tint(prop.obj, '#2c4852', 0.8);
+      if (!layer.tint && polar) {
+        tint(prop.obj, '#2c4852', 0.85);
+        // Always well into the haze, so the spires stay soft silhouettes in the blue.
+        prop.obj.traverse((o) => {
+          if (o.isMesh) o.material.defines = { ...o.material.defines, FOG_MIN: '0.6' };
+        });
+      }
       prop.size = rand(layer.scale[0], layer.scale[1]);
       prop.stretch = 1;
       // Under the polar ice the rocks far out in the blue grow into great spires, looming out of the haze.
       if (want === 'polar' && layer.z[0] < -60) {
-        prop.size = rand(7, 13);
+        prop.size = rand(5, 9);
         prop.stretch = rand(1.6, 2.6);
       }
       prop.obj.scale.setScalar(prop.size);
