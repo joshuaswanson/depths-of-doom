@@ -658,6 +658,23 @@ kbd {
 }
 .coop-btn:hover { filter: brightness(1.15); }
 .sound-btn { margin-top: 3vh; }
+.coffee-btn {
+  margin-top: 2.4vh;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5vw;
+  padding: 0.7vh 1.4vw;
+  font-size: max(1.1vw, 12px);
+  font-weight: 700;
+  color: #3b2a14;
+  text-decoration: none;
+  background: linear-gradient(#ffe866, #ffcf1f);
+  border: 0.18vw solid #6b4a1c;
+  border-radius: 999px;
+  box-shadow: 0 0.3vw 0 #6b4a1c;
+}
+@media (hover: hover) { .coffee-btn:hover { filter: brightness(1.08); } }
+.coffee-btn:active { transform: translateY(2px); box-shadow: 0 0.1vw 0 #6b4a1c; }
 .coop-btn:active { transform: translateY(2px); box-shadow: 0 0.1vw 0 #0d2a42; }
 .coop-code {
   width: 6.5vw;

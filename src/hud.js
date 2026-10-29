@@ -16,6 +16,10 @@ const achievementsButton = () => `<button class="side-btn ach-btn">${TROPHY}Achi
 const FRIENDS = `<svg viewBox="0 0 24 24" class="trophy" aria-hidden="true"><path fill="currentColor" d="M9 11a4 4 0 1 0 0-8
   4 4 0 0 0 0 8zm7.5 0a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM1 20c0-3.3 3.6-6 8-6s8 2.7 8 6v1H1v-1zm17.5 1v-1c0-2-1-3.8
   -2.6-5.1 3.6.2 6.1 2.4 6.1 5.1v1h-3.5z"/></svg>`;
+const COFFEE = `<svg viewBox="0 0 24 24" class="trophy" aria-hidden="true"><path fill="currentColor" d="M4 8h13v5a5 5 0 0
+  1-5 5H9a5 5 0 0 1-5-5V8zm13 1h1.5a2.5 2.5 0 0 1 0 5H17v-2h1.5a.5.5 0 0 0 0-1H17V9zM7 2c.6.8.6 1.7 0 2.5S6.4 6.2 7 7H5.6
+  c-.6-.8-.6-1.7 0-2.5S6.2 2.8 5.6 2H7zm4 0c.6.8.6 1.7 0 2.5s-.6 1.7 0 2.5H9.6c-.6-.8-.6-1.7 0-2.5s.6-1.7 0-2.5H11zM3
+  20h16v2H3z"/></svg>`;
 const titleControls = () => `<div class="title-row">
   <button class="side-btn friends-btn">${FRIENDS}Dive with friends</button>
   <button class="big-btn">Dive!</button>
@@ -197,7 +201,9 @@ export class Hud {
   showPause() {
     this.overlay.className = 'overlay show';
     this.overlay.innerHTML = `<div class="panel"><div class="logo small">Paused</div>
-      <button class="big-btn">Resume</button><div><button class="coop-btn sound-btn"></button></div></div>`;
+      <button class="big-btn">Resume</button><div><button class="coop-btn sound-btn"></button></div>
+      <a class="coffee-btn" href="https://buymeacoffee.com/swanson" target="_blank" rel="noopener">${COFFEE}Buy me a coffee</a>
+      </div>`;
     this.overlay.querySelector('.big-btn').addEventListener('click', () => this.onResume());
     const sound = this.overlay.querySelector('.sound-btn');
     const label = () => {
