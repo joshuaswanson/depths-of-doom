@@ -1133,9 +1133,11 @@ class Floe {
         const dir = Math.sign(p.vel.x || 1);
         // Each comes to its senses after its own moment, then rights itself and goes its own way at its own pace,
         // flippers out of step with the rest.
+        // It looks about to get its bearings at its own pace, and strokes at its own rhythm once it swims.
         Object.assign(p, { yaw: dir > 0 ? 0 : Math.PI, pitch: -0.2 - Math.random() * 0.4, roll: 0, speed: 0,
-          stroke: Math.random() * 6.3, cruise: 4 + Math.random() * 3, retarget: 0,
-          dazed: 0.3 + Math.random() * 1.1, calm: 2.5 + Math.random() * 2.5,
+          stroke: Math.random() * 6.3, cruise: 4.5 + Math.random() * 3, retarget: 0,
+          dazed: 0.1 + Math.random() * 0.8, gather: 0.5 + Math.random() * 0.9, calm: 4 + Math.random() * 4,
+          rate: 0.8 + Math.random() * 0.45, look: 5 + Math.random() * 5, lookPhase: Math.random() * 6.3,
           turn: new THREE.Vector3(p.spinVel.x, p.spinVel.y, p.spinVel.z) });
         const at = { x: obj.position.x, y: SURFACE_Y, z: obj.position.z };
         effects?.splash(at, 0.9 + Math.min(1, -p.vel.y * 0.08));
@@ -1160,7 +1162,7 @@ class Floe {
       }
       // The tumble carries on, slowed by the water, while a pull toward swimming belly down grows from nothing as it
       // gathers its wits, so it rolls round in one smooth motion over a couple of seconds.
-      const wits = THREE.MathUtils.smoothstep(p.swimTime, p.dazed * 0.4, p.dazed + 1.4);
+      const wits = THREE.MathUtils.smoothstep(p.swimTime, p.dazed * 0.4, p.dazed + p.gather);
       const pull = p.calm * wits;
       swimPose(p, this.pose);
       const err = this.qErr.copy(this.pose).multiply(this.qInv.copy(obj.quaternion).invert());
@@ -1173,14 +1175,15 @@ class Floe {
       const step = p.turn.length() * dt;
       if (step > 1e-6) obj.quaternion.premultiply(this.qTurn.setFromAxisAngle(this.turnAxis.copy(p.turn).normalize(), step));
       obj.quaternion.normalize();
-      // Flippers flail at first, then settle into slow strokes, and it starts to make way.
-      const effort = THREE.MathUtils.smoothstep(p.swimTime, p.dazed, p.dazed + 2);
-      swimStroke(p.rig, p, dt, effort * 0.35);
+      // Flippers flail at first, then settle into strokes, and it starts to make way, glancing about as it does.
+      const effort = THREE.MathUtils.smoothstep(p.swimTime, p.dazed * 0.6, p.dazed + p.gather);
+      swimStroke(p.rig, p, dt * p.rate, effort * 0.5);
       p.rig.uDrop.value += (1 - effort) * Math.sin(t * 9 + p.stroke) * 0.25;
       p.rig.uFlap.value *= 0.3 + 0.7 * effort;
-      p.speed = effort * 1.2;
+      p.rig.uHeadYaw.value = (1 - wits * 0.7) * Math.sin(t * p.look + p.lookPhase) * 0.7;
+      p.speed = effort * 2;
       obj.position.addScaledVector(swimmerBack(p), -p.speed * dt);
-      if (wits >= 1 && angle < 0.2 && p.turn.length() < 0.4) {
+      if (wits >= 1 && angle < 0.35 && p.turn.length() < 0.6) {
         p.state = 'swim';
         p.settle = 1;
       }
@@ -1206,7 +1209,7 @@ class Floe {
         p.settle = Math.max(0, p.settle - dt);
         obj.quaternion.slerpQuaternions(was, obj.quaternion, 1 - Math.exp(-dt * 3 / Math.max(0.15, p.settle)));
       }
-      if (swimStroke(p.rig, p, dt, p.speed / 7)) jet(effects, obj.position, swimmerBack(p));
+      if (swimStroke(p.rig, p, dt * p.rate, p.speed / 7)) jet(effects, obj.position, swimmerBack(p));
       // Gone for good once it has swum out of sight.
       if (p.swimTime > 9 + p.phase && camera && outOfView(obj.position, camera)) {
         p.state = 'gone';
