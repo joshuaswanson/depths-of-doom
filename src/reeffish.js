@@ -60,6 +60,8 @@ function makeSpecies(name, spec, scene) {
     scene.add(mesh);
     meshes.push(mesh);
   });
+  // Free slots are kept highest first, so fish are taken from the bottom of the pool and only the slots up to the
+  // highest one in use need drawing.
   return { name, spec, meshes, free: Array.from({ length: spec.count }, (_, i) => spec.count - 1 - i) };
 }
 
@@ -156,6 +158,7 @@ export class ReefFish {
         for (const m of f.species.meshes) m.setMatrixAt(f.slot, this.hidden ??= new THREE.Matrix4().makeScale(0, 0, 0));
       }
     }
+    for (const s of Object.values(this.species)) s.free.sort((a, b) => b - a);
   }
 
   update(dt, t, cx, sub) {
@@ -174,7 +177,14 @@ export class ReefFish {
       for (const slot of s.free) for (const m of s.meshes) m.setMatrixAt(slot, hidden);
     }
     for (const groups of this.stocked.values()) for (const g of groups) this.move(g, dt, t, sub);
-    for (const s of Object.values(this.species)) for (const m of s.meshes) m.instanceMatrix.needsUpdate = true;
+    for (const s of Object.values(this.species)) {
+      let drawn = s.spec.count;
+      for (let i = 0; i < s.free.length && s.free[i] === drawn - 1; i++) drawn--;
+      for (const m of s.meshes) {
+        m.count = drawn;
+        m.instanceMatrix.needsUpdate = true;
+      }
+    }
   }
 
   move(g, dt, t, sub) {
