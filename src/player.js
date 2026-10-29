@@ -34,7 +34,7 @@ const REGEN_DELAY = 5;
 // From this hull level the sub gets the long "car" hull with a flat front deck and a deck-mounted gun.
 const BIG_HULL_LEVEL = 4;
 const DECK = { start: 0.72, end: 0.97, height: 0.56 };
-const DECK_SOCKET = [1.2, 90];
+const DECK_SOCKET = [1.35, 90];
 
 function deckCap(x) {
   return THREE.MathUtils.lerp(10, DECK.height, THREE.MathUtils.smoothstep(x, DECK.start, DECK.end));
@@ -44,6 +44,10 @@ function deckCap(x) {
 // window as long as the base stays off it.
 const KEEP_CLEAR = [[0.35, 4, 0.22], [-0.3, 4, 0.19], [0.35, 176, 0.22], [-0.3, 176, 0.19]];
 const NOSE_LIMIT = 1.35;
+// Where the conning tower stands along the top of the hull, in hull units. A mount whose base sits alongside it keeps
+// low on the flank, so seen from the side the part never looks bolted into the tower; its barrels may pass in front.
+const TOWER = [0.15, 1];
+const BESIDE_TOWER = 25;
 // Rough space each part takes on the hull: how far it reaches back and forward along the hull from its mount, and
 // how wide it is around the hull. Used to keep parts from bolting into each other.
 const ENVELOPE = {
@@ -442,15 +446,18 @@ export class Player {
       const overlapAlong = sx * fx + back < e.x1 && sx * fx + front > e.x0;
       return overlapAlong && gap(a, e.angle) * Math.min(around, e.around) < width + e.width;
     });
+    const besideTower = sx * fx + back < TOWER[1] * fx && sx * fx + r > TOWER[0] * fx;
+    const onTower = (a) => besideTower && gap(a, 90) < THREE.MathUtils.degToRad(90 - BESIDE_TOWER);
     for (let step = 0; step <= 20; step++) {
       for (const dir of [1, -1]) {
         const a = angle + dir * step * 6;
-        if (!onWindow(a) && !bumps(a)) return [sx, a];
+        if (!onWindow(a) && !bumps(a) && !onTower(a)) return [sx, a];
       }
     }
-    for (let step = 0; step <= 15; step++) {
+    for (let step = 0; step <= 20; step++) {
       for (const dir of [1, -1]) {
-        if (!onWindow(angle + dir * step * 6)) return [sx, angle + dir * step * 6];
+        const a = angle + dir * step * 6;
+        if (!onWindow(a) && !onTower(a)) return [sx, a];
       }
     }
     return [sx, angle];
