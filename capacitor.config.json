@@ -1,0 +1,16 @@
+{
+  "appId": "com.joshuaswanson.submania",
+  "appName": "Submania",
+  "webDir": "dist-ios",
+  "backgroundColor": "#04121f",
+  "ios": {
+    "contentInset": "never",
+    "scrollEnabled": false,
+    "backgroundColor": "#04121f"
+  },
+  "plugins": {
+    "SystemBars": {
+      "hidden": true
+    }
+  }
+}

@@ -12,14 +12,19 @@
     "trailer": "node trailer/capture.mjs && node trailer/soundtrack.mjs",
     "icons": "blender --background --python blender/render_icons.py && uv run --with pillow scripts/optimize_images.py",
     "seagull": "blender --background ~/Developer/seagull/seagull.blend --python blender/import_seagull.py && node scripts/optimize-models.mjs seagull",
-    "anglerfish": "blender --background ~/Developer/angler-fish/anglerfish.blend --python blender/import_anglerfish.py && node scripts/optimize-models.mjs anglerfish"
+    "anglerfish": "blender --background ~/Developer/angler-fish/anglerfish.blend --python blender/import_anglerfish.py && node scripts/optimize-models.mjs anglerfish",
+    "ios": "vite build --mode ios && cap sync ios && cap open ios",
+    "ios:sync": "vite build --mode ios && cap sync ios"
   },
   "dependencies": {
+    "@capacitor/core": "^8.6.0",
+    "@capacitor/ios": "^8.6.0",
     "@fontsource/fredoka": "^5.3.0",
     "peerjs": "^1.5.5",
     "three": "^0.186.1"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.6.0",
     "@gltf-transform/core": "^4.5.1",
     "@gltf-transform/extensions": "^4.5.1",
     "@gltf-transform/functions": "^4.5.1",
