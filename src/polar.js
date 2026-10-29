@@ -612,7 +612,11 @@ function placeAnimal(obj) {
 // into chunks when the hull drives into them, opening a channel like an icebreaker's.
 const PACK_TOP = 0.16;
 const PACK_DRAFT = 0.42;
-const PACK_DEPTH = [-24, 3.4];
+// The pack runs from just in front of the lane back to where the haze swallows it, so it reaches the horizon.
+const PACK_DEPTH = [-140, 3.4];
+// Floes beyond this far behind the lane grow bigger and simpler with distance, where no one can see their detail.
+const PACK_NEAR = -24;
+const packFar = (z) => THREE.MathUtils.clamp((PACK_NEAR - z) / 60, 0, 1);
 const LANE_HALF = 2.7;
 const CHUNKS = 700;
 // The farthest out a chunk of the given size may float with all of it still behind the water's front edge.
@@ -680,10 +684,13 @@ function* packLayout(field, depth, blocked, out) {
     x: field.start + r() * width, a: (r() - 0.5) * 1.4, w: 0.4 + r() * 1.1,
   }));
   const inLead = (x, z) => leads.some((l) => Math.abs((x - l.x) * Math.cos(l.a) - z * Math.sin(l.a)) < l.w / 2);
-  const tries = Math.round(width * (depth[1] - depth[0]) * 8);
+  const nearDepth = depth[1] - Math.max(depth[0], PACK_NEAR);
+  const tries = Math.round(width * (nearDepth + (Math.max(depth[0], PACK_NEAR) - depth[0]) * 0.25) * 8);
   for (let k = 0; k < tries; k++) {
     const x = field.start - 8 + r() * (width + 16);
-    const z = depth[0] + r() * (depth[1] - depth[0]);
+    // Tries are spread evenly over the near pack; the far pack, its floes bigger, takes a quarter as many per stride.
+    const pick = r() * (nearDepth + (Math.max(depth[0], PACK_NEAR) - depth[0]) * 0.25);
+    const z = pick < nearDepth ? depth[1] - pick : Math.max(depth[0], PACK_NEAR) - (pick - nearDepth) * 4;
     // The field's ragged ends, beyond which only a few stragglers drift.
     const inside = Math.min(x - field.start - fbm(z * 0.07, 1.3, 0.5) * 12, field.end + fbm(z * 0.07, 7.1, 2.5) * 12 - x);
     if (inside < 0 && r() > 0.15 * Math.exp(inside / 3)) continue;
@@ -692,7 +699,7 @@ function* packLayout(field, depth, blocked, out) {
     // Mostly small pieces with the odd big floe among them, the big ones bunched where the field is thickest.
     const lane = Math.abs(z) < LANE_HALF + 1;
     const big = 0.5 + fbm(x * 0.06, z * 0.06, 4.4);
-    const rad = lane ? 0.3 + 1.3 * r() ** 2 : 0.3 + 3.4 * r() ** 3 * (0.4 + big);
+    const rad = (lane ? 0.3 + 1.3 * r() ** 2 : 0.3 + 3.4 * r() ** 3 * (0.4 + big)) * (1 + 4 * packFar(z));
     if (k % 100 === 0) yield;
     const room = (0.6 + r() * 0.25);
     let clash = false;
@@ -733,7 +740,8 @@ function* packLayout(field, depth, blocked, out) {
   for (let k = 0; k < width * 14; k++) {
     if (k % 300 === 0) yield;
     const x = field.start - 4 + r() * (width + 8);
-    const z = depth[0] + r() * (depth[1] - depth[0] - 1);
+    // Too small to see far back, the loose fragments drift only near the lane.
+    const z = Math.max(depth[0], PACK_NEAR) + r() * (depth[1] - Math.max(depth[0], PACK_NEAR) - 1);
     let covered = false;
     for (const s of grid.near(x, z, biggest)) {
       if ((s.x - x) ** 2 + (s.z - z) ** 2 < (s.rad * 0.95) ** 2) {
@@ -803,10 +811,12 @@ class PackIce {
         Math.hypot(x - cx, z - cz)]).sort((a, b) => a[0] - b[0]);
       const reach = Math.max(...corners.map((c) => c[1]));
       const thick = 0.6 + r() * 0.7;
+      const far = packFar(cz);
       const block = iceBlock(r, {
         reach: polygonReach(corners), width: 2, depth: 2, top: PACK_TOP * thick, draft: PACK_DRAFT * thick, dome: 0.12,
-        bulge: 0, blunt: 9, rough: 0.3, topRough: 0.45, segments: Math.min(84, Math.round(16 + reach * 18)),
-        capRows: s.home ? 6 : reach > 1 ? 2 : 1, cliffRows: 1, keelRows: 2,
+        bulge: 0, blunt: 9, rough: 0.3, topRough: 0.45,
+        segments: Math.max(10, Math.min(84, Math.round((16 + reach * 18) / (1 + 6 * far)))),
+        capRows: s.home ? 6 : reach > 1 && far < 0.5 ? 2 : 1, cliffRows: 1, keelRows: 2,
       });
       const geo = block.geometry;
       geo.translate(cx, 0, cz);
