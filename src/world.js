@@ -702,9 +702,9 @@ const ANGLER_FLOOR = -170;
 const ANGLER_BAND = [4, 16];
 const ANGLER_SPACING = 18;
 // A fish held in the sub's spotlight this long (seconds) bolts away from the sub for a few seconds, tail thrashing.
-const ANGLER_GLARE = 1.5;
+const ANGLER_GLARE = 0.25;
 const ANGLER_FLEE = [3.5, 5];
-const ANGLER_FLEE_SPEED = 2.4;
+const ANGLER_FLEE_SPEED = 5;
 
 function makeAngler() {
   const fish = spawn('anglerfish');
@@ -772,18 +772,23 @@ function updateAngler(a, dt, t, cx, sub, world) {
   const u = a.userData;
   const p = a.position;
   u.retarget -= dt;
-  // Caught in the spotlight the fish grows uneasy, and held there too long it bolts away from the sub.
+  // Caught in the spotlight the fish panics at once and bolts out of the beam: sideways out of it, and away from the
+  // sub along the trench. Still lit as it flees, it changes course again.
   u.glare = sub && world.inSpotlight(p) ? u.glare + dt : Math.max(0, u.glare - dt * 0.5);
-  if (u.flee <= 0 && u.glare > ANGLER_GLARE) {
+  if (u.glare > ANGLER_GLARE) {
     u.flee = rand(ANGLER_FLEE[0], ANGLER_FLEE[1]);
     u.glare = 0;
-    const away = Math.sign(p.x - sub.x) || 1;
-    let reach = rand(18, 26);
-    while (reach > 4 && floorY(p.x + away * reach) > ANGLER_FLOOR) reach -= 2;
+    const out = world.spotEscape(p);
+    const away = Math.sign(out?.x || p.x - sub.x) || 1;
+    let reach = out ? rand(3, 6) : rand(8, 14);
+    while (reach > 2 && floorY(p.x + away * reach) > ANGLER_FLOOR) reach -= 2;
     const x = p.x + away * reach;
+    const floor = world.anglerFloor(p.x, x, u.homeZ);
+    // With the seabed in the way below, it escapes the beam upward.
+    let rise = out ? Math.sign(out.y || 1) * 16 : rand(-2, 2);
+    if (p.y + rise < floor + ANGLER_BAND[0] + 2) rise = 16;
     u.targetZ = u.homeZ;
-    // Straight out along the trench, keeping roughly to its depth.
-    u.target = new THREE.Vector2(x, Math.max(world.anglerFloor(p.x, x, u.homeZ) + ANGLER_BAND[0], p.y + rand(-2, 2)));
+    u.target = new THREE.Vector2(x, THREE.MathUtils.clamp(p.y + rise, floor + ANGLER_BAND[0], floor + ANGLER_BAND[1] + 12));
     u.retarget = u.flee + 2;
   }
   u.flee = Math.max(0, u.flee - dt);
@@ -2150,6 +2155,23 @@ export class World {
   }
 
   // Whether a point lies inside one of the sub's spotlight beams, as worked out at the start of this frame.
+  // The quickest way out of whichever spotlight beam lights `pos`: straight out to the side of the beam, and a little
+  // further along it, away from the sub. Null when no beam lights it.
+  spotEscape(pos) {
+    for (const c of this.spotCones) {
+      const dx = pos.x - c.origin.x;
+      const dy = pos.y - c.origin.y;
+      const along = dx * c.dir.x + dy * c.dir.y;
+      const d = Math.hypot(dx, dy);
+      if (d >= this.spotRange || along <= d * Math.cos(0.45)) continue;
+      let px = dx - along * c.dir.x;
+      let py = dy - along * c.dir.y;
+      if (Math.hypot(px, py) < 0.3) [px, py] = [-c.dir.y, c.dir.x];
+      return new THREE.Vector2(px, py).normalize().addScaledVector(c.dir, 0.6).normalize();
+    }
+    return null;
+  }
+
   inSpotlight(pos) {
     return this.spotCones.some((c) => {
       const dx = pos.x - c.origin.x;
