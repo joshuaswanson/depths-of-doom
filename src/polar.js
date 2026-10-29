@@ -271,13 +271,25 @@ function* layoutIce(s, ice) {
   const roomy = bergs.filter((b) => b.width > 10 && b.z > BACK_Z[0] + 10);
   if (kind === 'north') {
     animals.push({ type: 'igloo', berg: home, dx: IGLOO_SPOT.dx, dz: IGLOO_SPOT.dz });
-    // The bear stands at the front of the floe, clear of the igloo's tunnel.
-    animals.push({ type: 'bear', berg: home, dx: 1.5, dz: 3.7 });
+    // The bear stands beside the igloo, set back from the floe's front edge and clear of the dome and its tunnel.
+    animals.push({ type: 'bear', berg: home, dx: 2.6, dz: 0.4 });
+    // Each stands back from the berg's front edge, so the ice in front hides its feet from the camera; the furthest
+    // back spot with room to stand wins. Out of sight back there it may stand on steeper snow.
     for (const b of roomy) {
       if (r() > 0.5) continue;
-      const dx = (r() - 0.5) * b.width * 0.2;
-      const dz = (r() - 0.5) * b.depth * 0.12;
-      if (b.walkable(dx, dz, ANIMAL_SIZE.bear * 0.6)) animals.push({ type: 'bear', berg: b, dx, dz });
+      const shift = (r() - 0.5) * 0.2;
+      let spot = null;
+      for (let k = 8; k >= 0 && !spot; k--) {
+        const dz = -k * 0.05 * b.depth;
+        for (const f of [0, 0.08, -0.08, 0.16, -0.16, 0.24, -0.24]) {
+          const dx = (shift + f) * b.width;
+          if (b.walkable(dx, dz, ANIMAL_SIZE.bear * (k > 0 ? 0.35 : 0.6), k > 0 ? 1 : 0.45)) {
+            spot = { dx, dz };
+            break;
+          }
+        }
+      }
+      if (spot) animals.push({ type: 'bear', berg: b, ...spot });
     }
   } else {
     for (const b of roomy) {

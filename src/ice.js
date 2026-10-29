@@ -279,9 +279,9 @@ export function iceBlock(r, o) {
     }
     return surface;
   };
-  // Whether a point on the top lies at least `margin` in from every edge on fairly level snow, where something can
-  // stand.
-  const walkable = (x, z, margin) => {
+  // Whether a point on the top lies at least `margin` in from every edge on snow no steeper than `steep`, where
+  // something can stand.
+  const walkable = (x, z, margin, steep = 0.45) => {
     const a = Math.atan2(z / hz, x / hx);
     const f = (((a / (Math.PI * 2)) % 1) + 1) % 1 * segments;
     const i = Math.floor(f);
@@ -290,7 +290,7 @@ export function iceBlock(r, o) {
     if (r > out * (1 - shoulderScale) * size - margin) return false;
     const y = topAt(x, z);
     // Nothing stands on a steep slope.
-    if (Math.hypot(topAt(x + 0.5, z) - topAt(x - 0.5, z), topAt(x, z + 0.5) - topAt(x, z - 0.5)) > 0.45) return false;
+    if (Math.hypot(topAt(x + 0.5, z) - topAt(x - 0.5, z), topAt(x, z + 0.5) - topAt(x, z - 0.5)) > steep) return false;
     return planes.every(({ n, c }) => n.y > 0.5 || n.x * x + n.y * y + n.z * z <= c - margin);
   };
   // Whether (x, z) lies within `margin` of the ice where it meets the water.
