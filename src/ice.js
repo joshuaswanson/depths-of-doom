@@ -105,7 +105,7 @@ export function jaggedOutline(r, corners, irregular) {
 export function iceBlock(r, o) {
   const {
     reach, width, depth, top, draft, dome = 0.1, bulge = 0.15, blunt = 2, rough = 1, topRough = 1, lean = 0, cuts = [],
-    rams = [], lobes = 0, peaks = [], deepest = 1.5, taper = 0, smooth = 0, segments = 96,
+    rams = [], lobes = 0, peaks = [], deepest = 1.5, taper = 0, smooth = 0, drifts = 0, segments = 96,
     capRows = 10, cliffRows = 6, keelRows = 16,
   } = o;
   const hx = width / 2;
@@ -167,7 +167,13 @@ export function iceBlock(r, o) {
   const displace = (x, y, z, up) => {
     const big = fbm(x * 0.09 + ox, y * 0.09 + oy, z * 0.09 + oz, 3);
     const small = fbm(x * 0.45 + ox, y * 0.45 + oy, z * 0.45 + oz, 3);
-    if (up >= 1) return (big * top * 0.22 + small * 0.08) * topRough;
+    if (up >= 1) {
+      const hummocks = fbm(x * 0.22 + oz, 3.7, z * 0.22 + ox, 2);
+      // `drifts` heaps snow into hummocks of a set height whatever the block's size, for thin floes; heaped snow only
+      // ever adds height.
+      return (big * top * 0.22 + hummocks * top * 0.1 + small * 0.08) * topRough
+        + Math.max(0, hummocks * 1.6 + 0.3 * small + 0.1) * drifts;
+    }
     const grooves = y > -1 ? noise3(x * 0.9 + ox, y * 0.06, z * 0.9 + oz) * 0.22 * rough * Math.min(1, top) : 0;
     // Below the water melt swells the ice into great rounded bulges.
     const below = Math.min(1, Math.max(0, -y - 0.5) / 2);
@@ -284,7 +290,7 @@ export function iceBlock(r, o) {
     if (r > out * (1 - shoulderScale) * size - margin) return false;
     const y = topAt(x, z);
     // Nothing stands on a steep slope.
-    if (Math.hypot(topAt(x + 0.5, z) - topAt(x - 0.5, z), topAt(x, z + 0.5) - topAt(x, z - 0.5)) > 0.3) return false;
+    if (Math.hypot(topAt(x + 0.5, z) - topAt(x - 0.5, z), topAt(x, z + 0.5) - topAt(x, z - 0.5)) > 0.45) return false;
     return planes.every(({ n, c }) => n.y > 0.5 || n.x * x + n.y * y + n.z * z <= c - margin);
   };
   // Whether (x, z) lies within `margin` of the ice where it meets the water.

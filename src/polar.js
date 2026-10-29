@@ -138,9 +138,9 @@ function seeded(seed) {
 // there is always room to pass beneath.
 function iceberg(r, width, depth, top, draft, segments, lane) {
   const kind = r();
-  const tabular = kind < 0.45;
-  const wedge = kind > 0.75;
-  const dome = tabular ? 0.04 + r() * 0.06 : wedge ? 0.5 + r() * 0.5 : 0.15 + r() * 0.25;
+  const tabular = kind < 0.25;
+  const wedge = kind > 0.7;
+  const dome = tabular ? 0.1 + r() * 0.12 : wedge ? 0.5 + r() * 0.5 : 0.2 + r() * 0.3;
   const cuts = [];
   const walls = tabular ? 3 + Math.floor(r() * 3) : 2 + Math.floor(r() * 3);
   for (let i = 0; i < walls; i++) {
@@ -157,7 +157,7 @@ function iceberg(r, width, depth, top, draft, segments, lane) {
   return iceBlock(r, {
     reach: jaggedOutline(r, 5 + Math.floor(r() * 4), tabular ? 0.2 : 0.3),
     width, depth, top: top / (1 + dome), draft, dome, bulge: 0.1 + r() * 0.15, blunt: 2 + r() * 0.5, taper: 0.4 + r() * 0.25,
-    lean: (r() - 0.5) * 0.7, rough: 0.7 + r() * 0.5, cuts, segments, lobes: lane ? 0.25 + r() * 0.3 : 0.5 + r() * 0.45,
+    lean: (r() - 0.5) * 0.7, rough: 0.7 + r() * 0.5, topRough: 1.6 + r() * 1.2, cuts, segments, lobes: lane ? 0.25 + r() * 0.3 : 0.5 + r() * 0.45,
     peaks: keelPeaks(r, lane),
     deepest: lane ? 1.6 : 2, keelRows: lane ? 16 : 22, smooth: 6,
     rams: Array.from({ length: Math.floor(r() * 3) }, () => ({
@@ -826,9 +826,9 @@ class PackIce {
       const far = packFar(cz);
       const block = iceBlock(r, {
         reach: polygonReach(corners), width: 2, depth: 2, top: PACK_TOP * thick, draft: PACK_DRAFT * thick, dome: 0.12,
-        bulge: 0, blunt: 9, rough: 0.3, topRough: 0.45,
+        bulge: 0, blunt: 9, rough: 0.3, topRough: 0.45, drifts: s.home ? 0 : Math.min(0.28, 0.06 + reach * 0.05),
         segments: Math.max(10, Math.min(84, Math.round((16 + reach * 18) / (1 + 6 * far)))),
-        capRows: s.home ? 6 : reach > 1 && far < 0.5 ? 2 : 1, cliffRows: 1, keelRows: 2,
+        capRows: s.home ? 6 : far < 0.5 ? (reach > 2 ? 5 : reach > 1 ? 3 : 1) : 1, cliffRows: 1, keelRows: 2,
       });
       const geo = block.geometry;
       geo.translate(cx, 0, cz);
