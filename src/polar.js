@@ -132,9 +132,11 @@ function seeded(seed) {
 }
 
 // An iceberg, in one of the shapes calving leaves them: a tabular slab with sheer walls and a flat top, a blocky berg
-// broken off along a few fracture faces, or a wedge whose top slopes up to a sharp ridge or peak. Under the water each
-// has a broad keel, itself sheared into flat faces in places. Most of its bulk hides below.
-function iceberg(r, width, depth, top, draft, segments) {
+// broken off along a few fracture faces, or a wedge whose top slopes up to a sharp ridge or peak. Under the water the
+// sea has melted each into a keel that tapers down in rounded, uneven lobes, hanging deeper on some sides than
+// others like an upside-down mountain. Most of its bulk hides below. Bergs in the sub's lane hang less unevenly, so
+// there is always room to pass beneath.
+function iceberg(r, width, depth, top, draft, segments, lane) {
   const kind = r();
   const tabular = kind < 0.45;
   const wedge = kind > 0.75;
@@ -145,10 +147,6 @@ function iceberg(r, width, depth, top, draft, segments) {
     const a = r() * Math.PI * 2;
     cuts.push({ dir: [Math.cos(a), (r() - 0.5) * 0.25, Math.sin(a)], keep: 0.72 + r() * 0.2 });
   }
-  for (let i = 0; i < 2 + Math.floor(r() * 3); i++) {
-    const a = r() * Math.PI * 2;
-    cuts.push({ dir: [Math.cos(a), -0.35 - r() * 0.5, Math.sin(a)], keep: 0.7 + r() * 0.2 });
-  }
   if (wedge) {
     const a = r() < 0.5 ? 0 : Math.PI;
     cuts.push({ dir: [Math.cos(a) * 0.7, 1, (r() - 0.5) * 0.6], keep: 0.55 + r() * 0.2 });
@@ -158,8 +156,12 @@ function iceberg(r, width, depth, top, draft, segments) {
   }
   return iceBlock(r, {
     reach: jaggedOutline(r, 5 + Math.floor(r() * 4), tabular ? 0.2 : 0.3),
-    width, depth, top: top / (1 + dome), draft, dome, bulge: 0.05 + r() * 0.15, blunt: 2.4 + r() * 2,
-    lean: (r() - 0.5) * 0.5, rough: 0.7 + r() * 0.5, cuts, segments, lobes: 0.2 + r() * 0.35,
+    width, depth, top: top / (1 + dome), draft, dome, bulge: 0.08 + r() * 0.12, blunt: 0.85 + r() * 0.5,
+    lean: (r() - 0.5) * 0.7, rough: 0.7 + r() * 0.5, cuts, segments, lobes: lane ? 0.25 + r() * 0.3 : 0.5 + r() * 0.45,
+    peaks: Array.from({ length: (lane ? 1 : 2) + Math.floor(r() * 3) }, () => ({
+      angle: r() * Math.PI * 2, spread: 0.3 + r() * 0.4, depth: (lane ? 0.15 : 0.3) + r() * (lane ? 0.2 : 0.5),
+    })),
+    deepest: lane ? 1.6 : 2, keelRows: lane ? 16 : 22,
     rams: Array.from({ length: Math.floor(r() * 3) }, () => ({
       angle: r() * Math.PI * 2, spread: 0.35 + r() * 0.5, size: 0.25 + r() * 0.45, depth: 0.08 + r() * 0.25,
     })),
@@ -203,7 +205,7 @@ function* layoutIce(s, ice) {
   // A berg whose keel or rams would reach past `limit` is made again smaller until it fits.
   const place = (b, x, limit = Infinity) => {
     for (let tries = 0; ; tries++) {
-      Object.assign(b, iceberg(seeded(b.seed + tries), b.width, b.depth, b.top, b.draft, b.lane ? 96 : 112));
+      Object.assign(b, iceberg(seeded(b.seed + tries), b.width, b.depth, b.top, b.draft, b.lane ? 96 : 112, b.lane));
       const box = b.geometry.boundingBox;
       if (x + box.max.x - box.min.x <= limit || tries > 6) {
         b.x = x - box.min.x;
@@ -241,7 +243,7 @@ function* layoutIce(s, ice) {
   for (let x = from - 6; x < to - 10;) {
     const width = Math.min(18 + r() * 34, to + 6 - x);
     const right = place({ z: BACK_Z[0] + r() * (BACK_Z[1] - BACK_Z[0]), width, depth: 10 + r() * 16,
-      top: 3 + r() * 9, draft: 6 + r() * 9, seed: Math.floor(r() * 1e9), lane: false }, x);
+      top: 3 + r() * 9, draft: 8 + r() * 6, seed: Math.floor(r() * 1e9), lane: false }, x);
     yield;
     x = right - width * (0.2 + r() * 0.5);
   }

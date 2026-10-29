@@ -105,7 +105,7 @@ export function jaggedOutline(r, corners, irregular) {
 export function iceBlock(r, o) {
   const {
     reach, width, depth, top, draft, dome = 0.1, bulge = 0.15, blunt = 2, rough = 1, topRough = 1, lean = 0, cuts = [],
-    rams = [], lobes = 0, segments = 96,
+    rams = [], lobes = 0, peaks = [], deepest = 1.5, segments = 96,
     capRows = 10, cliffRows = 6, keelRows = 16,
   } = o;
   const hx = width / 2;
@@ -145,9 +145,15 @@ export function iceBlock(r, o) {
   for (let i = 0; i < segments; i++) outline[i] = reach((i / segments) * Math.PI * 2);
   // Under the water the keel hangs deeper on some sides than others, and rams, broad spurs of ice, jut out just below
   // the waterline.
-  const hang = Array.from({ length: 3 }, (_, k) => [k + 1, r() * 6.28, lobes * (r() - 0.3) / (k + 1)]);
-  const deepen = (a) => THREE.MathUtils.clamp(1 + hang.reduce((sum, [f, p, amp]) => sum + Math.sin(a * f + p) * amp, 0),
-    0.55, 1.5);
+  const hang = Array.from({ length: 5 }, (_, k) => [k + 1, r() * 6.28, lobes * (r() - 0.3) / Math.sqrt(k + 1)]);
+  // Narrow peaks hang down here and there, each with a ridge running up from its tip to the waterline, so the keel's
+  // underside reads as a mountain range turned upside down.
+  const peakDrop = (a) => peaks.reduce((sum, peak) => {
+    const da = Math.atan2(Math.sin(a - peak.angle), Math.cos(a - peak.angle));
+    return sum + peak.depth * Math.exp(-(Math.abs(da / peak.spread) ** 1.5));
+  }, 0);
+  const deepen = (a) => THREE.MathUtils.clamp(
+    1 + hang.reduce((sum, [f, p, amp]) => sum + Math.sin(a * f + p) * amp, 0) + peakDrop(a), 0.5, deepest);
   const ramOut = (a, t) => rams.reduce((sum, ram) => {
     const da = Math.atan2(Math.sin(a - ram.angle), Math.cos(a - ram.angle));
     return sum + ram.size * Math.exp(-((da / ram.spread) ** 2)) * Math.exp(-(((t - ram.depth) / 0.09) ** 2));
@@ -161,9 +167,12 @@ export function iceBlock(r, o) {
     const small = fbm(x * 0.45 + ox, y * 0.45 + oy, z * 0.45 + oz, 3);
     if (up >= 1) return (big * top * 0.22 + small * 0.08) * topRough;
     const grooves = y > -1 ? noise3(x * 0.9 + ox, y * 0.06, z * 0.9 + oz) * 0.22 * rough * Math.min(1, top) : 0;
-    // Below the water melt swells the ice into great rounded bulges.
-    const swell = y < -0.5 ? fbm(x * 0.05 + oz, y * 0.07 + ox, z * 0.05 + oy, 2) * lump * 2.2 * Math.min(1, -y / 2) : 0;
-    return big * lump + small * 0.22 * rough + grooves + swell;
+    // Below the water melt swells the ice into great rounded bulges, and running meltwater carves ridges and ravines
+    // down the keel.
+    const below = Math.min(1, Math.max(0, -y - 0.5) / 2);
+    const swell = below ? fbm(x * 0.05 + oz, y * 0.07 + ox, z * 0.05 + oy, 2) * lump * 2.2 * below : 0;
+    const ridge = below ? (0.5 - Math.abs(noise3(x * 0.2 + oy, y * 0.04 + oz, z * 0.2 + ox))) * lump * 1.3 * below : 0;
+    return big * lump + small * 0.22 * rough + grooves + swell + ridge;
   };
   const position = [];
   const v = new THREE.Vector3();
@@ -421,23 +430,25 @@ export function iceMaterial({ name = 'ice', bob = false, snow = false } = {}) {
           vec3 snowColor = mix( vec3( 0.66, 0.74, 0.8 ), vec3( 0.86, 0.9, 0.93 ), lum );
           // Kept below full white, so sunlit snow stays clear of the bloom threshold.
           vec3 top = mix( wall, snowColor, snowy ) * 0.7;
-          float deep = clamp( -h / 10.0, 0.0, 1.0 );
-          // Below the water there is no snow, only bare glassy ice: clear blue near the surface, darkening down the
-          // keel, with faint streaks of trapped bubbles.
-          vec3 under = mix( vec3( 0.32, 0.78, 0.86 ), vec3( 0.04, 0.2, 0.28 ), sqrt( deep ) );
+          float deep = clamp( -h / 24.0, 0.0, 1.0 );
+          // Below the water there is no snow, only bare glassy ice: bright clear turquoise near the surface, deepening
+          // slowly down the keel, with faint streaks of trapped bubbles.
+          vec3 under = mix( vec3( 0.4, 0.86, 0.9 ), vec3( 0.07, 0.36, 0.46 ), sqrt( deep ) );
           under *= 0.9 + 0.2 * smoothstep( 0.55, 0.9, texture2D( uWindAlbedo, vIcePos.xy * 0.05 ).r );
-          // Faces turned up to the light from the surface glow; overhangs and undersides fall into deep shadow.
-          under *= mix( 0.45, 1.1, smoothstep( -0.8, 0.7, n.y ) );
+          // Faces turned up to the light from the surface glow; overhangs and undersides fall into shadow.
+          under *= mix( 0.62, 1.1, smoothstep( -0.8, 0.7, n.y ) );
           diffuseColor.rgb = mix( under, top, above );
           roughnessFactor = mix( 0.04, mix( 0.55, 0.9, snowy ), above );
           // Light scattering through the ice: strongest at grazing angles and in the clear ice under the water.
           vec3 toEye = normalize( vViewPosition );
           float facing = min( abs( dot( normal, toEye ) ), 1.0 );
           float rim = 1.0 - facing;
-          iceGlow = vec3( 0.03, 0.24, 0.3 ) * ( 0.3 + 0.9 * rim * rim * rim ) * ( 1.0 - deep * 0.85 ) * ( 1.0 - above );
-          // Daylight soaking down through the ice from above: bright just under the surface and gone a few strides
-          // down. Thin ice lets it all the way through, so the undersides of floes glow.
-          float through = exp( min( h, 0.0 ) / 2.2 ) * ( 1.0 - above );
+          iceGlow = vec3( 0.05, 0.34, 0.4 ) * ( 0.35 + 1.3 * rim * rim * rim ) * ( 1.0 - deep * 0.6 ) * ( 1.0 - above );
+          // Light carried through the body of the ice, so the whole keel glows faintly turquoise from within.
+          iceGlow += vec3( 0.02, 0.17, 0.2 ) * ( 1.0 - deep * 0.7 ) * ( 1.0 - above );
+          // Daylight soaking down through the ice from above: bright just under the surface, fading over the first
+          // few strides down. Thin ice lets it all the way through, so the undersides of floes glow.
+          float through = exp( min( h, 0.0 ) / 4.5 ) * ( 1.0 - above );
           iceGlow += vec3( 0.06, 0.38, 0.46 ) * through * ( 0.6 + 0.4 * rim );
           iceGlow += vec3( 0.12, 0.4, 0.46 ) * through * through * smoothstep( 0.2, -0.8, n.y );
           // Below the water the bare ice is glass: looked into face on it shows its deep clear blue-green, and toward
