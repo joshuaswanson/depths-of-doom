@@ -247,7 +247,12 @@ function resize() {
 window.addEventListener('resize', resize);
 
 // Trade sharpness above 1:1 for frame rate when frames run long, and win it back with headroom.
-const fpsWindow = { time: 0, frames: 0, good: 0, bad: 0, locked: false, need: 2, sinceRaise: Infinity, settle: 0 };
+const fpsWindow = { time: 0, frames: 0, good: 0, bad: 0, locked: false, need: 2, sinceRaise: Infinity, settle: 0,
+  trial: null, floor: MIN_PIXEL_RATIO, floorAge: 0, last: 0 };
+// A drop in resolution has to win back at least this much frame rate to stay; seconds before an undone drop may be
+// tried again, since a different stretch of the world can be held back by different work.
+const DROP_GAIN = 1.1;
+const FLOOR_HOLD = 30;
 
 function setPixelRatio(r) {
   pixelRatio = Math.round(r * 100) / 100;
@@ -255,7 +260,7 @@ function setPixelRatio(r) {
 }
 
 function lowerQuality() {
-  if (pixelRatio > MIN_PIXEL_RATIO) setPixelRatio(Math.max(MIN_PIXEL_RATIO, pixelRatio - 0.1));
+  if (pixelRatio > fpsWindow.floor) setPixelRatio(Math.max(fpsWindow.floor, pixelRatio - 0.1));
 }
 
 function raiseQuality() {
@@ -266,7 +271,8 @@ function raiseQuality() {
 
 // A slowdown lasting two straight seconds lowers the resolution, so a passing hitch never blurs the picture; a very
 // slow machine drops a step every second. Smooth seconds raise it again, and a raise that brings the slowdown straight
-// back makes the next one wait twice as long, so quality settles.
+// back makes the next one wait twice as long, so quality settles. A drop that doesn't speed things up, because the
+// slowdown comes from work that doesn't shrink with the picture, is undone, so the picture never blurs for nothing.
 function adaptQuality(dt) {
   if (fpsWindow.locked || document.hidden || dt > 1) return;
   fpsWindow.time += dt;
@@ -275,16 +281,32 @@ function adaptQuality(dt) {
   const fps = fpsWindow.frames / fpsWindow.time;
   fpsWindow.time = 0;
   fpsWindow.frames = 0;
+  const previous = fpsWindow.last;
+  fpsWindow.last = fps;
   // The second after a change can hold a shader compile, which says nothing about the new setting's speed.
   if (fpsWindow.settle > 0) {
     fpsWindow.settle--;
     return;
   }
+  if (fpsWindow.trial) {
+    const { from, fps: before } = fpsWindow.trial;
+    fpsWindow.trial = null;
+    if (fps < before * DROP_GAIN) {
+      setPixelRatio(from);
+      fpsWindow.floor = from;
+      fpsWindow.floorAge = 0;
+      fpsWindow.settle = 1;
+      return;
+    }
+  }
+  if (++fpsWindow.floorAge > FLOOR_HOLD) fpsWindow.floor = MIN_PIXEL_RATIO;
   fpsWindow.sinceRaise++;
   fpsWindow.bad = fps < 48 ? fpsWindow.bad + 1 : 0;
   fpsWindow.good = fps > 56 ? fpsWindow.good + 1 : 0;
-  if (fpsWindow.bad >= 2 || fps < 24) {
+  if ((fpsWindow.bad >= 2 || fps < 24) && pixelRatio > fpsWindow.floor) {
     if (fpsWindow.sinceRaise <= 3) fpsWindow.need = Math.min(fpsWindow.need * 2, 64);
+    // Measured against the better of the last two seconds, so a single hitch can't make any drop look worthwhile.
+    fpsWindow.trial = { from: pixelRatio, fps: Math.max(fps, previous) };
     lowerQuality();
     if (fps < 12) lowerQuality();
     fpsWindow.bad = 0;
@@ -399,7 +421,7 @@ async function boot() {
     startCoop((n) => n.join(invite));
   }
   window.__game = game;
-  window.__debug = { scene, world, bloom, renderer, composer, effects, player, get pixelRatio() { return pixelRatio; },
+  window.__debug = { scene, world, bloom, renderer, composer, effects, player, get pixelRatio() { return pixelRatio; }, fpsWindow,
     lockResolution(r) { fpsWindow.locked = true; setPixelRatio(r); },
     manual(on) { renderer.setAnimationLoop(on ? null : frame); },
     step(dt) { tick(dt); },
