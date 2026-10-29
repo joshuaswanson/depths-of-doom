@@ -168,13 +168,12 @@ function makeMound(cell) {
   };
 }
 
-// The coral reefs and kelp forests between x0 and x1, for the reef fish to live around.
+// The coral reefs between x0 and x1, for the reef fish to live around.
 function reefsBetween(x0, x1) {
   const found = [];
   for (let c = Math.floor(x0 / MOUND_CELL); c <= Math.floor(x1 / MOUND_CELL); c++) {
     const m = moundOf(c);
-    if (m.reef) found.push({ id: c, x: m.x, z: MOUND_Z, height: m.height, kind: 'reef' });
-    else if (!m.polar && m.murk > 0.5 && floorY(m.x) > SHELF_Y - 3) found.push({ id: c, x: m.x, z: MOUND_Z, kind: 'kelp' });
+    if (m.reef) found.push({ id: c, x: m.x, z: MOUND_Z, height: m.height });
   }
   return found;
 }

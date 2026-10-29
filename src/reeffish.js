@@ -4,8 +4,8 @@ import { spawn } from './assets.js';
 import { SHADER_TIME } from './surface.js';
 
 // Reef life: schools of blue tang circling the coral, clownfish hovering over their anemones,
-// pufferfish pottering about, seahorses clinging upright among the corals, starfish on the reef rock, and sheephead
-// nosing through the kelp. Each species is one instanced mesh, every fish beating its tail in its own rhythm.
+// pufferfish pottering about, seahorses clinging upright among the corals, and starfish on the reef rock. Each
+// species is one instanced mesh, every fish beating its tail in its own rhythm.
 // Every model is one unit long with its head along +x (the seahorse stands about twice as tall as it is long).
 const SPECIES = {
   blue_tang: { size: 1.0, count: 48, rate: 11, amount: 0.07 },
@@ -13,7 +13,6 @@ const SPECIES = {
   pufferfish: { size: 1.0, count: 6, rate: 6, amount: 0.04 },
   seahorse: { size: 0.45, count: 9, rate: 3, amount: 0.02 },
   starfish: { size: 0.75, count: 36, rate: 0, amount: 0 },
-  sheephead: { size: 1.6, count: 9, rate: 7, amount: 0.06 },
 };
 // How far either side of the camera reefs are stocked with fish.
 const REACH = 70;
@@ -65,7 +64,7 @@ function makeSpecies(name, spec, scene) {
 }
 
 export class ReefFish {
-  // `reefs(x0, x1)` lists the reef and kelp patches in a stretch of the world: { id, x, z, height, kind }.
+  // `reefs(x0, x1)` lists the reefs in a stretch of the world: { id, x, z, height }.
   // `ground(x, z)` is the height of the seabed.
   constructor(scene, reefs, ground) {
     this.reefs = reefs;
@@ -103,49 +102,43 @@ export class ReefFish {
       group.fish = group.fish.filter(Boolean);
       if (group.fish.length) groups.push(group);
     };
-    if (reef.kind === 'kelp') {
-      for (let i = 0; i < 1 + Math.floor(r(1) * 2); i++) {
-        add({ type: 'wander', fish: [this.take('sheephead')], home: reef, range: 9, speed: 0.9, lift: [1, 5] });
-      }
-    } else {
-      const schools = [['blue_tang', 6 + Math.floor(r(2) * 6)]];
-      if (r(6) < 0.7) schools.push(['blue_tang', 4 + Math.floor(r(7) * 4)]);
-      schools.forEach(([name, n], k) => {
-        add({
-          type: 'school', home: reef, phase: r(10 + k) * 6.3, speed: 1.1 + r(20 + k) * 0.6,
-          rx: 4 + r(30 + k) * 4, rz: 2.5 + r(40 + k) * 3, lift: 1.2 + r(50 + k) * 2.5,
-          dir: r(60 + k) < 0.5 ? -1 : 1, scatter: 0,
-          fish: Array.from({ length: n }, () => this.take(name, {
-            along: (Math.random() - 0.5) * 5, side: (Math.random() - 0.5) * 3, up: (Math.random() - 0.5) * 2,
-            wobble: Math.random() * 6.3,
-          })),
-        });
+    const schools = [['blue_tang', 6 + Math.floor(r(2) * 6)]];
+    if (r(6) < 0.7) schools.push(['blue_tang', 4 + Math.floor(r(7) * 4)]);
+    schools.forEach(([name, n], k) => {
+      add({
+        type: 'school', home: reef, phase: r(10 + k) * 6.3, speed: 1.1 + r(20 + k) * 0.6,
+        rx: 4 + r(30 + k) * 4, rz: 2.5 + r(40 + k) * 3, lift: 1.2 + r(50 + k) * 2.5,
+        dir: r(60 + k) < 0.5 ? -1 : 1, scatter: 0,
+        fish: Array.from({ length: n }, () => this.take(name, {
+          along: (Math.random() - 0.5) * 5, side: (Math.random() - 0.5) * 3, up: (Math.random() - 0.5) * 2,
+          wobble: Math.random() * 6.3,
+        })),
       });
-      for (let i = 0; i < 2 + Math.floor(r(70) * 3); i++) {
-        const a = r(80 + i) * 6.3;
-        const d = 1 + r(90 + i) * 2.5;
-        const x = reef.x + Math.cos(a) * d;
-        const z = reef.z + Math.sin(a) * d * 0.8;
-        const spot = new THREE.Vector3(x, this.ground(x, z) + 0.45, z);
-        add({ type: 'hover', spot, fish: [this.take('clownfish', { wobble: 0 }), this.take('clownfish', { wobble: 2.5 })] });
-      }
-      if (r(100) < 0.6) add({ type: 'wander', fish: [this.take('pufferfish')], home: reef, range: 6, speed: 0.45, lift: [1, 3] });
-      for (let i = 0; i < (r(110) < 0.5 ? 1 + Math.floor(r(111) * 2) : 0); i++) {
-        const x = reef.x + (r(120 + i) - 0.5) * 6;
-        const z = reef.z + 2 + r(130 + i) * 3;
-        add({ type: 'seahorse', spot: new THREE.Vector3(x, this.ground(x, z) + 0.5, z), fish: [this.take('seahorse')],
-          wobble: r(140 + i) * 6.3 });
-      }
-      const stars = [];
-      for (let i = 0; i < 3 + Math.floor(r(150) * 5); i++) {
-        const a = r(160 + i) * 6.3;
-        const d = 2 + r(170 + i) * 6;
-        const x = reef.x + Math.cos(a) * d;
-        const z = reef.z + Math.sin(a) * d * 0.9;
-        stars.push(this.take('starfish', { x, z, yaw: r(180 + i) * 6.3 }));
-      }
-      add({ type: 'still', fish: stars });
+    });
+    for (let i = 0; i < 2 + Math.floor(r(70) * 3); i++) {
+      const a = r(80 + i) * 6.3;
+      const d = 1 + r(90 + i) * 2.5;
+      const x = reef.x + Math.cos(a) * d;
+      const z = reef.z + Math.sin(a) * d * 0.8;
+      const spot = new THREE.Vector3(x, this.ground(x, z) + 0.45, z);
+      add({ type: 'hover', spot, fish: [this.take('clownfish', { wobble: 0 }), this.take('clownfish', { wobble: 2.5 })] });
     }
+    if (r(100) < 0.6) add({ type: 'wander', fish: [this.take('pufferfish')], home: reef, range: 6, speed: 0.45, lift: [1, 3] });
+    for (let i = 0; i < (r(110) < 0.5 ? 1 + Math.floor(r(111) * 2) : 0); i++) {
+      const x = reef.x + (r(120 + i) - 0.5) * 6;
+      const z = reef.z + 2 + r(130 + i) * 3;
+      add({ type: 'seahorse', spot: new THREE.Vector3(x, this.ground(x, z) + 0.5, z), fish: [this.take('seahorse')],
+        wobble: r(140 + i) * 6.3 });
+    }
+    const stars = [];
+    for (let i = 0; i < 3 + Math.floor(r(150) * 5); i++) {
+      const a = r(160 + i) * 6.3;
+      const d = 2 + r(170 + i) * 6;
+      const x = reef.x + Math.cos(a) * d;
+      const z = reef.z + Math.sin(a) * d * 0.9;
+      stars.push(this.take('starfish', { x, z, yaw: r(180 + i) * 6.3 }));
+    }
+    add({ type: 'still', fish: stars });
     for (const g of groups) {
       for (const f of g.fish) {
         f.pos = new THREE.Vector3(reef.x, this.ground(reef.x, reef.z) + 2, reef.z);

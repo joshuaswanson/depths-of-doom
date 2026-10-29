@@ -15,7 +15,6 @@ const MODEL_NAMES = [
   'coral_table', 'sponge_cluster', 'anemone_patch', 'reef_small', 'reef_large',
   'wreck_sub', 'anglerfish', 'seagull', 'humpback', 'whale_shark', 'sperm_whale', 'dolphin', 'marlin', 'manta', 'rusted_vessel',
   'penguin', 'polar_bear', 'blue_tang', 'clownfish', 'pufferfish', 'seahorse', 'starfish',
-  'sheephead',
 ];
 
 const models = {};
