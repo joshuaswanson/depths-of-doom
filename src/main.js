@@ -57,8 +57,20 @@ renderer.shadowMap.autoUpdate = false;
 
 const scene = new THREE.Scene();
 scene.fog = new THREE.Fog(0xffffff, 20, 125);
-const pmrem = new THREE.PMREMGenerator(renderer);
-scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+// Phones take the graphics memory away from a page or app in the background. three.js rebuilds what it can when it
+// comes back, but the lighting environment is drawn on the graphics chip and would come back blank, leaving the sub
+// and reef dark, so it is drawn again.
+function makeEnvironment() {
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  const environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+  pmrem.dispose();
+  return environment;
+}
+scene.environment = makeEnvironment();
+canvas.addEventListener('webglcontextrestored', () => {
+  scene.environment.dispose();
+  scene.environment = makeEnvironment();
+});
 scene.environmentIntensity = 0.7;
 
 const camera = new THREE.PerspectiveCamera(CAMERA_FOV, 1, 0.5, 400);
