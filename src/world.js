@@ -1588,7 +1588,7 @@ function updateMarlin(fish, dt, t, cx, cy, halfW, sub) {
     if (u.wait > 0 || !open || deepBelow(cx) < 60 || nearIce(cx, OPEN_SEA) || residentOf(cx) === 'whale_shark') return;
     const side = Math.random() < 0.5 ? -1 : 1;
     const x = cx + side * (halfW + MARLIN_LENGTH);
-    if (deepBelow(x) < 50) {
+    if (deepBelow(x) < 50 || nearIce(x, OPEN_SEA)) {
       u.wait = 2;
       return;
     }
@@ -1607,6 +1607,10 @@ function updateMarlin(fish, dt, t, cx, cy, halfW, sub) {
   if (sub && Math.hypot(sub.x - p.x, sub.y - p.y) < MARLIN_SHY) {
     u.boost = 1;
     u.dir = Math.sign(p.x - sub.x) || u.dir;
+  }
+  // A warm-water fish, it never heads in under the polar ice; with ice ahead it turns back.
+  if (nearIce(p.x + u.dir * MARLIN_LENGTH * 4, OPEN_SEA)) {
+    u.dir = -u.dir;
   } else if (Math.abs(p.x - cx) < halfW * 0.6 && Math.random() < dt * 0.04) {
     u.dir = -u.dir;
   }
