@@ -376,6 +376,8 @@ const MINE_LANE = 2.6;
 const MAX_CHAIN = 70;
 // Fraction of the half-screen height taken up by the store panel along the bottom.
 const PANEL_SHARE = 0.17;
+// A solo dive opens with the camera rising from the seabed to the surface, then the sub dropping in from the sky.
+const INTRO_RISE = 2.4;
 const LOOSE_COIN_RANGE = 70;
 
 const ENEMY_TYPES = {
@@ -456,7 +458,7 @@ export class Game {
     this.bullets = [];
     this.enemyBullets = [];
     this.aspect = 1.5;
-    this.cam = new THREE.Vector2(0, 0);
+    this.cam = new THREE.Vector2(0, 2);
     this.makeBulletMesh();
     this.makeEnemyBulletMesh();
     this.status = playerStatus(this.scene);
@@ -606,6 +608,31 @@ export class Game {
     this.over = false;
     this.overTimer = 0;
     this.wasAbove = false;
+    this.intro = this.role === 'solo' ? { t: 0, dropped: false } : null;
+    this.player.group.visible = !this.intro;
+  }
+
+  // Returns true while the camera is still rising, when nothing else in the dive moves yet. The sub drops from just
+  // above the top of the screen, and the intro ends once it has splashed down and sunk below the surface.
+  playIntro(dt) {
+    const intro = this.intro;
+    const pl = this.player;
+    intro.t += dt;
+    if (!intro.dropped) {
+      const top = SURFACE_Y + 1;
+      this.cam.y = THREE.MathUtils.lerp(2, top, THREE.MathUtils.smootherstep(intro.t, 0, INTRO_RISE));
+      if (intro.t < INTRO_RISE) return true;
+      pl.group.position.set(this.cam.x - 4, top + this.halfH + 3, 0);
+      pl.vel.set(3, -2);
+      pl.airborne = true;
+      pl.dropping = true;
+      pl.group.visible = true;
+      this.wasAbove = true;
+      intro.dropped = true;
+      return false;
+    }
+    if (!pl.airborne && pl.group.position.y < SURFACE_Y - 1) this.intro = null;
+    return false;
   }
 
   get remotePlayers() {
@@ -2300,6 +2327,7 @@ export class Game {
   }
 
   update(dt, input) {
+    if (this.intro && this.playIntro(dt)) return;
     const pl = this.player;
     pl.update(dt, input, this.bounds);
     for (const r of this.remotePlayers) this.net.updateRemote(r, dt);

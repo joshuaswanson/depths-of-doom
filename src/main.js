@@ -335,7 +335,8 @@ function startGame() {
 const hintPoint = new THREE.Vector3();
 function placeHints() {
   if (!hud.hints) return;
-  hud.hints.hidden = state !== 'playing';
+  hud.hints.hidden = state !== 'playing' || !!game.intro;
+  if (hud.hints.hidden) return;
   const move = readInput();
   if (state === 'playing' && (move.x || move.y)) {
     hud.dismissHints();
@@ -382,6 +383,8 @@ async function boot() {
   composer.render();
   for (const j of hidden) j.visible = false;
   cleanup();
+  // The sub stays out of sight on the title screen until a dive drops it in.
+  player.group.visible = false;
   state = 'title';
   hud.showTitle();
   const params = new URLSearchParams(location.search);
@@ -458,7 +461,7 @@ onUnlock((def) => {
 });
 
 function tick(dt) {
-  setActive(state === 'playing' && !cinematic);
+  setActive(state === 'playing' && !cinematic && !game.intro);
   if (state !== 'paused') SHADER_TIME.value += dt;
   if (state === 'playing') {
     game.update(dt, scriptedInput ?? readInput());
@@ -473,12 +476,10 @@ function tick(dt) {
     }
   } else if (state === 'title' || state === 'gameover') {
     titleT += dt;
-    const auto = { x: 0, y: 0 };
-    if (state === 'title') player.update(dt, auto, { left: -4, right: 4, top: 6, bottom: () => -1 });
     if (state === 'gameover') game.update(dt, { x: 0, y: 0 });
   }
   if (state !== 'paused') effects.update(dt, 0);
-  game.status.group.visible = !cinematic && (state === 'playing' || state === 'paused') && player.alive;
+  game.status.group.visible = !cinematic && (state === 'playing' || state === 'paused') && player.alive && !game.intro;
   const shake = state === 'paused' ? 0 : effects.shake;
   camera.position.x = game.cam.x + (Math.random() - 0.5) * shake * 0.5;
   camera.position.y = game.cam.y + (Math.random() - 0.5) * shake * 0.5;

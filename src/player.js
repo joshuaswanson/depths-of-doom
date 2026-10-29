@@ -8,6 +8,7 @@ import { SURFACE_Y } from './water.js';
 const DRAG = 1.9;
 const MAX_SPOTLIGHTS = 4;
 const GRAVITY = 18;
+const DROP_PITCH = -0.4;
 const AIR_DRAG = 0.15;
 const TURN_SPEED = Math.PI / 0.7;
 const TURN_ACCEL = 14;
@@ -331,6 +332,7 @@ export class Player {
     this.pitchVel = 0;
     this.pitch = 0;
     this.airborne = false;
+    this.dropping = false;
     this.tumbling = false;
     this.spin = 0;
     this.invuln = 0;
@@ -853,6 +855,10 @@ export class Player {
     if (bounds.left !== undefined) p.x = THREE.MathUtils.clamp(p.x, bounds.left, bounds.right);
     if (bounds.top !== undefined) p.y = Math.min(p.y, bounds.top);
     this.airborne = p.y > SURFACE_Y + 0.3;
+    if (!this.airborne && this.dropping) {
+      this.dropping = false;
+      this.righting = true;
+    }
     if (!this.airborne && this.tumbling) {
       this.tumbling = false;
       this.righting = true;
@@ -947,6 +953,8 @@ export class Player {
     }
     let wantPitch = null;
     if (this.airborne) wantPitch = Math.atan2(this.vel.y, Math.abs(this.vel.x) + 0.3);
+    // Dropped in at the start of a dive, the sub falls belly first with its nose dipped a little.
+    if (this.dropping) wantPitch = Math.max(wantPitch, DROP_PITCH);
     else if (pushDir) wantPitch = Math.atan2(pushDir.y, Math.abs(pushDir.x));
     // After a fall off the ice the sub levels out by itself until it is steered.
     if (pushDir || this.airborne) this.righting = false;
