@@ -11,13 +11,14 @@ const TROPHY = `<svg viewBox="0 0 24 24" class="trophy" aria-hidden="true"><path
   1.7V7zm10 0v2.7A2 2 0 0 0 18 8V7h-1z"/></svg>`;
 const LOCK = `<svg viewBox="0 0 24 24" class="trophy" aria-hidden="true"><path fill="currentColor" d="M12 2a5 5 0 0 1 5 5v3h1a2
   2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h1V7a5 5 0 0 1 5-5zm0 2a3 3 0 0 0-3 3v3h6V7a3 3 0 0 0-3-3z"/></svg>`;
-const achievementsButton = () => `<button class="ach-btn">${TROPHY}Achievements
+const achievementsButton = () => `<button class="side-btn ach-btn">${TROPHY}Achievements
   <b>${unlockedCount()}/${ACHIEVEMENTS.length}</b></button>`;
 const FRIENDS = `<svg viewBox="0 0 24 24" class="trophy" aria-hidden="true"><path fill="currentColor" d="M9 11a4 4 0 1 0 0-8
   4 4 0 0 0 0 8zm7.5 0a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM1 20c0-3.3 3.6-6 8-6s8 2.7 8 6v1H1v-1zm17.5 1v-1c0-2-1-3.8
   -2.6-5.1 3.6.2 6.1 2.4 6.1 5.1v1h-3.5z"/></svg>`;
-const titleControls = () => `<button class="big-btn">Dive!</button>
-  <div class="title-links"><button class="ach-btn friends-btn">${FRIENDS}Dive with friends</button>
+const titleControls = () => `<div class="title-row">
+  <button class="side-btn friends-btn">${FRIENDS}Dive with friends</button>
+  <button class="big-btn">Dive!</button>
   <div class="ach-slot">${achievementsButton()}</div></div>`;
 // Movement keys laid out as they sit on a keyboard: one key above, three below.
 const keyCluster = (up, left, down, right) => `<div class="key-grid"><kbd class="k-up">${up}</kbd>
