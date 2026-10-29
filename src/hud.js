@@ -59,7 +59,6 @@ export class Hud {
     this.root = root;
     this.onBuy = onBuy;
 
-    const topLeft = el('div', 'hud-topleft');
     this.health = el('div', 'health', `<span class="heart">${HEART}</span>
       <div class="health-track"><div class="health-lag"></div><div class="health-fill"></div>
       <span class="health-text"></span></div>`);
@@ -72,11 +71,7 @@ export class Hud {
     this.coinBox = el('div', 'coins', `<img src="${ICON('coin')}" alt=""><span>0</span>`);
     this.coinText = this.coinBox.querySelector('span');
 
-
-    this.waveTag = el('div', 'wave-tag');
-    topLeft.append(this.waveTag);
-
-    this.pauseBtn = el('button', 'pause-btn', '<span class="bars"><i></i><i></i></span><span class="label"></span>');
+    this.pauseBtn = el('button', 'pause-btn', '<span class="bars"><i></i><i></i></span>');
     this.pauseBtn.addEventListener('pointerdown', (e) => {
       e.preventDefault();
       onPause();
@@ -113,7 +108,7 @@ export class Hud {
 
     this.overlay = el('div', 'overlay');
     this.achievementPops = el('div', 'ach-pops');
-    root.append(topLeft, this.pauseBtn, this.radar, this.bossBar, this.banner, this.toast, this.bar, this.overlay,
+    root.append(this.pauseBtn, this.radar, this.bossBar, this.banner, this.toast, this.bar, this.overlay,
       this.achievementPops);
     this.onStart = onStart;
     this.onHost = onHost;
@@ -137,7 +132,6 @@ export class Hud {
 
   // Text that stays on screen between redraws, set again whenever the language changes.
   relabel() {
-    this.pauseBtn.querySelector('.label').textContent = t('pause');
     this.pauseBtn.setAttribute('aria-label', t('pause'));
     this.bossBar.querySelector('.boss-name').textContent = t('boss');
     this.rotateNote.querySelector('span').textContent = t('rotate');
@@ -428,7 +422,7 @@ export class Hud {
     });
   }
 
-  // A gold card that drops in under the pause button, with the coins it paid.
+  // A gold card that drops in at the top of the screen, with the coins it paid.
   showAchievement(def, reward) {
     const pop = el('div', 'ach-pop', `<span class="ach-icon">${TROPHY}</span><span class="ach-text">
       <small>${t('achUnlocked')}</small><b>${def.name}</b><span>${def.desc}</span></span>
@@ -479,7 +473,6 @@ export class Hud {
       this.lastPips = pips;
     }
     this.coinText.textContent = coins;
-    this.waveTag.textContent = t('wave', { n: wave });
 
     for (const s of this.slots) {
       const lvl = player.levels[s.def.id];

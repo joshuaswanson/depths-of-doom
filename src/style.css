@@ -28,16 +28,6 @@ html, body {
 #hud > * { transition: opacity 0.4s; }
 #hud:not(.playing) > :not(.overlay):not(.ach-pops):not(.rotate-note) { opacity: 0; }
 
-.hud-topleft {
-  position: absolute;
-  top: 2.2vh;
-  left: calc(1.8vw + env(safe-area-inset-left));
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 1vh;
-}
-
 .health { display: flex; align-items: center; gap: 0.5vw; }
 .health.hurt { animation: shake 0.35s; }
 .heart { position: relative; z-index: 1; width: 3.8vw; min-width: 36px; margin-right: -1.6vw;
@@ -122,30 +112,16 @@ html, body {
 .upgrade-bar .coins img { width: 2.4vw; }
 .coins.pulse { animation: pulse 0.25s; }
 
-.wave-tag {
-  margin-top: 0.3vh;
-  padding: 0.2vh 0.9vw;
-  font-size: 1.2vw;
-  font-weight: 500;
-  background: rgba(10, 24, 44, 0.55);
-  border-radius: 999px;
-  color: #bfe9ff;
-}
-
 .pause-btn {
   position: absolute;
-  top: 1.8vh;
-  left: 50%;
-  transform: translateX(-50%);
+  top: calc(2vh + env(safe-area-inset-top));
+  left: calc(1.6vw + env(safe-area-inset-left));
+  width: max(3.4vw, 40px);
+  height: max(3.4vw, 40px);
+  padding: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 0.45vw;
-  padding: 0.5vh 1.6vw 0.6vh;
-  font-family: inherit;
-  font-size: 1.3vw;
-  font-weight: 700;
-  color: #4a1d02;
   background: linear-gradient(#ffe36b, #f5a515);
   border: 0.2vw solid #8a3d06;
   border-radius: 999px;
@@ -154,10 +130,10 @@ html, body {
   pointer-events: auto;
   transition: transform 0.1s;
 }
-.pause-btn:hover { transform: translateX(-50%) translateY(-2px) scale(1.04); }
-.pause-btn:active { transform: translateX(-50%) translateY(2px); box-shadow: 0 0.1vw 0 #8a3d06; }
-.pause-btn .bars { display: flex; gap: 0.22vw; }
-.pause-btn .bars i { display: block; width: 0.32vw; height: 1.05vw; border-radius: 0.1vw; background: #4a1d02; }
+.pause-btn:hover { transform: translateY(-2px) scale(1.06); }
+.pause-btn:active { transform: translateY(2px); box-shadow: 0 0.1vw 0 #8a3d06; }
+.pause-btn .bars { display: flex; gap: 22%; width: 40%; height: 40%; justify-content: center; }
+.pause-btn .bars i { display: block; width: 30%; height: 100%; border-radius: 0.15vw; background: #4a1d02; }
 .radar {
   position: absolute;
   top: 1.6vh;
@@ -990,7 +966,7 @@ kbd {
 
 .ach-pops {
   position: absolute;
-  top: 8.5vh;
+  top: 2vh;
   left: 50%;
   transform: translateX(-50%);
   z-index: 7;
@@ -1052,15 +1028,13 @@ kbd {
     transform: none;
     font-size: 2.2vw;
   }
-  .pause-btn { gap: 0.8vw; padding: 1.2vh 3vw 1.4vh; font-size: 2.6vw; border-width: 0.35vw; }
-  .pause-btn .bars { gap: 0.45vw; }
-  .pause-btn .bars i { width: 0.6vw; height: 2vw; border-radius: 0.2vw; }
+  .pause-btn { width: max(6.4vw, 52px); height: max(6.4vw, 52px); border-width: 0.35vw; }
   .panel .big-btn { margin-top: 3vh; padding: 1.8vh 5vw; font-size: 3.4vw; }
   .panel .settings-btn { padding: 1.6vh 2.8vw; font-size: 2.5vw; }
   .toast { bottom: 31vh; font-size: 3.8vw; -webkit-text-stroke-width: 0.25vw; text-shadow: 0 0.4vw 0 #0d1d33; }
   .banner { font-size: 8vw; }
   .banner small { font-size: 3.6vw; }
-  .ach-pops { top: 13vh; gap: 1.6vh; }
+  .ach-pops { top: 3vh; gap: 1.6vh; }
   .ach-pop { gap: 1.6vw; padding: 1.8vh 2.4vw; border-width: 0.35vw; }
   .ach-pop .ach-icon { width: 5vw; height: 5vw; font-size: 2.8vw; }
   .ach-pop small { font-size: 1.5vw; }
